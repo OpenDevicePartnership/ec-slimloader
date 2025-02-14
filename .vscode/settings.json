@@ -1,0 +1,22 @@
+{
+    "[markdown]": {
+        "editor.formatOnSave": false
+    },
+    "[toml]": {
+        "editor.formatOnSave": true
+    },
+    "[rust]": {
+        "editor.formatOnSave": true
+    },
+    "rust-analyzer.cargo.sysroot": "discover",
+    "rust-analyzer.check.allTargets": false,
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.cargo.target": "thumbv8m.main-none-eabihf",
+    "rust-analyzer.linkedProjects": [
+        "${workspaceFolder}/Cargo.toml",
+    ],
+    "rust-analyzer.cargo.features": [
+        "mimxrt685s",
+        "imxrt"
+    ]
+}

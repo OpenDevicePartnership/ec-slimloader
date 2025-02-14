@@ -1,0 +1,33 @@
+[package]
+name = "ec-slimloader"
+version = "0.1.0"
+edition = "2021"
+
+
+[profile.release]
+lto = true      # better optimizations
+opt-level = "z"
+
+[features]
+mimxrt685s = ["imxrt"]
+mimxrt633s = ["imxrt"]
+imxrt = ["dep:mimxrt600-fcb"]
+defmt = ["dep:defmt", "dep:defmt-rtt"]
+
+[dependencies]
+ec-slimloader-descriptors = { git = "https://github.com/OpenDevicePartnership/ec-slimloader-descriptors" }
+
+crc = "3.2.1"
+
+# Optionally pull in defmt for trace debugging scenarios
+defmt = { version = "0.3.6", optional = true }
+defmt-rtt = { version = "0.4.0", optional = true }
+
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+cortex-m-rt = "0.7.3"
+panic-probe = "*"
+
+mimxrt600-fcb = { version = "0.2.0", optional = true }
