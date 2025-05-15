@@ -65,6 +65,47 @@ unsafe fn pre_init() {
     cortex_m::interrupt::disable();
 }
 
+fn copy_and_execute_image(app_descriptor: &AppImageDescriptor) -> ! {
+    // note that use of this flag requires proper app image address backing for .text section-- ensure you have linked the app against RAM addresses! (Or other required adjustments)
+    if app_descriptor.flags & APP_IMAGE_FLAG_COPY_TO_EXECUTION_ADDRESS != 0 {
+        #[cfg(feature = "defmt")]
+        defmt::info!("Bootloader: Performing image copy to execution location.");
+
+        copy_image(&app_descriptor);
+    }
+
+    #[cfg(feature = "defmt")]
+    {
+        let xaddr = app_descriptor.execution_address;
+        defmt::info!(
+            "Bootloader: Validation complete and branching to application execution address {:x}.",
+            xaddr
+        );
+    }
+
+    // branch to location as described by descriptor
+    unsafe {
+        // set the VTOR
+        cortex_m::Peripherals::steal()
+            .SCB
+            .vtor
+            .write(app_descriptor.execution_address);
+
+        // enable interrupts
+        cortex_m::interrupt::enable();
+
+        // perform the branch
+        // NOTE: two separate steps are used here for easier debug inspection
+        let p_sp = app_descriptor.execution_address as *const u32;
+        let p_rv = (app_descriptor.execution_address as *const u32).add(1);
+
+        let sp = *p_sp;
+        let rv = *p_rv;
+
+        cortex_m::asm::bootstrap(sp as *const u32, rv as *const u32);
+    }
+}
+
 #[cortex_m_rt::entry]
 fn main() -> ! {
     #[cfg(feature = "defmt")]
@@ -139,48 +180,39 @@ fn main() -> ! {
 
     // validate integrity of app image
     if boot_image {
-        // note that use of this flag requires proper app image address backing for .text section-- ensure you have linked the app against RAM addresses! (Or other required adjustments)
-        if active_app_descriptor.flags & APP_IMAGE_FLAG_COPY_TO_EXECUTION_ADDRESS != 0 {
-            #[cfg(feature = "defmt")]
-            defmt::info!("Bootloader: Performing image copy to execution location.");
-
-            copy_image(&active_app_descriptor);
-        }
-
-        #[cfg(feature = "defmt")]
-        {
-            let xaddr = active_app_descriptor.execution_address;
-            defmt::info!(
-                "Bootloader: Validation complete and branching to application execution address {:x}.",
-                xaddr
-            );
-        }
-
-        // branch to location as described by descriptor
-        unsafe {
-            // set the VTOR
-            cortex_m::Peripherals::steal()
-                .SCB
-                .vtor
-                .write(active_app_descriptor.execution_address);
-
-            // enable interrupts
-            cortex_m::interrupt::enable();
-
-            // perform the branch
-            // NOTE: two separate steps are used here for easier debug inspection
-            let p_sp = active_app_descriptor.execution_address as *const u32;
-            let p_rv = (active_app_descriptor.execution_address as *const u32).add(1);
-
-            let sp = *p_sp;
-            let rv = *p_rv;
-
-            cortex_m::asm::bootstrap(sp as *const u32, rv as *const u32);
-        }
+        copy_and_execute_image(&active_app_descriptor);
     } else {
-        // TODO any boot recovery logic
+        // Attempt to boot the backup image
         #[cfg(feature = "defmt")]
         defmt::error!("Active App CRC checksum failure!");
+
+        let backup_slot = active_app_descriptor.app_slot_number ^ 1;
+        if let Ok(backup_descriptor) = descriptors.get_app_at_slot(backup_slot) {
+            #[cfg(feature = "defmt")]
+            defmt::info!("Bootloader: Backup App slot is {}", backup_slot);
+
+            let backup_boot_image = if backup_descriptor.flags & APP_IMAGE_FLAG_SKIP_IMAGE_CRC_CHECK != 0 {
+                #[cfg(feature = "defmt")]
+                defmt::info!("Bootloader: skipping backup image CRC due to SKIP_IMAGE_CRC_CHECK flag.");
+
+                true
+            } else {
+                #[cfg(feature = "defmt")]
+                defmt::info!("Bootloader: validating image CRC.");
+
+                validate_crc(&backup_descriptor)
+            };
+
+            if backup_boot_image {
+                #[cfg(feature = "defmt")]
+                defmt::info!("Bootloader: Backup App CRC checksum success!");
+
+                copy_and_execute_image(&backup_descriptor);
+            } else {
+                #[cfg(feature = "defmt")]
+                defmt::error!("Backup App CRC checksum failure!");
+            }
+        }
 
         loop {
             cortex_m::asm::wfi();
