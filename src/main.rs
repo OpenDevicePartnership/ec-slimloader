@@ -11,6 +11,8 @@ mod imxrt;
 #[cfg(feature = "imxrt")]
 use imxrt::{raw_copy_to_ram, validate_crc};
 
+mod log;
+
 #[cfg(not(feature = "imxrt"))]
 mod unsupported {
     use super::*;
@@ -67,13 +69,11 @@ unsafe fn pre_init() {
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    #[cfg(feature = "defmt")]
-    defmt::info!("Bootloader: Initializing Hardware.");
+    info!("Bootloader: Initializing Hardware.");
 
     let boot_descriptors_address = unsafe { &__bootable_region_descriptors_address as *const u32 };
 
-    #[cfg(feature = "defmt")]
-    defmt::info!(
+    info!(
         "Bootloader: Fetching App Descriptors from {:X}.",
         boot_descriptors_address
     );
@@ -83,8 +83,7 @@ fn main() -> ! {
     let descriptors = match BootableRegionDescriptors::from_address(boot_descriptors_address) {
         Ok(descriptors) => descriptors,
         Err(_e) => {
-            #[cfg(feature = "defmt")]
-            defmt::error!(
+            error!(
                 "Invalid boot region descriptors: ParseError |{}|",
                 match _e {
                     ParseError::InvalidSignature => "Invalid Header Signature",
@@ -121,19 +120,18 @@ fn main() -> ! {
 
     #[cfg(feature = "defmt")]
     {
-        let slot = active_app_descriptor.app_slot_number;
-        defmt::info!("Bootloader: Active App slot is {}", slot);
+        let xaddr = active_app_descriptor.execution_address; // Unaligned read
+        defmt::info!(
+            "Bootloader: Validation complete and branching to application execution address {:x}.",
+            xaddr
+        );
     }
 
     let boot_image = if active_app_descriptor.flags & APP_IMAGE_FLAG_SKIP_IMAGE_CRC_CHECK != 0 {
-        #[cfg(feature = "defmt")]
-        defmt::info!("Bootloader: skipping image CRC due to SKIP_IMAGE_CRC_CHECK flag.");
-
+        info!("Bootloader: skipping image CRC due to SKIP_IMAGE_CRC_CHECK flag.");
         true
     } else {
-        #[cfg(feature = "defmt")]
-        defmt::info!("Bootloader: validating image CRC.");
-
+        info!("Bootloader: validating image CRC.");
         validate_crc(&active_app_descriptor)
     };
 
@@ -141,16 +139,14 @@ fn main() -> ! {
     if boot_image {
         // note that use of this flag requires proper app image address backing for .text section-- ensure you have linked the app against RAM addresses! (Or other required adjustments)
         if active_app_descriptor.flags & APP_IMAGE_FLAG_COPY_TO_EXECUTION_ADDRESS != 0 {
-            #[cfg(feature = "defmt")]
-            defmt::info!("Bootloader: Performing image copy to execution location.");
-
+            info!("Bootloader: Performing image copy to execution location.");
             copy_image(&active_app_descriptor);
         }
 
         #[cfg(feature = "defmt")]
         {
-            let xaddr = active_app_descriptor.execution_address;
-            defmt::info!(
+            let xaddr = active_app_descriptor.execution_address; // Unaligned read
+            info!(
                 "Bootloader: Validation complete and branching to application execution address {:x}.",
                 xaddr
             );
@@ -179,8 +175,7 @@ fn main() -> ! {
         }
     } else {
         // TODO any boot recovery logic
-        #[cfg(feature = "defmt")]
-        defmt::error!("Active App CRC checksum failure!");
+        error!("Active App CRC checksum failure!");
 
         loop {
             cortex_m::asm::wfi();
