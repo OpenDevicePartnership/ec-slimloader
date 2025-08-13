@@ -18,6 +18,9 @@ fn main() {
         println!("cargo:rerun-if-changed=memory-imxrt.x");
         println!("cargo:rustc-link-arg=-Tlink.x");
 
+        #[cfg(feature = "defmt")]
+        println!("cargo:rustc-link-arg=-Tdefmt.x");
+
         // Inject crate version into the .biv section.
         File::create(out.join("biv.rs"))
             .unwrap()

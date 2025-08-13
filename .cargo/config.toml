@@ -5,8 +5,6 @@ runner = 'probe-rs run --chip MIMXRT685SFVKB'
 rustflags = [
     "-C",
     "linker=flip-link",
-    # "-C",
-    # "link-arg=-Tdefmt.x",
     # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x
     # See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
     "-C",
