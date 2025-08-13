@@ -1,4 +1,5 @@
 mod fcb;
+mod rom;
 
 // auto-generated version information from Cargo.toml
 #[cfg(feature = "imxrt")]

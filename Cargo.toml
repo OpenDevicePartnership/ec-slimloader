@@ -19,7 +19,7 @@ imxrt-fcb-1spi-b1-nor = ["imxrt-fcb-1spi-nor"]
 imxrt-fcb-1spi-nor = ["imxrt"]
 
 # chip variants
-mimxrt685s = ["imxrt"]
+mimxrt685s = ["imxrt", "dep:mimxrt685s-pac"]
 mimxrt633s = ["imxrt"]
 
 # common imxrt features
@@ -45,3 +45,4 @@ cortex-m-rt = "0.7.3"
 panic-probe = "*"
 
 mimxrt600-fcb = { version = "0.2.0", optional = true }
+mimxrt685s-pac = { version = "0.4.0", features = ["rt"], optional = true }
