@@ -11,6 +11,7 @@ mod imxrt;
 #[cfg(feature = "imxrt")]
 use imxrt::{raw_copy_to_ram, validate_crc};
 
+mod bootload;
 mod log;
 
 #[cfg(not(feature = "imxrt"))]
@@ -60,11 +61,6 @@ use ec_slimloader_descriptors::*;
 
 extern "C" {
     static __bootable_region_descriptors_address: u32;
-}
-
-#[cortex_m_rt::pre_init]
-unsafe fn pre_init() {
-    cortex_m::interrupt::disable();
 }
 
 #[cortex_m_rt::entry]
@@ -153,26 +149,7 @@ fn main() -> ! {
         }
 
         // branch to location as described by descriptor
-        unsafe {
-            // set the VTOR
-            cortex_m::Peripherals::steal()
-                .SCB
-                .vtor
-                .write(active_app_descriptor.execution_address);
-
-            // enable interrupts
-            cortex_m::interrupt::enable();
-
-            // perform the branch
-            // NOTE: two separate steps are used here for easier debug inspection
-            let p_sp = active_app_descriptor.execution_address as *const u32;
-            let p_rv = (active_app_descriptor.execution_address as *const u32).add(1);
-
-            let sp = *p_sp;
-            let rv = *p_rv;
-
-            cortex_m::asm::bootstrap(sp as *const u32, rv as *const u32);
-        }
+        unsafe { bootload::boot_application(active_app_descriptor.execution_address as *const u32) };
     } else {
         // TODO any boot recovery logic
         error!("Active App CRC checksum failure!");
