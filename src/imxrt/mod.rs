@@ -1,5 +1,4 @@
 mod fcb;
-mod interrupts;
 
 // auto-generated version information from Cargo.toml
 #[cfg(feature = "imxrt")]

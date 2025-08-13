@@ -10,13 +10,13 @@ fn main() {
         // Put corresponding linker script in our output directory and ensure it's
         // on the linker search path.
         let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
-        File::create(out.join("link-imxrt.x"))
+        File::create(out.join("memory.x"))
             .unwrap()
-            .write_all(include_bytes!("link-imxrt.x"))
+            .write_all(include_bytes!("memory-imxrt.x"))
             .unwrap();
         println!("cargo:rustc-link-search={}", out.display());
-        println!("cargo:rerun-if-changed=link-imxrt.x");
-        println!("cargo:rustc-link-arg=-Tlink-imxrt.x");
+        println!("cargo:rerun-if-changed=memory-imxrt.x");
+        println!("cargo:rustc-link-arg=-Tlink.x");
 
         // Inject crate version into the .biv section.
         File::create(out.join("biv.rs"))
