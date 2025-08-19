@@ -19,11 +19,11 @@ imxrt-fcb-1spi-b1-nor = ["imxrt-fcb-1spi-nor"]
 imxrt-fcb-1spi-nor = ["imxrt"]
 
 # chip variants
-mimxrt685s = ["imxrt", "dep:mimxrt685s-pac"]
-mimxrt633s = ["imxrt"]
+mimxrt685s = ["imxrt", "dep:mimxrt685s-pac", "embassy-imxrt/mimxrt685s"]
+mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
 
 # common imxrt features
-imxrt = ["dep:mimxrt600-fcb"]
+imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt"]
 
 # optional debug logging 
 defmt = ["dep:defmt", "dep:defmt-rtt"]
@@ -46,3 +46,4 @@ panic-probe = "*"
 
 mimxrt600-fcb = { version = "0.2.0", optional = true }
 mimxrt685s-pac = { version = "0.4.0", features = ["rt"], optional = true }
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, optional = true }
