@@ -3,7 +3,6 @@ name = "ec-slimloader"
 version = "0.1.0"
 edition = "2021"
 
-
 [profile.release]
 lto = true      # better optimizations
 opt-level = "z"
@@ -26,14 +25,23 @@ mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
 imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt"]
 
 # optional debug logging 
-defmt = ["dep:defmt", "dep:defmt-rtt"]
+defmt = ["dep:defmt", "dep:defmt-rtt", "embassy-imxrt/defmt"]
+
+default = ["imxrt-fcb-rt685evk"]
 
 [dependencies]
-ec-slimloader-descriptors = { git = "https://github.com/OpenDevicePartnership/ec-slimloader-descriptors" }
+# ec-slimloader-descriptors = { git = "https://github.com/wassasin/ec-slimloader-descriptors", branch = "feature/journal-state" }
+ec-slimloader-descriptors = { path = "../ec-slimloader-descriptors" }
 
-crc = "3.2.1"
+mimxrt600-fcb = { version = "0.2.0", optional = true }
+mimxrt685s-pac = { version = "0.4.0", features = ["rt"], optional = true }
+embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "new-flexspi-driver", default-features = false, optional = true }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
+    "arch-cortex-m",
+    "executor-thread",
+    "defmt",
+] }
 
-# Optionally pull in defmt for trace debugging scenarios
 defmt = { version = "0.3.6", optional = true }
 defmt-rtt = { version = "0.4.0", optional = true }
 
@@ -44,6 +52,10 @@ cortex-m = { version = "0.7.7", features = [
 cortex-m-rt = "0.7.3"
 panic-probe = "*"
 
-mimxrt600-fcb = { version = "0.2.0", optional = true }
-mimxrt685s-pac = { version = "0.4.0", features = ["rt"], optional = true }
-embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, optional = true }
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa"] }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
+embedded-storage = "0.3.1"
+embedded-storage-async = "0.4.1"
+storage_bus = { git = "https://github.com/OpenDevicePartnership/embedded-mcu" }
+
+static_cell = "2.1.1"

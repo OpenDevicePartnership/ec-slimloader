@@ -3,16 +3,24 @@
 
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
+
+use ec_slimloader_descriptors::AppImageDescriptor;
+use embassy_executor::Spawner;
 use panic_probe as _;
 
+mod descriptors;
 #[cfg(feature = "imxrt")]
 mod imxrt;
 
 #[cfg(feature = "imxrt")]
-use imxrt::{raw_copy_to_ram, validate_crc};
+use imxrt::{init, raw_copy_to_ram};
 
 mod bootload;
 mod log;
+
+trait Board {
+    async fn init() -> Self;
+}
 
 #[cfg(not(feature = "imxrt"))]
 mod unsupported {
@@ -23,139 +31,39 @@ mod unsupported {
         true
     }
 }
+use partition_manager::PartitionManager;
 #[cfg(not(feature = "imxrt"))]
 use unsupported::*;
 
 fn copy_image(_app_descriptor: &AppImageDescriptor) {
+    todo!()
     // TODO allow other scenarios supported from bootloader aside from copy to RAM
-    unsafe {
-        raw_copy_to_ram(
-            _app_descriptor.stored_address as *const u32,
-            _app_descriptor.execution_address as *mut u32,
-            _app_descriptor.execution_copy_size_bytes as usize / core::mem::size_of::<u32>(),
-        );
-    }
+    // unsafe {
+    //     raw_copy_to_ram(
+    //         _app_descriptor.slot_address as *const u32,
+    //         _app_descriptor.execution_address as *mut u32,
+    //         _app_descriptor.execution_copy_size_bytes as usize / core::mem::size_of::<u32>(),
+    //     );
+    // }
 }
 
-#[cfg(feature = "defmt")]
-fn dump_descriptor_header(descriptor_header_address: *const u32) {
-    let mut memory_copy = [0u32; core::mem::size_of::<BootableRegionDescriptorHeader>() / core::mem::size_of::<u32>()];
-    for (i, b) in memory_copy.iter_mut().enumerate() {
-        *b = unsafe { *descriptor_header_address.add(i) };
-    }
-
-    defmt::info!("Descriptor Header Bytes: {:x}", memory_copy);
-}
-
-#[cfg(feature = "defmt")]
-fn dump_app_descriptor(app_descriptor_address: *const u32) {
-    let mut memory_copy = [0u32; core::mem::size_of::<AppImageDescriptor>() / core::mem::size_of::<u32>()];
-    for (i, b) in memory_copy.iter_mut().enumerate() {
-        *b = unsafe { *app_descriptor_address.add(i) };
-    }
-
-    defmt::info!("App Descriptor Bytes: {:x}", memory_copy);
-}
-
-use ec_slimloader_descriptors::*;
-
-extern "C" {
-    static __bootable_region_descriptors_address: u32;
-}
-
-#[cortex_m_rt::entry]
-fn main() -> ! {
+#[embassy_executor::main]
+async fn main(_spawner: Spawner) -> ! {
     info!("Bootloader: Initializing Hardware.");
 
-    let boot_descriptors_address = unsafe { &__bootable_region_descriptors_address as *const u32 };
+    // Load descriptors, if flashed at all.
+    let descriptors = descriptors::load();
 
-    info!(
-        "Bootloader: Fetching App Descriptors from {:X}.",
-        boot_descriptors_address
-    );
+    let board = init().await;
 
-    // TODO error handling
-    //      ? should the bootloader be responsible for re-formatting? This may be a security decision
-    let descriptors = match BootableRegionDescriptors::from_address(boot_descriptors_address) {
-        Ok(descriptors) => descriptors,
-        Err(_e) => {
-            error!(
-                "Invalid boot region descriptors: ParseError |{}|",
-                match _e {
-                    ParseError::InvalidSignature => "Invalid Header Signature",
-                    ParseError::InvalidAppSlot => "Invalid App Slot",
-                    ParseError::InvalidSlotCount => "Invalid Slot Count",
-                    _ => "CRC Error",
-                }
-            );
+    let active_slot = 1; // TODO
 
-            #[cfg(feature = "defmt")]
-            match _e {
-                ParseError::InvalidHeaderCrc { found, expected } => {
-                    defmt::error!("Header CRC found = {:x}, expected = {:x}", found, expected);
-                    dump_descriptor_header(boot_descriptors_address);
-                }
-                ParseError::InvalidAppCrc {
-                    address,
-                    found,
-                    expected,
-                } => {
-                    defmt::error!("App @{:x} CRC found = {:x}, expected = {:x}", address, found, expected);
-                    dump_app_descriptor(address);
-                }
-                _ => (),
-            }
+    let active_app_descriptor = descriptors.get_app_at_slot(active_slot);
 
-            loop {
-                cortex_m::asm::wfi();
-            }
-        }
-    };
+    info!("Bootloader: Performing image copy to execution location.");
+    // copy_image(&active_app_descriptor);
 
-    let active_app_descriptor = descriptors.get_active_slot();
-
-    #[cfg(feature = "defmt")]
-    {
-        let xaddr = active_app_descriptor.execution_address; // Unaligned read
-        defmt::info!(
-            "Bootloader: Validation complete and branching to application execution address {:x}.",
-            xaddr
-        );
-    }
-
-    let boot_image = if active_app_descriptor.flags & APP_IMAGE_FLAG_SKIP_IMAGE_CRC_CHECK != 0 {
-        info!("Bootloader: skipping image CRC due to SKIP_IMAGE_CRC_CHECK flag.");
-        true
-    } else {
-        info!("Bootloader: validating image CRC.");
-        validate_crc(&active_app_descriptor)
-    };
-
-    // validate integrity of app image
-    if boot_image {
-        // note that use of this flag requires proper app image address backing for .text section-- ensure you have linked the app against RAM addresses! (Or other required adjustments)
-        if active_app_descriptor.flags & APP_IMAGE_FLAG_COPY_TO_EXECUTION_ADDRESS != 0 {
-            info!("Bootloader: Performing image copy to execution location.");
-            copy_image(&active_app_descriptor);
-        }
-
-        #[cfg(feature = "defmt")]
-        {
-            let xaddr = active_app_descriptor.execution_address; // Unaligned read
-            info!(
-                "Bootloader: Validation complete and branching to application execution address {:x}.",
-                xaddr
-            );
-        }
-
-        // branch to location as described by descriptor
-        unsafe { bootload::boot_application(active_app_descriptor.execution_address as *const u32) };
-    } else {
-        // TODO any boot recovery logic
-        error!("Active App CRC checksum failure!");
-
-        loop {
-            cortex_m::asm::wfi();
-        }
-    }
+    // branch to location as described by descriptor
+    // unsafe { bootload::boot_application(active_app_descriptor.execution_address as *const u32) };
+    loop {}
 }
