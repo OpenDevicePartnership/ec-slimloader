@@ -80,6 +80,8 @@ struct Imxrt {
 
 impl Board for Imxrt {
     async fn init() -> Self {
+        cortex_m::asm::delay(100000);
+
         let p = embassy_imxrt::init(Default::default());
 
         let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, 2, 2) } {
@@ -111,8 +113,6 @@ impl Board for Imxrt {
     }
 
     async fn check_and_boot(&mut self, slot: &Slot) -> BootError {
-        self.abort();
-
         let descriptor = match DESCRIPTOR_SLOTS.get(u8::from(*slot) as usize) {
             Some(descriptor) => descriptor,
             None => return BootError::SlotUnknown,
