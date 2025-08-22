@@ -1,0 +1,6 @@
+family: mimxrt685s
+revision: latest
+chainCertificate0File0: cert-img1.pem
+rootCertificate0File: cert-rot1.pem
+mainRootCertId: 0
+containerOutputFile: cert_block.bin

@@ -1,0 +1,15 @@
+artifacts_path = "./artifacts"
+
+rkth_path = "./artifacts/rkth.txt"
+otp_path = "./artifacts/otp_master_key.txt"
+
+[bootloader]
+flash_start = 0x08001000
+run_start = 0x00080000
+max_size = 0x8000
+state = { start = 0x08010000, size = 0x2000 }
+
+[application]
+slot_starts = [0x08020000, 0x080a0000]
+run_start = 0x00090000
+slot_size = 0x80000
