@@ -24,4 +24,5 @@ embedded-storage-async = "0.4.1"
 
 [profile.release]
 lto = true      # better optimizations
+debug = 2
 opt-level = "s"
