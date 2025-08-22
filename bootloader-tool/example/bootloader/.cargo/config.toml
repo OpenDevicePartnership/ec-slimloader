@@ -1,0 +1,16 @@
+[target.thumbv8m.main-none-eabihf]
+runner = [
+  'probe-rs',
+  'run',
+  '--chip',
+  'MIMXRT685SFVKB',
+  '--preverify',
+  '--verify',
+  "--log-format", "{L} {t} {f}:{l} {s}",
+]
+
+[build]
+target = "thumbv8m.main-none-eabihf" # Cortex-M33
+
+[env]
+DEFMT_LOG = "trace"

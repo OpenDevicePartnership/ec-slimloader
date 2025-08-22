@@ -1,10 +1,13 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "ec-slimloader",
     "ec-slimloader-descriptors"
 ]
-exclude = ["examples/*"]
+exclude = [
+    "examples/*",
+    "bootloader-tool"
+]
 
 [workspace.package]
 version = "0.2.0"

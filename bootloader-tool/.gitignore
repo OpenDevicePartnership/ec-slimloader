@@ -1,0 +1,8 @@
+/target
+
+# Software package
+/elftosb*
+
+/binaries.tar.xz
+/gpio-blinky
+/*.bin

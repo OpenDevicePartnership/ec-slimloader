@@ -1,0 +1,13 @@
+MEMORY {
+    FLASH    : ORIGIN = 0x10080000, LENGTH = 32K
+    RAM      : ORIGIN = 0x30088000, LENGTH = 32K
+    APP      : ORIGIN = 0x00090000, LENGTH = 1024K
+    ROM_TABLE (r): ORIGIN = 0x1303F000, LENGTH = 64
+}
+
+SECTIONS {
+    .rom_table ORIGIN(ROM_TABLE) (NOLOAD): {
+        API_TABLE = .;
+        . += LENGTH(ROM_TABLE);
+    } >ROM_TABLE
+} INSERT AFTER .uninit;
