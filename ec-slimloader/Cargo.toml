@@ -40,8 +40,8 @@ default = ["imxrt-fcb-rt685evk"]
 [dependencies]
 ec-slimloader-descriptors = { path = "../ec-slimloader-descriptors", default-features = false }
 
-mimxrt600-fcb = { version = "0.2.0", optional = true }
-mimxrt685s-pac = { version = "0.4.0", features = ["rt"], optional = true }
+mimxrt600-fcb = { version = "0.2.2", optional = true }
+mimxrt685s-pac = { version = "0.4.0", features = ["rt", "debug"], optional = true }
 embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "new-flexspi-driver", default-features = false, optional = true }
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
     "arch-cortex-m",
