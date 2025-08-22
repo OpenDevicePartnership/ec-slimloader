@@ -53,6 +53,8 @@ enum BootError {
     TooLarge,
     /// Image cannot not possible be this small.
     TooSmall,
+    /// Image did not contain the correct markers,
+    Markers,
     /// Image requested to be copied into a disallowed memory region.
     MemoryRegion,
     /// What we copied from the NVM seems to have changed after initial read.
