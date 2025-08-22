@@ -5,11 +5,11 @@ otp_path = "./artifacts/otp_master_key.txt"
 
 [bootloader]
 flash_start = 0x08001000
-run_start = 0x00080000
+run_start = 0x20114000
 max_size = 0x8000
-state = { start = 0x08010000, size = 0x2000 }
+state = { start = 0x0800B000, size = 0x2000 }
 
 [application]
-slot_starts = [0x08020000, 0x080a0000]
-run_start = 0x00090000
-slot_size = 0x80000
+slot_starts = [0x800D000, 0x80F9000]
+run_start = 0x00020000
+slot_size = 0xEC000 # 944K

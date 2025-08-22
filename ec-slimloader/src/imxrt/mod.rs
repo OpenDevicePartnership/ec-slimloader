@@ -10,7 +10,7 @@ use partition_manager::{Partition, PartitionManager, RW};
 use static_cell::StaticCell;
 
 use crate::imxrt::storage_async::AsyncWrapper;
-use crate::{panic, warn, Board, BootError};
+use crate::{info, panic, warn, Board, BootError};
 
 mod bootload;
 mod fcb;
@@ -142,6 +142,7 @@ impl Board for Imxrt {
                 return BootError::MemoryRegion;
             }
 
+            info!("Starting copy");
             unsafe {
                 raw_copy_to_ram(
                     image_ptr,
@@ -149,6 +150,7 @@ impl Board for Imxrt {
                     ivt.image_len.div_ceil(core::mem::size_of::<u32>()),
                 );
             }
+            info!("Copy done");
 
             let ram_ivt = unsafe { IVT::read(ivt.target_ptr) };
             if ivt != ram_ivt {
@@ -158,6 +160,7 @@ impl Board for Imxrt {
             ram_ivt
         };
 
+        info!("Starting authenticate");
         // Call the ROM API to ensure that the image is signed and not broken or tampered with.
         match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
             Ok(()) => {}
@@ -166,6 +169,7 @@ impl Board for Imxrt {
                 return BootError::Authenticate;
             }
         }
+        info!("Booting into application...");
 
         // Boot to application, and we do not return from this function.
         unsafe { bootload::boot_application(ram_ivt.target_ptr) }

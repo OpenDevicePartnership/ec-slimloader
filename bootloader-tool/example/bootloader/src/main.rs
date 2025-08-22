@@ -6,7 +6,7 @@ mod rom;
 use cortex_m_rt::entry;
 use defmt_rtt as _;
 
-pub const MAX_IMAGE_SIZE: u32 = 0x80000;
+pub const MAX_IMAGE_SIZE: u32 = 1024 * 944;
 
 #[entry]
 fn main() -> ! {
@@ -32,8 +32,8 @@ fn do_main() -> Result<(), ()> {
         return Ok(());
     }
 
-    let image_container_ptr = 0x08020000 as *const u32;
-    let target_ptr = 0x00090000 as *mut u32;
+    let image_container_ptr = 0x800D000 as *const u32;
+    let target_ptr = 0x00020000 as *mut u32;
 
     let image_len = unsafe { *image_container_ptr.byte_add(0x20) };
     defmt::info!("Image size is 0x{:x}", image_len);

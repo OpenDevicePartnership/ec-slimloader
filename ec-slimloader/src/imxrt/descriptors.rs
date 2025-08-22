@@ -14,9 +14,7 @@ static DESCRIPTORS: DescriptorBlock = DescriptorBlock {
         0x08_009_000 + core::mem::size_of::<BootableRegionDescriptorHeader>() as u32,
     ),
     images: [
-        AppImageDescriptor::new_ram_image(0, 0x008_100_000, 0x100_000),
-        AppImageDescriptor::new_ram_image(1, 0x008_200_000, 0x100_000),
-        AppImageDescriptor::new_ram_image(2, 0x008_300_000, 0x100_000),
-        AppImageDescriptor::new_ram_image(3, 0x008_400_000, 0x100_000),
+        AppImageDescriptor::new_ram_image(0, 0x800_D000, 1024 * 944),
+        AppImageDescriptor::new_ram_image(1, 0x80F_9000, 1024 * 944),
     ],
 };
