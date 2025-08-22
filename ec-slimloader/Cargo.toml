@@ -40,7 +40,7 @@ defmt = [
 default = ["imxrt-fcb-rt685evk"]
 
 [dependencies]
-ec-slimloader-descriptors = { git = "https://github.com/wassasin/ec-slimloader-descriptors", branch = "feature/journal-state", default-features = false }
+ec-slimloader-descriptors = { path = "../ec-slimloader-descriptors", default-features = false }
 
 mimxrt600-fcb = { version = "0.2.0", optional = true }
 mimxrt685s-pac = { version = "0.4.0", features = ["rt"], optional = true }
@@ -49,6 +49,7 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
     "arch-cortex-m",
     "executor-thread",
 ] }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 
 defmt = { version = "0.3.6", optional = true }
 defmt-rtt = { version = "0.4.0", optional = true }
@@ -61,7 +62,6 @@ cortex-m-rt = "0.7.3"
 panic-probe = "*"
 
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 embedded-storage = "0.3.1"
 embedded-storage-async = "0.4.1"
 
