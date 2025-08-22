@@ -1,11 +1,9 @@
 [package]
 name = "ec-slimloader"
-version = "0.1.0"
-edition = "2021"
-
-[profile.release]
-lto = true      # better optimizations
-opt-level = "s"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [features]
 # Special board support
@@ -51,7 +49,7 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
 ] }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 
-defmt = { version = "0.3.6", optional = true }
+defmt = { workspace = true, optional = true }
 defmt-rtt = { version = "0.4.0", optional = true }
 
 cortex-m = { version = "0.7.7", features = [
@@ -63,6 +61,6 @@ panic-probe = "*"
 
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
 embedded-storage = "0.3.1"
-embedded-storage-async = "0.4.1"
+embedded-storage-async = { workspace = true }
 
 static_cell = "2.1.1"
