@@ -1,8 +1,9 @@
 #![no_std]
 #![no_main]
 
-#[cfg(feature = "defmt")]
-use defmt_rtt as _;
+mod descriptors;
+mod log;
+
 use ec_slimloader_descriptors::journal::flash::FlashJournal;
 use ec_slimloader_descriptors::journal::state::{Slot, State, Status};
 use ec_slimloader_descriptors::{AppImageDescriptor, BootableRegionDescriptors};
@@ -10,14 +11,14 @@ use embassy_executor::Spawner;
 use embedded_storage_async::nor_flash::NorFlash;
 use panic_probe as _;
 
+#[cfg(feature = "defmt")]
+use defmt_rtt as _;
+
 #[cfg(feature = "imxrt")]
 mod imxrt;
 
 #[cfg(feature = "imxrt")]
 use imxrt::init;
-
-mod descriptors;
-mod log;
 
 /// Maximum buffer size on stack that is used by the bootloader.
 const JOURNAL_BUFFER_SIZE: usize = 1024;
@@ -50,6 +51,8 @@ trait Board {
 enum BootError {
     /// Image is too large to fit.
     TooLarge,
+    /// Image cannot not possible be this small.
+    TooSmall,
     /// Image requested to be copied into a disallowed memory region.
     MemoryRegion,
     /// What we copied from the NVM seems to have changed after initial read.
@@ -93,6 +96,8 @@ async fn set_status<B: Board>(board: &mut B, state: &mut State, status: Status) 
     if let Err(_e) = board.journal().set::<JOURNAL_BUFFER_SIZE>(state).await {
         panic!("Failed to update state"); // TODO print e, but requirements for defmt are in the way.
     }
+
+    debug!("Stored new state in journal: {}", state);
 }
 
 #[embassy_executor::main]
@@ -107,7 +112,10 @@ async fn main(_spawner: Spawner) -> ! {
 
     // Fetch state or set initial state.
     let mut state: State = match state {
-        Some(state) => *state,
+        Some(state) => {
+            info!("Latest state fetched from journal: {:?}", state);
+            *state
+        }
         None => {
             let slot = unwrap!(Slot::try_from(0));
             warn!(
@@ -146,11 +154,15 @@ async fn main(_spawner: Spawner) -> ! {
     let error = attempt_slot(slot, &mut board, &descriptors).await; // If this function returns, it implies that the boot has failed.
     warn!("Failed to boot {:?} in {:?} because {:?}", intent, slot, error);
 
+    // Mark our state as [Failed] if it was not set to be so already.
+    if state.status() != Status::Failed {
+        set_status(&mut board, &mut state, Status::Failed).await;
+    }
+
     if slot != state.backup() {
         // There exists a separate backup slot.
-        // That implies that we were in either [Initial] or [Confirmed].
-        // But the target [Slot] did not work, so will give up on it forever.
-        set_status(&mut board, &mut state, Status::Failed).await;
+        // That implies that we were in either [Initial] or [Confirmed], and now are in [Failed].
+        // So attempt to boot the backup for now.
 
         info!("Attempting to boot backup in {:?}", slot);
         let error = attempt_slot(state.backup(), &mut board, &descriptors).await; // If this function returns, it implies that the boot has failed.

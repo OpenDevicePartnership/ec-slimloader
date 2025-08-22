@@ -17,6 +17,9 @@ imxrt-fcb-1spi-a1-nor = ["imxrt-fcb-1spi-nor"]
 imxrt-fcb-1spi-b1-nor = ["imxrt-fcb-1spi-nor"]
 imxrt-fcb-1spi-nor = ["imxrt"]
 
+# Pre-defined descriptors
+descriptors = []
+
 # chip variants
 mimxrt685s = ["imxrt", "dep:mimxrt685s-pac", "embassy-imxrt/mimxrt685s"]
 mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
@@ -34,7 +37,7 @@ defmt = [
     "partition-manager/defmt"
 ]
 
-default = ["imxrt-fcb-rt685evk"]
+default = ["imxrt-fcb-rt685evk", "descriptors"]
 
 [dependencies]
 # ec-slimloader-descriptors = { git = "https://github.com/wassasin/ec-slimloader-descriptors", branch = "feature/journal-state" }

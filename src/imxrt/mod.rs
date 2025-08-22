@@ -17,7 +17,11 @@ mod fcb;
 mod rom;
 mod storage_async;
 
+#[cfg(feature = "descriptors")]
+mod descriptors;
+
 const MAXIMUM_SLOT_SIZE: usize = 1024 * 1024;
+const MINIMUM_IMAGE_SIZE: usize = 64; // Should at least contain an IVT.
 const ALLOWED_APP_RANGE: Range<*mut u32> = (0x0009_0000 as *mut u32)..0x018_0000 as *mut u32;
 
 // auto-generated version information from Cargo.toml
@@ -115,6 +119,9 @@ impl Board for Imxrt {
             let ivt = unsafe { IVT::read(image_ptr) };
             if ivt.image_len > slot_size {
                 return BootError::TooLarge;
+            }
+            if ivt.image_len < MINIMUM_IMAGE_SIZE {
+                return BootError::TooSmall;
             }
 
             // Check if the target_ptr is within the allowed range.
