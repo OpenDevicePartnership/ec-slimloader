@@ -7,13 +7,9 @@ MEMORY {
   CONFIG_FLASH_OTFAD : ORIGIN = 0x08000000, LENGTH = 256
   CONFIG_FLASH_FCB   : ORIGIN = 0x08000400, LENGTH = 512
   CONFIG_FLASH_BIV   : ORIGIN = 0x08000600, LENGTH = 4
-  FLASH              : ORIGIN = 0x20114000, LENGTH = 24K /* running in load-to-ram mode */
-  DESCRIPTORS        : ORIGIN = 0x08009000, LENGTH = 4K
+  FLASH              : ORIGIN = 0x00114000, LENGTH = 24K /* running in load-to-ram mode */
   ROM_TABLE (r)      : ORIGIN = 0x1303F000, LENGTH = 64
 }
-
-/* link descriptors at FLASH address after 32KB Bootloader Range */
-__bootable_region_descriptors_address = 0x08009000;
 
 SECTIONS {
   .otfad : {
@@ -33,12 +29,6 @@ SECTIONS {
     KEEP(* (.biv))
     . = ALIGN(4);
   } > CONFIG_FLASH_BIV
-
-  .descriptors : {
-    . = ALIGN(4);
-    KEEP(* (.biv))
-    . = ALIGN(4);
-  } > DESCRIPTORS
 
   .rom_table ORIGIN(ROM_TABLE) (NOLOAD): {
     API_TABLE = .;

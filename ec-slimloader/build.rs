@@ -17,6 +17,7 @@ fn main() {
         println!("cargo:rustc-link-search={}", out.display());
         println!("cargo:rerun-if-changed=memory-imxrt.x");
         println!("cargo:rustc-link-arg=-Tlink.x");
+        println!("cargo::rustc-link-arg=--nmagic");
 
         #[cfg(feature = "defmt")]
         println!("cargo:rustc-link-arg=-Tdefmt.x");

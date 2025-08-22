@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
 
-mod descriptors;
 mod log;
 
-use ec_slimloader_descriptors::journal::flash::FlashJournal;
-use ec_slimloader_descriptors::journal::state::{Slot, State, Status};
-use ec_slimloader_descriptors::{AppImageDescriptor, BootableRegionDescriptors};
+use ec_slimloader_descriptors::journal::{
+    flash::FlashJournal,
+    state::{Slot, State, Status},
+};
 use embassy_executor::Spawner;
 use embedded_storage_async::nor_flash::NorFlash;
 use panic_probe as _;
@@ -38,7 +38,7 @@ trait Board {
     ///
     /// Does not return if the boot is successful.
     /// Yields [BootError] if at any stage the boot is aborted.
-    async fn check_and_boot(&mut self, descriptor: &AppImageDescriptor) -> BootError;
+    async fn check_and_boot(&mut self, slot: &Slot) -> BootError;
 
     /// Give up booting into an application.
     ///
@@ -49,6 +49,8 @@ trait Board {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum BootError {
+    /// Slot is not defined.
+    SlotUnknown,
     /// Image is too large to fit.
     TooLarge,
     /// Image cannot not possible be this small.
@@ -63,15 +65,6 @@ enum BootError {
     ChangeAfterRead,
     /// Image failed to authenticate.
     Authenticate,
-    /// Failed to read the descriptor.
-    #[allow(unused)]
-    Descriptor(ec_slimloader_descriptors::ParseError),
-}
-
-impl From<ec_slimloader_descriptors::ParseError> for BootError {
-    fn from(value: ec_slimloader_descriptors::ParseError) -> Self {
-        BootError::Descriptor(value)
-    }
 }
 
 /// Intent which denotes which [Slot] should be booted.
@@ -80,16 +73,6 @@ impl From<ec_slimloader_descriptors::ParseError> for BootError {
 enum BootIntent {
     Target,
     Backup,
-}
-
-/// Attempt booting a specific slot.
-///
-/// Will not return if boot is successfull, and yield [BootError] in any other case.
-async fn attempt_slot(slot: Slot, board: &mut impl Board, descriptors: &BootableRegionDescriptors) -> BootError {
-    match descriptors.get_app_at_slot(u8::from(slot) as u32) {
-        Ok(active_app_descriptor) => board.check_and_boot(&active_app_descriptor).await,
-        Err(e) => e.into(),
-    }
 }
 
 /// Set a new valid [State] as the latest in the [FlashJournal].
@@ -115,7 +98,6 @@ async fn main(_spawner: Spawner) -> ! {
     // }
 
     // Load descriptors, if flashed at all.
-    let descriptors = descriptors::load();
 
     let mut board = init().await;
     let state = board.journal().get();
@@ -161,7 +143,7 @@ async fn main(_spawner: Spawner) -> ! {
     };
 
     info!("Attempting to boot {:?} in {:?}", intent, slot);
-    let error = attempt_slot(slot, &mut board, &descriptors).await; // If this function returns, it implies that the boot has failed.
+    let error = board.check_and_boot(&slot).await; // If this function returns, it implies that the boot has failed.
     warn!("Failed to boot {:?} in {:?} because {:?}", intent, slot, error);
 
     // Mark our state as [Failed] if it was not set to be so already.
@@ -175,7 +157,7 @@ async fn main(_spawner: Spawner) -> ! {
         // So attempt to boot the backup for now.
 
         info!("Attempting to boot backup in {:?}", slot);
-        let error = attempt_slot(state.backup(), &mut board, &descriptors).await; // If this function returns, it implies that the boot has failed.
+        let error = board.check_and_boot(&state.backup()).await; // If this function returns, it implies that the boot has failed.
         warn!("Failed to boot backup in {:?} because {:?}", slot, error);
     }
 

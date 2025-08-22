@@ -1,6 +1,7 @@
 use core::ops::Range;
 
 use ec_slimloader_descriptors::journal::flash::FlashJournal;
+use ec_slimloader_descriptors::journal::state::Slot;
 use ec_slimloader_descriptors::AppImageDescriptor;
 use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
 use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
@@ -17,13 +18,15 @@ mod fcb;
 mod rom;
 mod storage_async;
 
-#[cfg(feature = "descriptors")]
-mod descriptors;
-
 const MAXIMUM_SLOT_SIZE: usize = 1024 * 1024;
 const MINIMUM_IMAGE_SIZE: usize = 64; // Should at least contain an IVT.
-const ALLOWED_APP_RANGE: Range<*mut u32> = (0x0009_0000 as *mut u32)..0x018_0000 as *mut u32;
+const ALLOWED_APP_RANGE: Range<*mut u32> = (0x0002_0000 as *mut u32)..0x018_0000 as *mut u32;
 const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
+
+static DESCRIPTOR_SLOTS: &'static [AppImageDescriptor] = &[
+    AppImageDescriptor::new_ram_image(0x800_D000, 1024 * 944),
+    AppImageDescriptor::new_ram_image(0x80F_9000, 1024 * 944),
+];
 
 // auto-generated version information from Cargo.toml
 #[cfg(feature = "imxrt")]
@@ -107,7 +110,14 @@ impl Board for Imxrt {
         &mut self.journal
     }
 
-    async fn check_and_boot(&mut self, descriptor: &AppImageDescriptor) -> BootError {
+    async fn check_and_boot(&mut self, slot: &Slot) -> BootError {
+        self.abort();
+
+        let descriptor = match DESCRIPTOR_SLOTS.get(u8::from(*slot) as usize) {
+            Some(descriptor) => descriptor,
+            None => return BootError::SlotUnknown,
+        };
+
         // Copy the image to RAM from flash, and ensure that everything from flash is no longer available.
         let ram_ivt = {
             // Fetch image size, which in MBI is located in 0x20 of IVT.
@@ -150,6 +160,11 @@ impl Board for Imxrt {
                     ivt.image_len.div_ceil(core::mem::size_of::<u32>()),
                 );
             }
+
+            unsafe {
+                let mut p = cortex_m::Peripherals::steal();
+                p.SCB.invalidate_icache();
+            }
             info!("Copy done");
 
             let ram_ivt = unsafe { IVT::read(ivt.target_ptr) };
@@ -161,6 +176,7 @@ impl Board for Imxrt {
         };
 
         info!("Starting authenticate");
+
         // Call the ROM API to ensure that the image is signed and not broken or tampered with.
         match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
             Ok(()) => {}
