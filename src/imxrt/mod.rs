@@ -23,6 +23,7 @@ mod descriptors;
 const MAXIMUM_SLOT_SIZE: usize = 1024 * 1024;
 const MINIMUM_IMAGE_SIZE: usize = 64; // Should at least contain an IVT.
 const ALLOWED_APP_RANGE: Range<*mut u32> = (0x0009_0000 as *mut u32)..0x018_0000 as *mut u32;
+const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
 
 // auto-generated version information from Cargo.toml
 #[cfg(feature = "imxrt")]
@@ -50,6 +51,7 @@ partition_manager::macros::create_partition_map!(
 #[allow(clippy::upper_case_acronyms)]
 struct IVT {
     pub image_len: usize,
+    pub image_type: u32,
     pub target_ptr: *mut u32,
 }
 
@@ -57,6 +59,7 @@ impl IVT {
     pub unsafe fn read(image_ptr: *const u32) -> Self {
         Self {
             image_len: *image_ptr.byte_add(0x20) as usize,
+            image_type: *image_ptr.byte_add(0x24),
             target_ptr: *image_ptr.byte_add(0x34) as *mut u32,
         }
     }
@@ -116,7 +119,11 @@ impl Board for Imxrt {
                 return BootError::TooLarge;
             }
 
+            // Verify IVT fields.
             let ivt = unsafe { IVT::read(image_ptr) };
+            if ivt.image_type & 0xFF != IMAGE_TYPE_XIP_SIGNED {
+                return BootError::Markers;
+            }
             if ivt.image_len > slot_size {
                 return BootError::TooLarge;
             }
