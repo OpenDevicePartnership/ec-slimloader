@@ -8,6 +8,7 @@ MEMORY {
   CONFIG_FLASH_FCB   : ORIGIN = 0x08000400, LENGTH = 512
   CONFIG_FLASH_BIV   : ORIGIN = 0x08000600, LENGTH = 4
   FLASH              : ORIGIN = 0x08001000, LENGTH = 16K /* running in XiP mode */
+  DESCRIPTORS        : ORIGIN = 0x08009000, LENGTH = 4K
   ROM_TABLE (r)      : ORIGIN = 0x1303F000, LENGTH = 64
 }
 
@@ -34,6 +35,12 @@ SECTIONS {
     KEEP(* (.biv))
     . = ALIGN(4);
   } > CONFIG_FLASH_BIV
+
+  .descriptors : {
+    . = ALIGN(4);
+    KEEP(* (.biv))
+    . = ALIGN(4);
+  } > DESCRIPTORS
 
   .rom_table ORIGIN(ROM_TABLE) (NOLOAD): {
     API_TABLE = .;
