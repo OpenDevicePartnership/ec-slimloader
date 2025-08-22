@@ -5,7 +5,7 @@ edition = "2021"
 
 [profile.release]
 lto = true      # better optimizations
-opt-level = "z"
+opt-level = "s"
 
 [features]
 # Special board support
@@ -25,7 +25,14 @@ mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
 imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt"]
 
 # optional debug logging 
-defmt = ["dep:defmt", "dep:defmt-rtt", "embassy-imxrt/defmt"]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "embassy-executor/defmt",
+    "embassy-imxrt/defmt",
+    "ec-slimloader-descriptors/defmt",
+    "partition-manager/defmt"
+]
 
 default = ["imxrt-fcb-rt685evk"]
 
@@ -39,7 +46,6 @@ embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch 
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
     "arch-cortex-m",
     "executor-thread",
-    "defmt",
 ] }
 
 defmt = { version = "0.3.6", optional = true }
@@ -56,6 +62,5 @@ partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-s
 embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 embedded-storage = "0.3.1"
 embedded-storage-async = "0.4.1"
-storage_bus = { git = "https://github.com/OpenDevicePartnership/embedded-mcu" }
 
 static_cell = "2.1.1"
