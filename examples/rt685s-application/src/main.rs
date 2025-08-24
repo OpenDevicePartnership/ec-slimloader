@@ -74,6 +74,9 @@ async fn main(_spawner: Spawner) {
         Err(e) => defmt::panic!("Failed to initialize the flash state journal: {:?}", e),
     };
 
+    let slot_a = defmt::unwrap!(Slot::try_from(0));
+    let slot_b = defmt::unwrap!(Slot::try_from(1));
+
     let state = match journal.get() {
         Some(state) => {
             defmt::info!("Read state {}", state);
@@ -98,6 +101,8 @@ async fn main(_spawner: Spawner) {
         Status::Failed => (state.backup(), false, true),
         Status::Confirmed => (state.target(), true, false),
     };
+
+    let other_slot = if slot == slot_a { slot_b } else { slot_a };
 
     info!("Initializing GPIO");
 
@@ -155,13 +160,13 @@ async fn main(_spawner: Spawner) {
         }
     };
 
-    let button1_fut = async {
+    let button1_fut = async move {
         button1.wait_for_falling_edge().await;
         info!("USER1");
 
         let new_state = if is_confirmed {
             // Swap around
-            State::new(Status::Initial, state.backup(), state.target())
+            State::new(Status::Initial, other_slot, slot)
         } else if is_backup {
             // Try main again
             state.with_status(Status::Initial)
@@ -172,6 +177,7 @@ async fn main(_spawner: Spawner) {
 
         defmt::info!("Writing new state: {}", new_state);
         defmt::unwrap!(journal.set::<JOURNAL_BUFFER_SIZE>(&new_state).await);
+        drop(journal);
     };
 
     let button2_fut = async {
