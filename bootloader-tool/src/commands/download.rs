@@ -24,15 +24,10 @@ pub async fn process(config: &Config, command: DownloadCommands) -> anyhow::Resu
             }
         }
         Other(RunCommands::Application { run_args, slot }) => {
-            if slot != 0 {
-                todo!("Only slot 0 is supported for now");
-            }
-
             if let Some(application) = &config.application {
-                let flash_start = *application
-                    .slot_starts
-                    .first()
-                    .ok_or_else(|| anyhow::anyhow!("Slot 0 not defined in configuration file"))?;
+                let flash_start = *application.slot_starts.get(slot as usize).ok_or_else(|| {
+                    anyhow::anyhow!(format!("Slot {} not defined in configuration file", slot))
+                })?;
                 (run_args, false, flash_start)
             } else {
                 return Err(anyhow::anyhow!(

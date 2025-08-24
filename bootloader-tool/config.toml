@@ -11,5 +11,5 @@ state = { start = 0x0800B000, size = 0x2000 }
 
 [application]
 slot_starts = [0x800D000, 0x80F9000]
-run_start = 0x00020000
+run_start = 0x00090000
 slot_size = 0xEC000 # 944K
