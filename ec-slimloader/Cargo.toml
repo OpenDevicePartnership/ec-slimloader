@@ -32,7 +32,7 @@ defmt = [
     "partition-manager/defmt"
 ]
 
-default = ["imxrt-fcb-rt685evk"]
+default = ["mimxrt685s-evk"]
 
 [dependencies]
 ec-slimloader-descriptors = { path = "../ec-slimloader-descriptors", default-features = false }
@@ -45,6 +45,7 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
     "executor-thread",
 ] }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 
 defmt = { workspace = true, optional = true }
 defmt-rtt = { version = "0.4.0", optional = true }

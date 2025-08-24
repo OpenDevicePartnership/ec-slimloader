@@ -3,10 +3,7 @@ runner = [
   'probe-rs',
   'run',
   '--chip',
-  'MIMXRT685SFVKB',
-  '--preverify',
-  '--verify',
-  "--log-format", "{L} {t} {f}:{l} {s}",
+  'MIMXRT685SFVKB'
 ]
 
 [build]
