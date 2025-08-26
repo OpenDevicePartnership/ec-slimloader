@@ -12,7 +12,7 @@ cortex-m-rt = { version = "0.7.3", features = ["paint-stack"] }
 defmt = "0.3.6"
 defmt-rtt = "0.4.0"
 panic-probe = { version = "0.3.1", features = ["print-defmt"] }
-embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "new-flexspi-driver", features = [
+embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", features = [
     "defmt",
     "time-driver",
     "time",
