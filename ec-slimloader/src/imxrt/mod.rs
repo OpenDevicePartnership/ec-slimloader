@@ -3,6 +3,7 @@ use core::ops::Range;
 use ec_slimloader_descriptors::journal::flash::FlashJournal;
 use ec_slimloader_descriptors::journal::state::Slot;
 use ec_slimloader_descriptors::AppImageDescriptor;
+use embassy_imxrt::clocks::MainClkSrc;
 use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
 use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -80,9 +81,12 @@ struct Imxrt {
 
 impl Board for Imxrt {
     async fn init() -> Self {
-        cortex_m::asm::delay(100000);
-
-        let p = embassy_imxrt::init(Default::default());
+        // Set clock to Pll but with a larger divider, otherwise
+        // we get nondeterministic behaviour from the ROM API.
+        let mut config = embassy_imxrt::config::Config::default();
+        config.clocks.main_clk.src = MainClkSrc::PllMain;
+        config.clocks.main_clk.div_int = 4.into();
+        let p = embassy_imxrt::init(config);
 
         let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, 2, 2) } {
             Ok(ext_flash) => ext_flash,

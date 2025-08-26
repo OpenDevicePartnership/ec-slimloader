@@ -39,7 +39,7 @@ ec-slimloader-descriptors = { path = "../ec-slimloader-descriptors", default-fea
 
 mimxrt600-fcb = { version = "0.2.2", optional = true }
 mimxrt685s-pac = { version = "0.4.0", features = ["rt", "debug"], optional = true }
-embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "new-flexspi-driver", default-features = false, optional = true }
+embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", default-features = false, optional = true }
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
     "arch-cortex-m",
     "executor-thread",
