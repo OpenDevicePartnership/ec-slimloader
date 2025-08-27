@@ -28,14 +28,14 @@ defmt = [
     "dep:defmt-rtt",
     "embassy-executor/defmt",
     "embassy-imxrt/defmt",
-    "ec-slimloader-descriptors/defmt",
+    "ec-slimloader-state/defmt",
     "partition-manager/defmt"
 ]
 
 default = ["mimxrt685s-evk"]
 
 [dependencies]
-ec-slimloader-descriptors = { path = "../ec-slimloader-descriptors", default-features = false }
+ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 
 mimxrt600-fcb = { version = "0.2.2", optional = true }
 mimxrt685s-pac = { version = "0.4.0", features = ["rt", "debug"], optional = true }

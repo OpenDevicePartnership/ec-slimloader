@@ -1,5 +1,5 @@
 [package]
-name = "ec-slimloader-descriptors"
+name = "ec-slimloader-state"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

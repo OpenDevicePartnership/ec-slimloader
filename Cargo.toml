@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "ec-slimloader",
-    "ec-slimloader-descriptors"
+    "ec-slimloader-state"
 ]
 exclude = [
     "examples/*",

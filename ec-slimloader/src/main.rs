@@ -3,7 +3,7 @@
 
 mod log;
 
-use ec_slimloader_descriptors::journal::{
+use ec_slimloader_state::journal::{
     flash::FlashJournal,
     state::{Slot, State, Status},
 };

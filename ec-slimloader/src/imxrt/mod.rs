@@ -1,8 +1,8 @@
 use core::ops::Range;
 
-use ec_slimloader_descriptors::journal::flash::FlashJournal;
-use ec_slimloader_descriptors::journal::state::Slot;
-use ec_slimloader_descriptors::AppImageDescriptor;
+use ec_slimloader_state::journal::flash::FlashJournal;
+use ec_slimloader_state::journal::state::Slot;
+use ec_slimloader_state::AppImageDescriptor;
 use embassy_imxrt::clocks::MainClkSrc;
 use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
 use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;

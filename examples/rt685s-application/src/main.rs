@@ -4,7 +4,7 @@
 use cortex_m_rt::exception;
 use defmt::info;
 use defmt_rtt as _;
-use ec_slimloader_descriptors::journal::{
+use ec_slimloader_state::journal::{
     flash::FlashJournal,
     state::{Slot, State, Status},
 };

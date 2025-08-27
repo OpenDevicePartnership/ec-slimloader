@@ -35,7 +35,7 @@ embassy-futures = { git = "https://github.com/embassy-rs/embassy"}
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 
-ec-slimloader-descriptors = { path = "../../ec-slimloader-descriptors" }
+ec-slimloader-state = { path = "../../ec-slimloader-state" }
 
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros", "defmt"], default-features = false }
 embedded-storage = "0.3.1"
