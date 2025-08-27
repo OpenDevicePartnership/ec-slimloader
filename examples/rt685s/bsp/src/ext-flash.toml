@@ -12,7 +12,5 @@ alignment = 0x1000
 
 bl_state = { offset = 0xb000, size = 0x2000, access = { application = "rw", bootloader = "rw" } }
 
-# app_slot0 => { offset = 0x100000, size = 0x100000 }
-# app_slot1 => { offset = 0x200000, size = 0x100000 }
-# app_slot2 => { offset = 0x300000, size = 0x100000 }
-# app_slot3 => { offset = 0x400000, size = 0x100000 }
+app_slot0 = { offset = 0x0d000, size = 0xec000, access = { application = "rw", bootloader = "ro" } }
+app_slot1 = { offset = 0xf9000, size = 0xec000, access = { application = "rw", bootloader = "ro" } }

@@ -29,10 +29,6 @@ static DESCRIPTOR_SLOTS: &'static [AppImageDescriptor] = &[
     AppImageDescriptor::new_ram_image(0x80F_9000, 1024 * 944),
 ];
 
-// auto-generated version information from Cargo.toml
-#[cfg(feature = "imxrt")]
-include!(concat!(env!("OUT_DIR"), "/biv.rs"));
-
 #[cfg(feature = "imxrt")]
 #[link_section = ".otfad"]
 #[used]

@@ -26,13 +26,6 @@ struct Leds<'a> {
     pub green: Output<'a>,
 }
 
-partition_manager::macros::create_partition_map!(
-    name: ExternalStorageConfig,
-    map_name: ExternalStorageMap,
-    variant: "bootloader",
-    manifest: "src/ext-flash.toml"
-);
-
 const JOURNAL_BUFFER_SIZE: usize = 1024;
 
 #[embassy_executor::main]
@@ -67,7 +60,7 @@ async fn main(_spawner: Spawner) {
     let mut ext_flash_manager =
         PartitionManager::<_, NoopRawMutex>::new(BlockingAsync::new(ext_flash));
 
-    let ExternalStorageMap { bl_state } = ext_flash_manager.map(ExternalStorageConfig::new());
+    let example_bsp::ExternalStorageMap { bl_state, .. } = ext_flash_manager.map(example_bsp::ExternalStorageConfig::new());
 
     let mut journal = match FlashJournal::new::<{ crate::JOURNAL_BUFFER_SIZE }>(bl_state).await {
         Ok(journal) => journal,

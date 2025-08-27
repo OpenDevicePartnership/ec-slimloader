@@ -85,10 +85,7 @@ async fn set_status<B: Board>(board: &mut B, state: &mut State, status: Status) 
     debug!("Stored new state in journal: {}", state);
 }
 
-#[embassy_executor::main]
-async fn main(_spawner: Spawner) -> ! {
-    info!("Bootloader: Initializing Hardware.");
-
+pub async fn start() -> ! {
     let mut board = init().await;
 
     // let rkth = &unsafe { *(0x401301E0 as *const [u8; 32]) };

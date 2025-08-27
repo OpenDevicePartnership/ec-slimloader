@@ -1,9 +1,13 @@
 [package]
-name = "example-application"
+name = "example-bootloader"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+defmt = ["ec-slimloader/defmt"]
+
 [dependencies]
+ec-slimloader = { path = "../../../ec-slimloader", features = ["mimxrt685s-evk"] }
 example-bsp = { path = "../bsp", features = ["application"] }
 
 cortex-m = { version = "0.7.7", features = [

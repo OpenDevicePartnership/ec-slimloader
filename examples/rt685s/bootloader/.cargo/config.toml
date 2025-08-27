@@ -1,0 +1,14 @@
+[target.thumbv8m.main-none-eabihf]
+runner = [
+  'probe-rs',
+  'run',
+  '--chip',
+  'MIMXRT685SFVKB'
+]
+
+[build]
+target = "thumbv8m.main-none-eabihf" # Cortex-M33
+
+[env]
+RUST_LOG = "info"
+DEFMT_LOG = "info"
