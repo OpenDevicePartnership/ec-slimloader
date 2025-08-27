@@ -25,8 +25,8 @@ const ALLOWED_APP_RANGE: Range<*mut u32> = (0x0002_0000 as *mut u32)..0x018_0000
 const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
 
 static DESCRIPTOR_SLOTS: &'static [AppImageDescriptor] = &[
-    AppImageDescriptor::new_ram_image(0x800_D000, 1024 * 944),
-    AppImageDescriptor::new_ram_image(0x80F_9000, 1024 * 944),
+    AppImageDescriptor::new_ram_image(0x800_9000, 1024 * 952),
+    AppImageDescriptor::new_ram_image(0x80F_7000, 1024 * 952),
 ];
 
 // auto-generated version information from Cargo.toml
@@ -135,6 +135,7 @@ impl Board for Imxrt {
 
             // Verify IVT fields.
             let ivt = unsafe { IVT::read(image_ptr) };
+            #[cfg(not(feature = "non-secure"))]
             if ivt.image_type & 0xFF != IMAGE_TYPE_XIP_SIGNED {
                 return BootError::Markers;
             }
@@ -179,14 +180,17 @@ impl Board for Imxrt {
             ram_ivt
         };
 
-        info!("Starting authenticate");
+        #[cfg(not(feature = "non-secure"))]
+        {
+            info!("Starting authenticate");
 
-        // Call the ROM API to ensure that the image is signed and not broken or tampered with.
-        match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
-            Ok(()) => {}
-            Err(e) => {
-                warn!("Failed to authenticate {:?}", e);
-                return BootError::Authenticate;
+            // Call the ROM API to ensure that the image is signed and not broken or tampered with.
+            match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
+                Ok(()) => {}
+                Err(e) => {
+                    warn!("Failed to authenticate {:?}", e);
+                    return BootError::Authenticate;
+                }
             }
         }
         info!("Booting into application...");

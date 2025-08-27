@@ -1,6 +1,6 @@
 use core::ptr::{null, null_mut};
 
-use mimxrt685s_pac::interrupt;
+use embassy_imxrt::pac::interrupt;
 
 use crate::{error, warn};
 
@@ -240,9 +240,9 @@ pub fn skboot_authenticate(start: *const u32, max_image_length: u32) -> Result<(
 
     let result = unsafe { (api_table().skboot.authenticate)(start, &mut is_sign_verified) };
 
-    if cortex_m::peripheral::NVIC::is_enabled(mimxrt685s_pac::Interrupt::HASHCRYPT) {
+    if cortex_m::peripheral::NVIC::is_enabled(embassy_imxrt::pac::Interrupt::HASHCRYPT) {
         warn!("ROM API kept HASHCRYPT unmasked...");
-        cortex_m::peripheral::NVIC::mask(mimxrt685s_pac::Interrupt::HASHCRYPT);
+        cortex_m::peripheral::NVIC::mask(embassy_imxrt::pac::Interrupt::HASHCRYPT);
     }
 
     let status = unsafe { (api_table().iap_driver.deinit)(session_ref) };

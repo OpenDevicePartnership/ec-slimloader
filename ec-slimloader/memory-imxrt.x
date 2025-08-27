@@ -3,11 +3,11 @@
  *  there or on any of the overlays. 
  */
 MEMORY {
-  RAM                : ORIGIN = 0x20114000, LENGTH = 32K
+  RAM                : ORIGIN = 0x20116000, LENGTH = 32K
   CONFIG_FLASH_OTFAD : ORIGIN = 0x08000000, LENGTH = 256
   CONFIG_FLASH_FCB   : ORIGIN = 0x08000400, LENGTH = 512
   CONFIG_FLASH_BIV   : ORIGIN = 0x08000600, LENGTH = 4
-  FLASH              : ORIGIN = 0x0010C000, LENGTH = 32K /* running in load-to-ram mode */
+  FLASH              : ORIGIN = 0x0010E000, LENGTH = 32K /* running in load-to-ram mode */
   ROM_TABLE (r)      : ORIGIN = 0x1303F000, LENGTH = 64
 }
 

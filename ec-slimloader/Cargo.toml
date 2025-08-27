@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+# Skips all security and verification checks
+non-secure = []
+
 # Special board support
 mimxrt685s-evk = ["imxrt-fcb-rt685evk", "mimxrt685s"]
 
@@ -20,7 +23,7 @@ mimxrt685s = ["imxrt", "dep:mimxrt685s-pac", "embassy-imxrt/mimxrt685s"]
 mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
 
 # common imxrt features
-imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt"]
+imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt", "embassy-imxrt/unstable-pac"]
 
 # optional debug logging 
 defmt = [
