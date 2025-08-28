@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use mimxrt600_fcb::FlexSpiLutOpcode::{CMD_SDR, READ_SDR, STOP};
 use mimxrt600_fcb::FlexSpiNumPads::Single;
 use mimxrt600_fcb::{flexspi_lut_seq, FlexSPIFlashConfigurationBlock};

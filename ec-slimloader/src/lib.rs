@@ -7,7 +7,6 @@ use ec_slimloader_state::journal::{
     flash::FlashJournal,
     state::{Slot, State, Status},
 };
-use embassy_executor::Spawner;
 use embedded_storage_async::nor_flash::NorFlash;
 use panic_probe as _;
 
@@ -15,10 +14,7 @@ use panic_probe as _;
 use defmt_rtt as _;
 
 #[cfg(feature = "imxrt")]
-mod imxrt;
-
-#[cfg(feature = "imxrt")]
-use imxrt::init;
+pub mod imxrt;
 
 /// Maximum buffer size on stack that is used by the bootloader.
 const JOURNAL_BUFFER_SIZE: usize = 1024;
@@ -27,9 +23,12 @@ const JOURNAL_BUFFER_SIZE: usize = 1024;
 ///
 /// Typically a board needs to support the intrinsics for some microcontroller and
 /// contain non volatile memory that stores the multiple images and bootloading state.
-trait Board {
+#[allow(async_fn_in_trait)]
+pub trait Board {
+    type Config;
+
     /// Initialize the [Board], can only be called once.
-    async fn init() -> Self;
+    async fn init(config: Self::Config) -> Self;
 
     /// Give a mutable reference to the [FlashJournal].
     fn journal(&mut self) -> &mut FlashJournal<impl NorFlash>;
@@ -48,7 +47,7 @@ trait Board {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-enum BootError {
+pub enum BootError {
     /// Slot is not defined.
     SlotUnknown,
     /// Image is too large to fit.
@@ -85,8 +84,8 @@ async fn set_status<B: Board>(board: &mut B, state: &mut State, status: Status) 
     debug!("Stored new state in journal: {}", state);
 }
 
-pub async fn start() -> ! {
-    let mut board = init().await;
+pub async fn start<B: Board>(config: B::Config) -> ! {
+    let mut board = B::init(config).await;
 
     // let rkth = &unsafe { *(0x401301E0 as *const [u8; 32]) };
     // info!("Shadow RKTH: {:x}", rkth);

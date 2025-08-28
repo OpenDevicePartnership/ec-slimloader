@@ -19,10 +19,8 @@ mod fcb;
 mod rom;
 mod storage_async;
 
-const MAXIMUM_SLOT_SIZE: usize = 1024 * 1024;
-const MINIMUM_IMAGE_SIZE: usize = 64; // Should at least contain an IVT.
-const ALLOWED_APP_RANGE: Range<*mut u32> = (0x0002_0000 as *mut u32)..0x018_0000 as *mut u32;
 const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
+const JOURNAL_BUFFER_SIZE: usize = 4096;
 
 static DESCRIPTOR_SLOTS: &'static [AppImageDescriptor] = &[
     AppImageDescriptor::new_ram_image(0x800_D000, 1024 * 944),
@@ -71,25 +69,40 @@ impl IVT {
     }
 }
 
-struct Imxrt {
-    journal: FlashJournal<Partition<'static, ExternalStorage, RW>>,
+pub trait ImxrtConfig {
+    /// Minimum and maximum image size contained within a slot.
+    const SLOT_SIZE_RANGE: Range<usize>;
+
+    /// The memory range an image is allowed to be copied to.
+    const LOAD_RANGE: Range<*mut u32>;
 }
 
-impl Board for Imxrt {
-    async fn init() -> Self {
+pub struct Imxrt<C> {
+    journal: FlashJournal<Partition<'static, ExternalStorage, RW>>,
+    _config: C,
+}
+
+impl<C: ImxrtConfig> Board for Imxrt<C> {
+    type Config = C;
+
+    async fn init(config: Self::Config) -> Self {
+        const READ_ALIGNMENT: u32 = 2;
+        const WRITE_ALIGNMENT: u32 = 2;
+
         // Set clock to Pll but with a larger divider, otherwise
         // we get nondeterministic behaviour from the ROM API.
-        let mut config = embassy_imxrt::config::Config::default();
-        config.clocks.main_clk.src = MainClkSrc::PllMain;
-        config.clocks.main_clk.div_int = 4.into();
-        let p = embassy_imxrt::init(config);
+        let mut hal_config = embassy_imxrt::config::Config::default();
+        hal_config.clocks.main_clk.src = MainClkSrc::PllMain;
+        hal_config.clocks.main_clk.div_int = 4.into();
+        let p = embassy_imxrt::init(hal_config);
 
-        let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, 2, 2) } {
+        let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, READ_ALIGNMENT, WRITE_ALIGNMENT) }
+        {
             Ok(ext_flash) => ext_flash,
             Err(e) => panic!("Failed to initialize FlexSPI peripheral: {:?}", e),
         };
 
-        let ext_flash = match unsafe { FlexSpiNorStorage::<2, 2, 4096>::new(ext_flash) } {
+        let ext_flash = match unsafe { FlexSpiNorStorage::<READ_ALIGNMENT, WRITE_ALIGNMENT, 4096>::new(ext_flash) } {
             Ok(ext_flash) => ext_flash,
             Err(e) => panic!("Failed to wrap FlexSPI flash in embedded_storage adaptor: {:?}", e),
         };
@@ -100,12 +113,15 @@ impl Board for Imxrt {
 
         let ExternalStorageMap { bl_state } = ext_flash_manager.map(ExternalStorageConfig::new());
 
-        let journal = match FlashJournal::new::<{ crate::JOURNAL_BUFFER_SIZE }>(bl_state).await {
+        let journal = match FlashJournal::new::<{ JOURNAL_BUFFER_SIZE }>(bl_state).await {
             Ok(journal) => journal,
             Err(e) => panic!("Failed to initialize the flash state journal: {:?}", e),
         };
 
-        Self { journal }
+        Self {
+            journal,
+            _config: config,
+        }
     }
 
     fn journal(&mut self) -> &mut FlashJournal<impl NorFlash> {
@@ -125,7 +141,7 @@ impl Board for Imxrt {
             let slot_size = descriptor.slot_size_bytes as usize;
 
             // Check if the image_len fits within the slot.
-            if slot_size > MAXIMUM_SLOT_SIZE {
+            if slot_size >= C::SLOT_SIZE_RANGE.end {
                 return BootError::TooLarge;
             }
 
@@ -137,7 +153,7 @@ impl Board for Imxrt {
             if ivt.image_len > slot_size {
                 return BootError::TooLarge;
             }
-            if ivt.image_len < MINIMUM_IMAGE_SIZE {
+            if ivt.image_len < C::SLOT_SIZE_RANGE.start {
                 return BootError::TooSmall;
             }
 
@@ -148,7 +164,7 @@ impl Board for Imxrt {
                 None => return BootError::TooLarge,
             };
 
-            if !ALLOWED_APP_RANGE.contains(&ivt.target_ptr) || !ALLOWED_APP_RANGE.contains(&image_target_end_ptr) {
+            if !C::LOAD_RANGE.contains(&ivt.target_ptr) || !C::LOAD_RANGE.contains(&image_target_end_ptr) {
                 return BootError::MemoryRegion;
             }
 
@@ -196,8 +212,4 @@ impl Board for Imxrt {
             cortex_m::asm::wfi();
         }
     }
-}
-
-pub async fn init() -> impl Board {
-    Imxrt::init().await
 }
