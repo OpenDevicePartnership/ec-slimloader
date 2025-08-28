@@ -1,18 +1,51 @@
 #![no_std]
 #![no_main]
 
-use ec_slimloader;
+use ec_slimloader::imxrt::{ExternalStorage, Partitions};
 use embassy_executor::Spawner;
+use heapless::Vec;
+
+use panic_probe as _;
+
+#[cfg(feature = "defmt")]
+use defmt_rtt as _;
 
 // auto-generated version information from Cargo.toml
 include!(concat!(env!("OUT_DIR"), "/biv.rs"));
 
 struct Config;
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+struct TooManySlots;
+
 impl ec_slimloader::imxrt::ImxrtConfig for Config {
     const SLOT_SIZE_RANGE: core::ops::Range<usize> = 64..1024 * 1024;
     const LOAD_RANGE: core::ops::Range<*mut u32> =
         (0x0002_0000 as *mut u32)..0x018_0000 as *mut u32;
+
+    fn partitions(
+        &self,
+        flash: &'static mut partition_manager::PartitionManager<
+            ExternalStorage,
+            embassy_sync::blocking_mutex::raw::NoopRawMutex,
+        >,
+    ) -> Partitions {
+        let example_bsp::ExternalStorageMap {
+            app_slot0,
+            app_slot1,
+            bl_state,
+        } = flash.map(example_bsp::ExternalStorageConfig::new());
+
+        let mut slots = Vec::new();
+        ec_slimloader::unwrap!(slots.push(app_slot0).map_err(|_| TooManySlots));
+        ec_slimloader::unwrap!(slots.push(app_slot1).map_err(|_| TooManySlots));
+
+        Partitions {
+            state: bl_state,
+            slots,
+        }
+    }
 }
 
 #[embassy_executor::main]

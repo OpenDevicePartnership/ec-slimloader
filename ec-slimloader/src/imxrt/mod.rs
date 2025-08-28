@@ -2,17 +2,17 @@ use core::ops::Range;
 
 use ec_slimloader_state::journal::flash::FlashJournal;
 use ec_slimloader_state::journal::state::Slot;
-use ec_slimloader_state::AppImageDescriptor;
 use embassy_imxrt::clocks::MainClkSrc;
 use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
 use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embedded_storage_async::nor_flash::NorFlash;
-use partition_manager::{Partition, PartitionManager, RW};
+use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
+use heapless::Vec;
+use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
 
 use crate::imxrt::storage_async::AsyncWrapper;
-use crate::{info, panic, warn, Board, BootError};
+use crate::{info, panic, warn, Board, BootError, JOURNAL_BUFFER_SIZE};
 
 mod bootload;
 mod fcb;
@@ -20,30 +20,17 @@ mod rom;
 mod storage_async;
 
 const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
-const JOURNAL_BUFFER_SIZE: usize = 4096;
-
-static DESCRIPTOR_SLOTS: &'static [AppImageDescriptor] = &[
-    AppImageDescriptor::new_ram_image(0x800_D000, 1024 * 944),
-    AppImageDescriptor::new_ram_image(0x80F_9000, 1024 * 944),
-];
+const READ_ALIGNMENT: u32 = 2;
+const WRITE_ALIGNMENT: u32 = 2;
+const ERASE_SIZE: u32 = 4096;
+const MAX_SLOT_COUNT: usize = 7;
 
 #[cfg(feature = "imxrt")]
 #[link_section = ".otfad"]
 #[used]
 static OTFAD: [u8; 256] = [0x00; 256];
 
-pub unsafe fn raw_copy_to_ram(from: *const u32, to: *mut u32, len_words: usize) {
-    core::ptr::copy_nonoverlapping(from, to, len_words);
-}
-
-type ExternalStorage = AsyncWrapper<FlexSpiNorStorage<'static, 2, 2, 4096>>;
-
-partition_manager::macros::create_partition_map!(
-    name: ExternalStorageConfig,
-    map_name: ExternalStorageMap,
-    variant: "bootloader",
-    manifest: "src/imxrt/ext-flash.toml"
-);
+pub type ExternalStorage = AsyncWrapper<FlexSpiNorStorage<'static, READ_ALIGNMENT, WRITE_ALIGNMENT, ERASE_SIZE>>;
 
 #[derive(Debug, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
@@ -53,13 +40,28 @@ struct IVT {
     pub target_ptr: *mut u32,
 }
 
+struct BufferTooSmall;
+
 impl IVT {
-    pub unsafe fn read(image_ptr: *const u32) -> Self {
-        Self {
-            image_len: *image_ptr.byte_add(0x20) as usize,
-            image_type: *image_ptr.byte_add(0x24),
-            target_ptr: *image_ptr.byte_add(0x34) as *mut u32,
+    pub async fn read<F: ReadNorFlash>(slot: &mut F) -> Result<Self, F::Error> {
+        let mut buf = [0u8; 64];
+        slot.read(0, &mut buf).await?;
+
+        // Note(unsafe): our buffer is 64 bytes large.
+        Ok(unsafe { Self::read_from_slice(&buf).unwrap_unchecked() })
+    }
+
+    pub fn read_from_slice(data: &[u8]) -> Result<Self, BufferTooSmall> {
+        if data.len() < 64 {
+            return Err(BufferTooSmall);
         }
+
+        // Note(unsafe): we are taking byte slices 4 bytes long, so they should map perfectly to 4 byte arrays.
+        Ok(Self {
+            image_len: u32::from_le_bytes(unsafe { data[0x20..0x24].try_into().unwrap_unchecked() }) as usize,
+            image_type: u32::from_le_bytes(unsafe { data[0x24..0x28].try_into().unwrap_unchecked() }),
+            target_ptr: u32::from_le_bytes(unsafe { data[0x34..0x38].try_into().unwrap_unchecked() }) as *mut u32,
+        })
     }
 
     pub fn target_end_ptr(&self) -> Option<*mut u32> {
@@ -69,16 +71,24 @@ impl IVT {
     }
 }
 
+pub struct Partitions {
+    pub state: Partition<'static, ExternalStorage, RW, NoopRawMutex>,
+    pub slots: Vec<Partition<'static, ExternalStorage, RO, NoopRawMutex>, MAX_SLOT_COUNT>,
+}
+
 pub trait ImxrtConfig {
     /// Minimum and maximum image size contained within a slot.
     const SLOT_SIZE_RANGE: Range<usize>;
 
     /// The memory range an image is allowed to be copied to.
     const LOAD_RANGE: Range<*mut u32>;
+
+    fn partitions(&self, flash: &'static mut PartitionManager<ExternalStorage, NoopRawMutex>) -> Partitions;
 }
 
 pub struct Imxrt<C> {
     journal: FlashJournal<Partition<'static, ExternalStorage, RW>>,
+    slots: Vec<Partition<'static, ExternalStorage, RO, NoopRawMutex>, MAX_SLOT_COUNT>,
     _config: C,
 }
 
@@ -86,9 +96,6 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
     type Config = C;
 
     async fn init(config: Self::Config) -> Self {
-        const READ_ALIGNMENT: u32 = 2;
-        const WRITE_ALIGNMENT: u32 = 2;
-
         // Set clock to Pll but with a larger divider, otherwise
         // we get nondeterministic behaviour from the ROM API.
         let mut hal_config = embassy_imxrt::config::Config::default();
@@ -102,24 +109,28 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             Err(e) => panic!("Failed to initialize FlexSPI peripheral: {:?}", e),
         };
 
-        let ext_flash = match unsafe { FlexSpiNorStorage::<READ_ALIGNMENT, WRITE_ALIGNMENT, 4096>::new(ext_flash) } {
-            Ok(ext_flash) => ext_flash,
-            Err(e) => panic!("Failed to wrap FlexSPI flash in embedded_storage adaptor: {:?}", e),
-        };
+        let ext_flash =
+            match unsafe { FlexSpiNorStorage::<READ_ALIGNMENT, WRITE_ALIGNMENT, ERASE_SIZE>::new(ext_flash) } {
+                Ok(ext_flash) => ext_flash,
+                Err(e) => panic!("Failed to wrap FlexSPI flash in embedded_storage adaptor: {:?}", e),
+            };
 
         static EXT_FLASH: StaticCell<PartitionManager<ExternalStorage, NoopRawMutex>> = StaticCell::new();
         let ext_flash_manager =
             EXT_FLASH.init_with(|| PartitionManager::<_, NoopRawMutex>::new(AsyncWrapper(ext_flash)));
 
-        let ExternalStorageMap { bl_state } = ext_flash_manager.map(ExternalStorageConfig::new());
+        let Partitions { state, slots } = config.partitions(ext_flash_manager);
 
-        let journal = match FlashJournal::new::<{ JOURNAL_BUFFER_SIZE }>(bl_state).await {
+        // let ExternalStorageMap { bl_state } = ext_flash_manager.map(ExternalStorageConfig::new());
+
+        let journal = match FlashJournal::new::<{ JOURNAL_BUFFER_SIZE }>(state).await {
             Ok(journal) => journal,
             Err(e) => panic!("Failed to initialize the flash state journal: {:?}", e),
         };
 
         Self {
             journal,
+            slots,
             _config: config,
         }
     }
@@ -129,16 +140,14 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
     }
 
     async fn check_and_boot(&mut self, slot: &Slot) -> BootError {
-        let descriptor = match DESCRIPTOR_SLOTS.get(u8::from(*slot) as usize) {
-            Some(descriptor) => descriptor,
+        let slot_partition = match self.slots.get_mut(u8::from(*slot) as usize) {
+            Some(slot) => slot,
             None => return BootError::SlotUnknown,
         };
 
         // Copy the image to RAM from flash, and ensure that everything from flash is no longer available.
         let ram_ivt = {
-            // Fetch image size, which in MBI is located in 0x20 of IVT.
-            let image_ptr = descriptor.slot_address as *const u32;
-            let slot_size = descriptor.slot_size_bytes as usize;
+            let slot_size = slot_partition.capacity() as usize;
 
             // Check if the image_len fits within the slot.
             if slot_size >= C::SLOT_SIZE_RANGE.end {
@@ -146,7 +155,11 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
 
             // Verify IVT fields.
-            let ivt = unsafe { IVT::read(image_ptr) };
+            let ivt = match IVT::read(slot_partition).await {
+                Ok(ivt) => ivt,
+                Err(_) => return BootError::IO,
+            };
+
             if ivt.image_type & 0xFF != IMAGE_TYPE_XIP_SIGNED {
                 return BootError::Markers;
             }
@@ -169,21 +182,23 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
 
             info!("Starting copy");
-            unsafe {
-                raw_copy_to_ram(
-                    image_ptr,
-                    ivt.target_ptr,
-                    ivt.image_len.div_ceil(core::mem::size_of::<u32>()),
-                );
+            let target_slice = unsafe { core::slice::from_raw_parts_mut(ivt.target_ptr as *mut u8, ivt.image_len) };
+            if let Err(_e) = slot_partition.read(0, target_slice).await {
+                return BootError::IO;
             }
 
+            // Invalidate icache as we are writing to Code RAM, which is cached.
             unsafe {
                 let mut p = cortex_m::Peripherals::steal();
                 p.SCB.invalidate_icache();
             }
             info!("Copy done");
 
-            let ram_ivt = unsafe { IVT::read(ivt.target_ptr) };
+            let ram_ivt = match IVT::read_from_slice(target_slice) {
+                Ok(ram_ivt) => ram_ivt,
+                Err(BufferTooSmall) => return BootError::TooSmall,
+            };
+
             if ivt != ram_ivt {
                 return BootError::ChangeAfterRead;
             }

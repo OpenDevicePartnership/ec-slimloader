@@ -8,10 +8,6 @@ use ec_slimloader_state::journal::{
     state::{Slot, State, Status},
 };
 use embedded_storage_async::nor_flash::NorFlash;
-use panic_probe as _;
-
-#[cfg(feature = "defmt")]
-use defmt_rtt as _;
 
 #[cfg(feature = "imxrt")]
 pub mod imxrt;
@@ -64,6 +60,8 @@ pub enum BootError {
     ChangeAfterRead,
     /// Image failed to authenticate.
     Authenticate,
+    /// The underlying NVM threw an error.
+    IO,
 }
 
 /// Intent which denotes which [Slot] should be booted.

@@ -30,5 +30,5 @@ SECTIONS {
   .rom_table ORIGIN(ROM_TABLE) (NOLOAD): {
     API_TABLE = .;
     . += LENGTH(ROM_TABLE);
-  } >ROM_TABLE
+  } > ROM_TABLE
 } INSERT AFTER .uninit;
