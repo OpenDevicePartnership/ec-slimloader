@@ -10,16 +10,15 @@ use ec_slimloader_state::journal::{
 };
 use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_executor::Spawner;
-use embassy_imxrt::interrupt;
 use embassy_imxrt::{
     flexspi::{embedded_storage::FlexSpiNorStorage, nor_flash::FlexSpiNorFlash},
     gpio::{self, DriveMode, DriveStrength, Level, Output, SlewRate},
-    interrupt::InterruptExt,
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Timer;
 use partition_manager::PartitionManager;
 
+#[allow(dead_code)]
 struct Leds<'a> {
     pub red: Output<'a>,
     pub blue: Output<'a>,
@@ -31,16 +30,6 @@ const JOURNAL_BUFFER_SIZE: usize = 1024;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Example application");
-
-    let p = unsafe { cortex_m::Peripherals::steal() };
-    let vtor = p.SCB.vtor.read() as *const u32;
-    defmt::info!("VTOR: {}", vtor);
-
-    let int = embassy_imxrt::interrupt::Interrupt::HASHCRYPT;
-    unsafe {
-        int.enable();
-    }
-    // int.pend();
 
     let p = embassy_imxrt::init(Default::default());
 
@@ -79,8 +68,8 @@ async fn main(_spawner: Spawner) {
             defmt::info!("Initial state loaded");
             State::new(
                 Status::Confirmed,
-                defmt::unwrap!(Slot::try_from(0)),
-                defmt::unwrap!(Slot::try_from(1)),
+                slot_a,
+                slot_b,
             )
         }
     };
@@ -96,8 +85,6 @@ async fn main(_spawner: Spawner) {
     };
 
     let other_slot = if slot == slot_a { slot_b } else { slot_a };
-
-    info!("Initializing GPIO");
 
     let mut leds = Leds {
         // Blue: blink number indicates active slot
@@ -126,9 +113,11 @@ async fn main(_spawner: Spawner) {
         ),
     };
 
+    // Maps to user1 and user2 buttons on EVK.
     let mut button1 = gpio::Input::new(p.PIO1_1, gpio::Pull::None, gpio::Inverter::Disabled);
     let mut button2 = gpio::Input::new(p.PIO0_10, gpio::Pull::None, gpio::Inverter::Disabled);
 
+    // Task to repeatedly blink the blue LED, once for Slot(0) and twice for Slot(1).
     let led_fut = async {
         let slot = u8::from(slot) + 1;
         loop {
@@ -143,6 +132,7 @@ async fn main(_spawner: Spawner) {
         }
     };
 
+    // Task to blink the red LED if we are currently booted as the 'backup'.
     let backup_led_fut = async {
         if !is_backup {
             return;
@@ -153,6 +143,8 @@ async fn main(_spawner: Spawner) {
         }
     };
 
+    // Task to handle writing the state if we want to either attempt the other slot,
+    // or want to confirm the current slot.
     let button1_fut = async move {
         button1.wait_for_falling_edge().await;
         info!("USER1");
@@ -173,6 +165,7 @@ async fn main(_spawner: Spawner) {
         drop(journal);
     };
 
+    // Task to reboot.
     let button2_fut = async {
         button2.wait_for_falling_edge().await;
         info!("USER2");
@@ -182,11 +175,6 @@ async fn main(_spawner: Spawner) {
     };
 
     embassy_futures::join::join4(led_fut, button1_fut, button2_fut, backup_led_fut).await;
-}
-
-#[interrupt]
-fn HASHCRYPT() {
-    defmt::info!("test succeeded");
 }
 
 #[panic_handler]
