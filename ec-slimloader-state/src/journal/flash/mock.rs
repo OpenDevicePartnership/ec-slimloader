@@ -1,8 +1,10 @@
-use core::{fmt::Display, ops::Range};
+use core::fmt::Display;
+use core::ops::Range;
+use std::vec::Vec;
+
 use embedded_storage_async::nor_flash::{
     ErrorType, MultiwriteNorFlash, NorFlash, NorFlashError, NorFlashErrorKind, ReadNorFlash,
 };
-use std::vec::Vec;
 
 /// State of a word in the flash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

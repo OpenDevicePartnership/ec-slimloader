@@ -191,12 +191,9 @@ impl<T: NorFlash> FlashJournal<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::journal::{
-        flash::mock::MockFlashBase,
-        state::{Slot, Status},
-    };
-
     use super::*;
+    use crate::journal::flash::mock::MockFlashBase;
+    use crate::journal::state::{Slot, Status};
 
     async fn test_journal(nvm: impl NorFlash, assert_empty: bool) -> Option<usize> {
         let mut journal = FlashJournal::new::<4>(nvm).await.unwrap();

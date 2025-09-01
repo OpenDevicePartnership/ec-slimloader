@@ -3,10 +3,8 @@
 
 mod log;
 
-use ec_slimloader_state::journal::{
-    flash::FlashJournal,
-    state::{Slot, State, Status},
-};
+use ec_slimloader_state::journal::flash::FlashJournal;
+use ec_slimloader_state::journal::state::{Slot, State, Status};
 use embedded_storage_async::nor_flash::NorFlash;
 
 #[cfg(feature = "imxrt")]
