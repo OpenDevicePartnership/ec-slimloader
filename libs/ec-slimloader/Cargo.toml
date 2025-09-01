@@ -11,7 +11,10 @@ defmt = [
     "defmt-or-log/defmt",
     "ec-slimloader-state/defmt",
 ]
-log = ["defmt-or-log/log"]
+log = [
+    "dep:log",
+    "defmt-or-log/log"
+]
 
 default = []
 
@@ -21,4 +24,4 @@ ec-slimloader-state = { path = "../ec-slimloader-state", default-features = fals
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 embedded-storage-async = { workspace = true }
-
+log = { workspace = true, optional = true }

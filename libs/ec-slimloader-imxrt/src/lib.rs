@@ -1,25 +1,38 @@
 #![no_std]
 
+#[cfg(feature = "fcb")]
+mod fcb;
+
+#[cfg(not(feature = "non-secure"))]
+mod rom;
+
+#[cfg(feature = "empty-otfad")]
+#[link_section = ".otfad"]
+#[used]
+static OTFAD: [u8; 256] = [0x00; 256];
+
+mod bootload;
+mod mbi;
+
 use core::ops::Range;
 
 use defmt_or_log::{info, warn};
 use ec_slimloader_state::journal::flash::FlashJournal;
 use ec_slimloader_state::journal::state::Slot;
 use embassy_embedded_hal::adapter::BlockingAsync;
-use embassy_imxrt::clocks::MainClkSrc;
-use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
-use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
+use embassy_imxrt::{
+    clocks::MainClkSrc,
+    flexspi::{embedded_storage::FlexSpiNorStorage, nor_flash::FlexSpiNorFlash},
+};
+
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 use heapless::Vec;
 use partition_manager::{Partition, PartitionManager, RO, RW};
+
 use static_cell::StaticCell;
 
 use ec_slimloader::{Board, BootError};
-
-mod bootload;
-mod fcb;
-mod rom;
 
 const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
 const READ_ALIGNMENT: u32 = 2;
@@ -27,51 +40,7 @@ const WRITE_ALIGNMENT: u32 = 2;
 const ERASE_SIZE: u32 = 4096;
 const MAX_SLOT_COUNT: usize = 7;
 
-#[cfg(feature = "imxrt")]
-#[link_section = ".otfad"]
-#[used]
-static OTFAD: [u8; 256] = [0x00; 256];
-
 pub type ExternalStorage = BlockingAsync<FlexSpiNorStorage<'static, READ_ALIGNMENT, WRITE_ALIGNMENT, ERASE_SIZE>>;
-
-#[derive(Debug, PartialEq)]
-#[allow(clippy::upper_case_acronyms)]
-struct IVT {
-    pub image_len: usize,
-    pub image_type: u32,
-    pub target_ptr: *mut u32,
-}
-
-struct BufferTooSmall;
-
-impl IVT {
-    pub async fn read<F: ReadNorFlash>(slot: &mut F) -> Result<Self, F::Error> {
-        let mut buf = [0u8; 64];
-        slot.read(0, &mut buf).await?;
-
-        // Note(unsafe): our buffer is 64 bytes large.
-        Ok(unsafe { Self::read_from_slice(&buf).unwrap_unchecked() })
-    }
-
-    pub fn read_from_slice(data: &[u8]) -> Result<Self, BufferTooSmall> {
-        if data.len() < 64 {
-            return Err(BufferTooSmall);
-        }
-
-        // Note(unsafe): we are taking byte slices 4 bytes long, so they should map perfectly to 4 byte arrays.
-        Ok(Self {
-            image_len: u32::from_le_bytes(unsafe { data[0x20..0x24].try_into().unwrap_unchecked() }) as usize,
-            image_type: u32::from_le_bytes(unsafe { data[0x24..0x28].try_into().unwrap_unchecked() }),
-            target_ptr: u32::from_le_bytes(unsafe { data[0x34..0x38].try_into().unwrap_unchecked() }) as *mut u32,
-        })
-    }
-
-    pub fn target_end_ptr(&self) -> Option<*mut u32> {
-        (self.target_ptr as usize)
-            .checked_add(self.image_len)
-            .map(|ptr| ptr as *mut u32)
-    }
-}
 
 pub struct Partitions {
     pub state: Partition<'static, ExternalStorage, RW, NoopRawMutex>,
@@ -155,7 +124,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
 
             // Verify IVT fields.
-            let ivt = match IVT::read(slot_partition).await {
+            let ivt = match mbi::Ivt::read(slot_partition).await {
                 Ok(ivt) => ivt,
                 Err(_) => return BootError::IO,
             };
@@ -195,9 +164,9 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
             info!("Copy done");
 
-            let ram_ivt = match IVT::read_from_slice(target_slice) {
+            let ram_ivt = match mbi::Ivt::read_from_slice(target_slice) {
                 Ok(ram_ivt) => ram_ivt,
-                Err(BufferTooSmall) => return BootError::TooSmall,
+                Err(mbi::BufferTooSmall) => return BootError::TooSmall,
             };
 
             if ivt != ram_ivt {
@@ -207,18 +176,24 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             ram_ivt
         };
 
-        info!("Starting authenticate");
-
-        // Call the ROM API to ensure that the image is signed and not broken or tampered with.
-        // Note: skboot_authenticate will show false-negatives if your clock jitter is too high.
-        // We noticed this with FFROdiv2 and MainClk > 475MHz.
-        match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
-            Ok(()) => {}
-            Err(e) => {
-                warn!("Failed to authenticate {:?}", e);
-                return BootError::Authenticate;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "non-secure")] {
+                warn!("Authentication skipped");
+            } else {
+                info!("Starting authenticate");
+                // Call the ROM API to ensure that the image is signed and not broken or tampered with.
+                // Note: skboot_authenticate will show false-negatives if your clock jitter is too high.
+                // We noticed this with FFROdiv2 and MainClk > 475MHz.
+                match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        warn!("Failed to authenticate {:?}", e);
+                        return BootError::Authenticate;
+                    }
+                }
             }
         }
+
         info!("Booting into application...");
 
         // Boot to application, and we do not return from this function.

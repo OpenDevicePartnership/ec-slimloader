@@ -6,21 +6,32 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+# Skips all security and verification checks
+non-secure = []
+
 # Special board support
 mimxrt685s-evk = ["imxrt-fcb-rt685evk", "mimxrt685s"]
 
+# Optional empty OTFAD definition
+empty-otfad = []
+
 # FCB support
-imxrt-fcb-rt685evk = ["mimxrt685s"]
+fcb = []
+
+# FCB modes
+imxrt-fcb-1spi-nor = ["fcb"]
+imxrt-fcb-rt685evk = ["fcb"]
+
+# FCB banks
 imxrt-fcb-1spi-a1-nor = ["imxrt-fcb-1spi-nor"]
 imxrt-fcb-1spi-b1-nor = ["imxrt-fcb-1spi-nor"]
-imxrt-fcb-1spi-nor = ["imxrt"]
 
 # Chip variants
-mimxrt685s = ["imxrt", "dep:mimxrt685s-pac", "embassy-imxrt/mimxrt685s"]
+mimxrt685s = ["imxrt", "embassy-imxrt/mimxrt685s"]
 mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
 
 # Common imxrt features
-imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt"]
+imxrt = ["dep:mimxrt600-fcb"]
 
 # Optional debug logging 
 defmt = [
@@ -33,16 +44,14 @@ defmt = [
 ]
 log = ["defmt-or-log/log"]
 
-default = ["mimxrt685s-evk"]
+default = []
 
 [dependencies]
 ec-slimloader = { path = "../ec-slimloader" }
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 
 mimxrt600-fcb = { version = "0.2.2", optional = true }
-mimxrt685s-pac = { version = "0.4.0", features = ["rt", "debug"], optional = true }
-embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", default-features = false, optional = true }
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = ["unstable-pac"] }
 
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
@@ -51,6 +60,7 @@ cortex-m = { version = "0.7.7", features = [
     "inline-asm",
     "critical-section-single-core",
 ] }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 
 embassy-sync = { workspace = true }
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
@@ -59,3 +69,4 @@ embedded-storage-async = { workspace = true }
 
 static_cell = "2.1.1"
 heapless = "0.9.1"
+cfg-if = "1.0.3"

@@ -1,4 +1,4 @@
-use crate::info;
+use defmt_or_log::info;
 
 /// Boot an application from memory.
 ///

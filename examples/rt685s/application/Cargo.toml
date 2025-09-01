@@ -14,11 +14,11 @@ cortex-m = { version = "0.7.7", features = [
 ] }
 cortex-m-rt = { version = "0.7.5" }
 
-defmt = "0.3.6"
+defmt = { workspace = true }
 defmt-rtt = "0.4.0"
 panic-probe = { version = "0.3.1", features = ["print-defmt"] }
 
-embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", features = [
+embassy-imxrt = { workspace = true, features = [
     "defmt",
     "time-driver",
     "time",

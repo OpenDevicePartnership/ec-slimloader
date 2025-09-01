@@ -1,8 +1,10 @@
 #![no_std]
 
 use defmt_or_log::{debug, error, info, unwrap, warn};
-use ec_slimloader_state::journal::flash::FlashJournal;
-use ec_slimloader_state::journal::state::{Slot, State, Status};
+use ec_slimloader_state::journal::{
+    flash::FlashJournal,
+    state::{Slot, State, Status},
+};
 use embedded_storage_async::nor_flash::NorFlash;
 
 /// A board that can boot an application image.
@@ -70,7 +72,7 @@ async fn set_status<B: Board, const JOURNAL_BUFFER_SIZE: usize>(board: &mut B, s
         panic!("Failed to update state"); // TODO print e, but requirements for defmt are in the way.
     }
 
-    debug!("Stored new state in journal: {}", state);
+    debug!("Stored new state in journal: {:?}", state);
 }
 
 pub async fn start<B: Board, const JOURNAL_BUFFER_SIZE: usize>(config: B::Config) -> ! {
