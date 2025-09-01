@@ -121,8 +121,6 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
 
         let Partitions { state, slots } = config.partitions(ext_flash_manager);
 
-        // let ExternalStorageMap { bl_state } = ext_flash_manager.map(ExternalStorageConfig::new());
-
         let journal = match FlashJournal::new::<{ JOURNAL_BUFFER_SIZE }>(state).await {
             Ok(journal) => journal,
             Err(e) => panic!("Failed to initialize the flash state journal: {:?}", e),
@@ -147,7 +145,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
 
         // Copy the image to RAM from flash, and ensure that everything from flash is no longer available.
         let ram_ivt = {
-            let slot_size = slot_partition.capacity() as usize;
+            let slot_size = slot_partition.capacity();
 
             // Check if the image_len fits within the slot.
             if slot_size >= C::SLOT_SIZE_RANGE.end {
@@ -160,6 +158,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 Err(_) => return BootError::IO,
             };
 
+            // Note: skboot_authenticate only supports checking XIP_SIGNED, even though we are loading it to RAM here.
             if ivt.image_type & 0xFF != IMAGE_TYPE_XIP_SIGNED {
                 return BootError::Markers;
             }
@@ -209,6 +208,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         info!("Starting authenticate");
 
         // Call the ROM API to ensure that the image is signed and not broken or tampered with.
+        // Note: skboot_authenticate will show false-negatives if your clock jitter is too high.
+        // We noticed this with FFROdiv2 and MainClk > 475MHz.
         match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
             Ok(()) => {}
             Err(e) => {

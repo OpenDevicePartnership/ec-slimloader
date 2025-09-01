@@ -85,14 +85,6 @@ async fn set_status<B: Board>(board: &mut B, state: &mut State, status: Status) 
 pub async fn start<B: Board>(config: B::Config) -> ! {
     let mut board = B::init(config).await;
 
-    // let rkth = &unsafe { *(0x401301E0 as *const [u8; 32]) };
-    // info!("Shadow RKTH: {:x}", rkth);
-
-    // if rkth[0] == 0x00 {
-    //     warn!("Shadow RKTH not set, do not agitate the ROM bootloader further");
-    //     board.abort()
-    // }
-
     let state = board.journal().get();
 
     // Fetch state or set initial state.
