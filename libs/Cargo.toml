@@ -1,12 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-    "ec-slimloader", "ec-slimloader-imxrt",
+    "ec-slimloader",
+    "ec-slimloader-imxrt",
     "ec-slimloader-state"
-]
-exclude = [
-    "examples/*",
-    "bootloader-tool"
 ]
 
 [workspace.package]
@@ -23,7 +20,4 @@ defmt = "0.3.7"
 defmt-or-log = { version = "0.2.2", default-features = false }
 embedded-storage-async = "0.4.1"
 
-[profile.release]
-lto = true      # better optimizations
-debug = 2
-opt-level = "s"
+embassy-sync = "0.7.2"

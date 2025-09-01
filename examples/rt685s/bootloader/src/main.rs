@@ -2,6 +2,7 @@
 #![no_main]
 
 use ec_slimloader_imxrt::{ExternalStorage, Partitions};
+use example_bsp::bootloader::{ExternalStorageMap, ExternalStorageConfig};
 use embassy_executor::Spawner;
 use heapless::Vec;
 
@@ -33,11 +34,11 @@ impl ec_slimloader_imxrt::ImxrtConfig for Config {
             embassy_sync::blocking_mutex::raw::NoopRawMutex,
         >,
     ) -> Partitions {
-        let example_bsp::ExternalStorageMap {
+        let ExternalStorageMap {
             app_slot0,
             app_slot1,
             bl_state,
-        } = flash.map(example_bsp::ExternalStorageConfig::new());
+        } = flash.map(ExternalStorageConfig::new());
 
         let mut slots = Vec::new();
         defmt_or_log::unwrap!(slots.push(app_slot0).map_err(|_| TooManySlots));

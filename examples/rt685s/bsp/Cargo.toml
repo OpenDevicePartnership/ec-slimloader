@@ -6,8 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
+partition-manager = { workspace = true, features = ["esa", "macros"] }
+embassy-sync = { workspace = true }
 
 [features]
 application = []

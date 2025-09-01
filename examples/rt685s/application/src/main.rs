@@ -8,6 +8,7 @@ use ec_slimloader_state::journal::{
     flash::FlashJournal,
     state::{Slot, State, Status},
 };
+use example_bsp::application::{ExternalStorageConfig, ExternalStorageMap};
 use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_executor::Spawner;
 use embassy_imxrt::{
@@ -49,7 +50,7 @@ async fn main(_spawner: Spawner) {
     let mut ext_flash_manager =
         PartitionManager::<_, NoopRawMutex>::new(BlockingAsync::new(ext_flash));
 
-    let example_bsp::ExternalStorageMap { bl_state, .. } = ext_flash_manager.map(example_bsp::ExternalStorageConfig::new());
+    let ExternalStorageMap { bl_state, .. } = ext_flash_manager.map(ExternalStorageConfig::new());
 
     let mut journal = match FlashJournal::new::<{ crate::JOURNAL_BUFFER_SIZE }>(bl_state).await {
         Ok(journal) => journal,

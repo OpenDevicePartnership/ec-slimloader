@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 example-bsp = { path = "../bsp", features = ["application"] }
 
-ec-slimloader-state = { path = "../../../ec-slimloader-state" }
+ec-slimloader-state = { path = "../../../libs/ec-slimloader-state" }
 
 cortex-m = { version = "0.7.7", features = [
     "inline-asm",
@@ -39,9 +39,10 @@ embassy-time = { git = "https://github.com/embassy-rs/embassy", features = [
 ] }
 embassy-futures = { git = "https://github.com/embassy-rs/embassy"}
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 
-partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros", "defmt"], default-features = false }
+embassy-sync = { workspace = true }
+partition-manager = { workspace = true, features = ["esa", "macros", "defmt"] }
+
 embedded-storage = "0.3.1"
 embedded-storage-async = "0.4.1"
 

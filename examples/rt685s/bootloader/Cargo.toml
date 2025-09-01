@@ -16,8 +16,8 @@ defmt = [
 ]
 
 [dependencies]
-ec-slimloader = { path = "../../../ec-slimloader", default-features = false }
-ec-slimloader-imxrt = { path = "../../../ec-slimloader-imxrt", features = ["mimxrt685s-evk"], default-features = false }
+ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
+ec-slimloader-imxrt = { path = "../../../libs/ec-slimloader-imxrt", features = ["mimxrt685s-evk"], default-features = false }
 
 example-bsp = { path = "../bsp", features = ["bootloader"] }
 
@@ -39,12 +39,11 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
     "executor-thread"
 ] }
 
-embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
+embassy-sync = { workspace = true }
+partition-manager = { workspace = true, features = ["esa", "macros"] }
 
-partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
-
-defmt = { version = "0.3.6", optional = true }
-defmt-or-log = { version = "0.2.2" }
+defmt = { workspace = true, optional = true }
+defmt-or-log = { workspace = true }
 defmt-rtt = { version = "0.4.0", optional = true }
 
 panic-probe = "*"

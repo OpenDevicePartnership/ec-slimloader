@@ -16,6 +16,11 @@ repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 warnings = "deny"
 
 [workspace.dependencies]
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", default-features = false }
+embassy-sync = "0.7.2"
+
+defmt = "1.0.1"
+defmt-or-log = { version = "0.2.2", default-features = false }
 
 [profile.release]
 lto = true      # better optimizations

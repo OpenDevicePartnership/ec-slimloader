@@ -42,7 +42,6 @@ ec-slimloader-state = { path = "../ec-slimloader-state", default-features = fals
 mimxrt600-fcb = { version = "0.2.2", optional = true }
 mimxrt685s-pac = { version = "0.4.0", features = ["rt", "debug"], optional = true }
 embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", default-features = false, optional = true }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 
 defmt = { workspace = true, optional = true }
@@ -53,6 +52,7 @@ cortex-m = { version = "0.7.7", features = [
     "critical-section-single-core",
 ] }
 
+embassy-sync = { workspace = true }
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
 embedded-storage = "0.3.1"
 embedded-storage-async = { workspace = true }
