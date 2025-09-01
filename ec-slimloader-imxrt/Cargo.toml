@@ -1,0 +1,61 @@
+[package]
+name = "ec-slimloader-imxrt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Special board support
+mimxrt685s-evk = ["imxrt-fcb-rt685evk", "mimxrt685s"]
+
+# FCB support
+imxrt-fcb-rt685evk = ["mimxrt685s"]
+imxrt-fcb-1spi-a1-nor = ["imxrt-fcb-1spi-nor"]
+imxrt-fcb-1spi-b1-nor = ["imxrt-fcb-1spi-nor"]
+imxrt-fcb-1spi-nor = ["imxrt"]
+
+# Chip variants
+mimxrt685s = ["imxrt", "dep:mimxrt685s-pac", "embassy-imxrt/mimxrt685s"]
+mimxrt633s = ["imxrt", "embassy-imxrt/mimxrt633s"]
+
+# Common imxrt features
+imxrt = ["dep:mimxrt600-fcb", "dep:embassy-imxrt"]
+
+# Optional debug logging 
+defmt = [
+    "dep:defmt",
+    "defmt-or-log/defmt",
+    "ec-slimloader/defmt",
+    "ec-slimloader-state/defmt",
+    "embassy-imxrt/defmt",
+    "partition-manager/defmt"
+]
+log = ["defmt-or-log/log"]
+
+default = ["mimxrt685s-evk"]
+
+[dependencies]
+ec-slimloader = { path = "../ec-slimloader" }
+ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
+
+mimxrt600-fcb = { version = "0.2.2", optional = true }
+mimxrt685s-pac = { version = "0.4.0", features = ["rt", "debug"], optional = true }
+embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", default-features = false, optional = true }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
+
+defmt = { workspace = true, optional = true }
+defmt-or-log = { workspace = true }
+
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
+embedded-storage = "0.3.1"
+embedded-storage-async = { workspace = true }
+
+static_cell = "2.1.1"
+heapless = "0.9.1"

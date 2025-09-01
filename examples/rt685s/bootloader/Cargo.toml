@@ -7,14 +7,18 @@ edition = "2021"
 defmt = [
     "dep:defmt",
     "dep:defmt-rtt",
+    "defmt-or-log/defmt",
     "ec-slimloader/defmt",
+    "ec-slimloader-imxrt/defmt",
     "embassy-imxrt/defmt",
     "embassy-executor/defmt",
     "partition-manager/defmt"
 ]
 
 [dependencies]
-ec-slimloader = { path = "../../../ec-slimloader", features = ["mimxrt685s-evk"], default-features = false }
+ec-slimloader = { path = "../../../ec-slimloader", default-features = false }
+ec-slimloader-imxrt = { path = "../../../ec-slimloader-imxrt", features = ["mimxrt685s-evk"], default-features = false }
+
 example-bsp = { path = "../bsp", features = ["bootloader"] }
 
 heapless = "0.9.1"
@@ -40,6 +44,7 @@ embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
 
 defmt = { version = "0.3.6", optional = true }
+defmt-or-log = { version = "0.2.2" }
 defmt-rtt = { version = "0.4.0", optional = true }
 
 panic-probe = "*"

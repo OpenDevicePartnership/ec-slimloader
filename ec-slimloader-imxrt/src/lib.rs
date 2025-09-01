@@ -1,7 +1,11 @@
+#![no_std]
+
 use core::ops::Range;
 
+use defmt_or_log::{info, warn};
 use ec_slimloader_state::journal::flash::FlashJournal;
 use ec_slimloader_state::journal::state::Slot;
+use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_imxrt::clocks::MainClkSrc;
 use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
 use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
@@ -11,13 +15,11 @@ use heapless::Vec;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
 
-use crate::imxrt::storage_async::AsyncWrapper;
-use crate::{info, panic, warn, Board, BootError, JOURNAL_BUFFER_SIZE};
+use ec_slimloader::{Board, BootError};
 
 mod bootload;
 mod fcb;
 mod rom;
-mod storage_async;
 
 const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
 const READ_ALIGNMENT: u32 = 2;
@@ -30,7 +32,7 @@ const MAX_SLOT_COUNT: usize = 7;
 #[used]
 static OTFAD: [u8; 256] = [0x00; 256];
 
-pub type ExternalStorage = AsyncWrapper<FlexSpiNorStorage<'static, READ_ALIGNMENT, WRITE_ALIGNMENT, ERASE_SIZE>>;
+pub type ExternalStorage = BlockingAsync<FlexSpiNorStorage<'static, READ_ALIGNMENT, WRITE_ALIGNMENT, ERASE_SIZE>>;
 
 #[derive(Debug, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
@@ -95,7 +97,7 @@ pub struct Imxrt<C> {
 impl<C: ImxrtConfig> Board for Imxrt<C> {
     type Config = C;
 
-    async fn init(config: Self::Config) -> Self {
+    async fn init<const JOURNAL_BUFFER_SIZE: usize>(config: Self::Config) -> Self {
         // Set clock to Pll but with a larger divider, otherwise
         // we get nondeterministic behaviour from the ROM API.
         let mut hal_config = embassy_imxrt::config::Config::default();
@@ -117,11 +119,11 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
 
         static EXT_FLASH: StaticCell<PartitionManager<ExternalStorage, NoopRawMutex>> = StaticCell::new();
         let ext_flash_manager =
-            EXT_FLASH.init_with(|| PartitionManager::<_, NoopRawMutex>::new(AsyncWrapper(ext_flash)));
+            EXT_FLASH.init_with(|| PartitionManager::<_, NoopRawMutex>::new(BlockingAsync::new(ext_flash)));
 
         let Partitions { state, slots } = config.partitions(ext_flash_manager);
 
-        let journal = match FlashJournal::new::<{ JOURNAL_BUFFER_SIZE }>(state).await {
+        let journal = match FlashJournal::new::<JOURNAL_BUFFER_SIZE>(state).await {
             Ok(journal) => journal,
             Err(e) => panic!("Failed to initialize the flash state journal: {:?}", e),
         };

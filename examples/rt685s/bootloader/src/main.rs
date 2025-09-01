@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use ec_slimloader::imxrt::{ExternalStorage, Partitions};
+use ec_slimloader_imxrt::{ExternalStorage, Partitions};
 use embassy_executor::Spawner;
 use heapless::Vec;
 
@@ -19,7 +19,9 @@ struct Config;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 struct TooManySlots;
 
-impl ec_slimloader::imxrt::ImxrtConfig for Config {
+const JOURNAL_BUFFER_SIZE: usize = 4096;
+
+impl ec_slimloader_imxrt::ImxrtConfig for Config {
     const SLOT_SIZE_RANGE: core::ops::Range<usize> = 64..1024 * 1024;
     const LOAD_RANGE: core::ops::Range<*mut u32> =
         (0x0002_0000 as *mut u32)..0x018_0000 as *mut u32;
@@ -38,8 +40,8 @@ impl ec_slimloader::imxrt::ImxrtConfig for Config {
         } = flash.map(example_bsp::ExternalStorageConfig::new());
 
         let mut slots = Vec::new();
-        ec_slimloader::unwrap!(slots.push(app_slot0).map_err(|_| TooManySlots));
-        ec_slimloader::unwrap!(slots.push(app_slot1).map_err(|_| TooManySlots));
+        defmt_or_log::unwrap!(slots.push(app_slot0).map_err(|_| TooManySlots));
+        defmt_or_log::unwrap!(slots.push(app_slot1).map_err(|_| TooManySlots));
 
         Partitions {
             state: bl_state,
@@ -50,5 +52,5 @@ impl ec_slimloader::imxrt::ImxrtConfig for Config {
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) -> ! {
-    ec_slimloader::start::<ec_slimloader::imxrt::Imxrt<Config>>(Config).await
+    ec_slimloader::start::<ec_slimloader_imxrt::Imxrt<Config>, JOURNAL_BUFFER_SIZE>(Config).await
 }

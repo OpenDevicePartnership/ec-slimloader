@@ -1,8 +1,6 @@
 use core::ptr::{null, null_mut};
-
+use defmt_or_log::{error, warn};
 use mimxrt685s_pac::interrupt;
-
-use crate::{error, warn};
 
 #[repr(C)]
 #[derive(Default, Debug)]

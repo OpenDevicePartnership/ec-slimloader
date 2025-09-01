@@ -1,17 +1,9 @@
 #![no_std]
-#![no_main]
 
-mod log;
-
+use defmt_or_log::{debug, error, info, unwrap, warn};
 use ec_slimloader_state::journal::flash::FlashJournal;
 use ec_slimloader_state::journal::state::{Slot, State, Status};
 use embedded_storage_async::nor_flash::NorFlash;
-
-#[cfg(feature = "imxrt")]
-pub mod imxrt;
-
-/// Maximum buffer size on stack that is used by the bootloader.
-const JOURNAL_BUFFER_SIZE: usize = 1024;
 
 /// A board that can boot an application image.
 ///
@@ -19,10 +11,11 @@ const JOURNAL_BUFFER_SIZE: usize = 1024;
 /// contain non volatile memory that stores the multiple images and bootloading state.
 #[allow(async_fn_in_trait)]
 pub trait Board {
+    /// Type used to instantiate a [Board] implementation.
     type Config;
 
     /// Initialize the [Board], can only be called once.
-    async fn init(config: Self::Config) -> Self;
+    async fn init<const JOURNAL_BUFFER_SIZE: usize>(config: Self::Config) -> Self;
 
     /// Give a mutable reference to the [FlashJournal].
     fn journal(&mut self) -> &mut FlashJournal<impl NorFlash>;
@@ -71,7 +64,7 @@ enum BootIntent {
 }
 
 /// Set a new valid [State] as the latest in the [FlashJournal].
-async fn set_status<B: Board>(board: &mut B, state: &mut State, status: Status) {
+async fn set_status<B: Board, const JOURNAL_BUFFER_SIZE: usize>(board: &mut B, state: &mut State, status: Status) {
     *state = state.with_status(status);
     if let Err(_e) = board.journal().set::<JOURNAL_BUFFER_SIZE>(state).await {
         panic!("Failed to update state"); // TODO print e, but requirements for defmt are in the way.
@@ -80,8 +73,8 @@ async fn set_status<B: Board>(board: &mut B, state: &mut State, status: Status) 
     debug!("Stored new state in journal: {}", state);
 }
 
-pub async fn start<B: Board>(config: B::Config) -> ! {
-    let mut board = B::init(config).await;
+pub async fn start<B: Board, const JOURNAL_BUFFER_SIZE: usize>(config: B::Config) -> ! {
+    let mut board = B::init::<JOURNAL_BUFFER_SIZE>(config).await;
 
     let state = board.journal().get();
 
@@ -105,14 +98,14 @@ pub async fn start<B: Board>(config: B::Config) -> ! {
     let intent = match state.status() {
         Status::Initial => {
             // Mark the status to [Attempting], so that the app can mark the status to [Confirmed].
-            set_status(&mut board, &mut state, Status::Attempting).await;
+            set_status::<_, JOURNAL_BUFFER_SIZE>(&mut board, &mut state, Status::Attempting).await;
             BootIntent::Target
         }
         Status::Attempting => {
             // When the bootloader starts with the state [Attempting],
             // it implies that an attempt was made to start the application in the slot,
             // but the application failed to mark the slot as [Confirmed].
-            set_status(&mut board, &mut state, Status::Failed).await;
+            set_status::<_, JOURNAL_BUFFER_SIZE>(&mut board, &mut state, Status::Failed).await;
             BootIntent::Backup
         }
         Status::Failed => BootIntent::Backup,
@@ -131,7 +124,7 @@ pub async fn start<B: Board>(config: B::Config) -> ! {
 
     // Mark our state as [Failed] if it was not set to be so already.
     if state.status() != Status::Failed {
-        set_status(&mut board, &mut state, Status::Failed).await;
+        set_status::<_, JOURNAL_BUFFER_SIZE>(&mut board, &mut state, Status::Failed).await;
     }
 
     if slot != state.backup() {
