@@ -13,7 +13,7 @@
             },
             "coreConfigs": [
                 {
-                    "programBinary": "target/thumbv8m.main-none-eabihf/debug/ec-slimloader",
+                    "programBinary": "examples/target/thumbv8m.main-none-eabihf/release/example-bootloader",
                     "svdFile": ".vscode/MIMXRT685S_cm33.svd",
                     "rttEnabled": true,
                 }
