@@ -9,7 +9,7 @@ pub async fn process(config: &Config, command: Commands) -> anyhow::Result<()> {
     match command {
         Commands::Generate { subcommand } => generate::process(config, subcommand).await,
         Commands::Sign { subcommand } => {
-            let _ = sign::process(subcommand).await?;
+            let _ = sign::process(config, subcommand).await?;
             Ok(())
         }
         Commands::Download { subcommand } => {

@@ -25,7 +25,7 @@ const JOURNAL_BUFFER_SIZE: usize = 4096;
 impl ec_slimloader_imxrt::ImxrtConfig for Config {
     const SLOT_SIZE_RANGE: core::ops::Range<usize> = 64..1024 * 1024;
     const LOAD_RANGE: core::ops::Range<*mut u32> =
-        (0x0002_0000 as *mut u32)..0x018_0000 as *mut u32;
+        (0x1002_0000 as *mut u32)..0x1018_0000 as *mut u32;
 
     fn partitions(
         &self,

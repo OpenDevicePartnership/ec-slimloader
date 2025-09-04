@@ -52,7 +52,7 @@ enableHwUserModeKeys: false
 # ======================================================================================================================
 # ------------------------------------===== TrustZone enable option [Optional] =====------------------------------------
 # Description: If not specified, the Trust zone is disabled.
-enableTrustZone: false
+enableTrustZone: true
 # ---------------------------------===== TrustZone Customization file [Optional] =====----------------------------------
 # Description: If not specified, but TrustZone is enabled(enableTrustZone) the default values are used.
 #trustZonePresetFile: my_tz_custom.yaml

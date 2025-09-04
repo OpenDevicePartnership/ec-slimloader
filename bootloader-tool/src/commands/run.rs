@@ -24,6 +24,7 @@ pub async fn process(config: &Config, command: RunCommands) -> anyhow::Result<()
     let mut boot0 = 0u32;
     boot0 |= 0b0101 << 0;   // Use QSPI B
     boot0 |= 0b111 << 4;    // Completely disable ISP mode
+    boot0 |= 0b10 << 13;    // Force Trust-Zone mode
     boot0 |= 0b01 << 20;    // Enable secure boot
     boot0 |= 0b1 << 23;     // Skip DICE
     boot0 |= 0b101 << 24;   // Configure boot_fail_pin port 5

@@ -18,21 +18,18 @@ pub async fn process(config: &Config, command: DownloadCommands) -> anyhow::Resu
             if let Some(bootloader) = &config.bootloader {
                 (run_args, true, bootloader.flash_start)
             } else {
-                return Err(anyhow::anyhow!(
-                    "Bootloader not defined in configuration file"
-                ));
+                return Err(anyhow::anyhow!("Bootloader not defined in configuration file"));
             }
         }
         Other(RunCommands::Application { run_args, slot }) => {
             if let Some(application) = &config.application {
-                let flash_start = *application.slot_starts.get(slot as usize).ok_or_else(|| {
-                    anyhow::anyhow!(format!("Slot {} not defined in configuration file", slot))
-                })?;
+                let flash_start = *application
+                    .slot_starts
+                    .get(slot as usize)
+                    .ok_or_else(|| anyhow::anyhow!(format!("Slot {} not defined in configuration file", slot)))?;
                 (run_args, false, flash_start)
             } else {
-                return Err(anyhow::anyhow!(
-                    "Bootloader not defined in configuration file"
-                ));
+                return Err(anyhow::anyhow!("Bootloader not defined in configuration file"));
             }
         }
     };
@@ -45,11 +42,10 @@ pub async fn process(config: &Config, command: DownloadCommands) -> anyhow::Resu
         SignCommands::Application(run_args.sign_args.clone())
     };
 
-    let SignOutput { output_path } = super::sign::process(sign_command).await?;
+    let SignOutput { output_path } = super::sign::process(config, sign_command).await?;
 
     log::debug!("Starting probe session...");
-    let mut session =
-        probe::start_session(&run_args.probe_args.chip, run_args.probe_args.probe.clone()).await?;
+    let mut session = probe::start_session(&run_args.probe_args.chip, run_args.probe_args.probe.clone()).await?;
 
     // NOTE: First flash then set secure boot configuration! Doing it the other way around causes
     // flashing to almost always fail.

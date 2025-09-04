@@ -78,7 +78,7 @@ pub fn generate(
     log::debug!("Added len: 0x{diff_len:x}");
 
     // Performing checks on output image
-    let expected_image_type = if is_bootloader { 0x4001u32 } else { 0x4004u32 };
+    let expected_image_type = if is_bootloader { 0x0001u32 } else { 0x0004u32 };
 
     let image_type = u32::from_le_bytes((&output[0x24..0x28]).try_into().unwrap());
     if image_type != expected_image_type {

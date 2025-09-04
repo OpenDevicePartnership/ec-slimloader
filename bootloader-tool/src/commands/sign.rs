@@ -1,4 +1,5 @@
 use crate::SignCommands;
+use crate::config::Config;
 use crate::processors::{mbi, objcopy};
 use anyhow::Context;
 use object::read::elf::ElfFile32;
@@ -8,7 +9,7 @@ pub struct SignOutput {
     pub output_path: PathBuf,
 }
 
-pub async fn process(command: SignCommands) -> anyhow::Result<SignOutput> {
+pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<SignOutput> {
     let (is_bootloader, args) = match command {
         SignCommands::Bootloader(sign_arguments) => (true, sign_arguments),
         SignCommands::Application(sign_arguments) => (false, sign_arguments),
@@ -23,22 +24,37 @@ pub async fn process(command: SignCommands) -> anyhow::Result<SignOutput> {
     if is_bootloader {
         log::info!("Extracting prelude");
         let out = objcopy::remove_non_prelude(&input_data)?;
-        std::fs::write(args.prelude_path_with_default(), &out)
-            .context("Could not write prelude elf file")?;
+        std::fs::write(args.prelude_path_with_default(), &out).context("Could not write prelude elf file")?;
     }
 
     log::info!("Generating image for {}", args.input_path.display());
     let (image, base_addr) = objcopy::objcopy(&file)?;
 
+    if is_bootloader {
+        if let Some(bootloader) = &config.bootloader {
+            if bootloader.run_start != base_addr as u64 {
+                return Err(anyhow::anyhow!(
+                    "Bootloader image will be run from unexpected address 0x{:x}, should be 0x{:x}",
+                    base_addr,
+                    bootloader.run_start
+                ));
+            }
+        }
+    } else {
+        if let Some(application) = &config.application {
+            if application.run_start != base_addr as u64 {
+                return Err(anyhow::anyhow!(
+                    "Application image will be run from unexpected address 0x{:x}, should be 0x{:x}",
+                    base_addr,
+                    application.run_start
+                ));
+            }
+        }
+    }
+
     log::info!("Signing image {}", args.input_path.display());
 
-    mbi::generate(
-        &args.nxpimage_path,
-        &image,
-        base_addr,
-        &output_path,
-        is_bootloader,
-    )?;
+    mbi::generate(&args.nxpimage_path, &image, base_addr, &output_path, is_bootloader)?;
 
     Ok(SignOutput { output_path })
 }
