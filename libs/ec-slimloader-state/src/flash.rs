@@ -5,7 +5,7 @@ use core::ops::Range;
 
 use embedded_storage_async::nor_flash::NorFlash;
 
-use crate::journal::state::{ParseResult, State};
+use crate::state::{ParseResult, State};
 
 /// Error describing that the Nvm should have at least two partitions.
 #[derive(Debug)]
@@ -192,8 +192,8 @@ impl<T: NorFlash> FlashJournal<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::journal::flash::mock::MockFlashBase;
-    use crate::journal::state::{Slot, Status};
+    use crate::flash::mock::MockFlashBase;
+    use crate::state::{Slot, Status};
 
     async fn test_journal(nvm: impl NorFlash, assert_empty: bool) -> Option<usize> {
         let mut journal = FlashJournal::new::<4>(nvm).await.unwrap();

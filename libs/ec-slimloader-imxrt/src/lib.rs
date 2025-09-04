@@ -17,8 +17,8 @@ mod mbi;
 use core::ops::Range;
 
 use defmt_or_log::{info, warn};
-use ec_slimloader_state::journal::flash::FlashJournal;
-use ec_slimloader_state::journal::state::Slot;
+use ec_slimloader_state::flash::FlashJournal;
+use ec_slimloader_state::state::Slot;
 use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_imxrt::{
     clocks::MainClkSrc,

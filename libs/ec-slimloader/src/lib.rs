@@ -1,7 +1,7 @@
 #![no_std]
 
 use defmt_or_log::{debug, error, info, unwrap, warn};
-use ec_slimloader_state::journal::{
+use ec_slimloader_state::{
     flash::FlashJournal,
     state::{Slot, State, Status},
 };
