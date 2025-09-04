@@ -7,9 +7,9 @@ use anyhow::Context;
 use serde::Deserialize;
 
 use crate::{
-    GenerateCertificatesArguments,
     config::Config,
     util::{bytes_to_u32_le, generate_hex, parse_hex},
+    GenerateCertificatesArguments,
 };
 
 #[derive(Deserialize, Debug)]
@@ -17,11 +17,7 @@ struct CertDescr {
     subject_public_key: PathBuf,
 }
 
-fn generate_private_key(
-    cert_descr: &CertDescr,
-    nxpcrypto: impl AsRef<Path>,
-    config: &Config,
-) -> anyhow::Result<()> {
+fn generate_private_key(cert_descr: &CertDescr, nxpcrypto: impl AsRef<Path>, config: &Config) -> anyhow::Result<()> {
     // nxpcrypto key generate -k rsa2048 -e PEM -o IMG1_1_sha256_2048_65537_v3_usr_key.pem
 
     // Note: apparently the field name refers to a public key, but it is for the private key.
@@ -40,7 +36,7 @@ fn generate_private_key(
     let mut command = Command::new(nxpcrypto.as_ref());
     command.current_dir(&config.artifacts_path);
 
-    command.args(["key", "generate", "-k", "rsa2048", "-e", "PEM", "-o"]);
+    command.args(["key", "generate", "-k", "rsa3096", "-e", "PEM", "-o"]);
     command.arg(output_path);
 
     let output = command
@@ -61,11 +57,7 @@ fn generate_private_key(
     }
 }
 
-fn generate_certificate(
-    input: impl AsRef<Path>,
-    nxpcrypto: impl AsRef<Path>,
-    config: &Config,
-) -> anyhow::Result<()> {
+fn generate_certificate(input: impl AsRef<Path>, nxpcrypto: impl AsRef<Path>, config: &Config) -> anyhow::Result<()> {
     // nxpcrypto cert generate -c ROT1_2048_csr.yaml -e PEM -o ROT1_sha256_2048_65537_v3_ca_crt.PEM
 
     let mut output_path = input.as_ref().to_path_buf();
@@ -98,21 +90,16 @@ fn generate_certificate(
         .with_context(failed_exec(nxpcrypto))?;
 
     if !output.status.success() {
-        Err(anyhow::anyhow!(format!(
-            "Failed to build certificate from {}",
-            input.as_ref().display()
-        ))
-        .context(String::from_utf8(output.stdout)?))
+        Err(
+            anyhow::anyhow!(format!("Failed to build certificate from {}", input.as_ref().display()))
+                .context(String::from_utf8(output.stdout)?),
+        )
     } else {
         Ok(())
     }
 }
 
-fn generate_single(
-    input: impl AsRef<Path>,
-    nxpcrypto: impl AsRef<Path>,
-    config: &Config,
-) -> anyhow::Result<()> {
+fn generate_single(input: impl AsRef<Path>, nxpcrypto: impl AsRef<Path>, config: &Config) -> anyhow::Result<()> {
     let input_abs = config.artifacts_path.join(&input);
 
     let cert_descr: CertDescr = serde_yml::from_reader(std::fs::File::open(&input_abs)?)?;
@@ -131,9 +118,11 @@ impl Rkth {
     }
 
     pub fn from_hex(str: &str) -> anyhow::Result<Self> {
-        Ok(Self(parse_hex(str)?.try_into().map_err(|_| {
-            anyhow::anyhow!("Input not appropriate size")
-        })?))
+        Ok(Self(
+            parse_hex(str)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Input not appropriate size"))?,
+        ))
     }
 
     pub fn as_u32_le(&self) -> Vec<u32> {
@@ -218,10 +207,5 @@ pub fn get_rkth(config: &Config) -> anyhow::Result<Rkth> {
 }
 
 fn failed_exec<'a>(tool: impl AsRef<Path> + 'a) -> impl Fn() -> String + 'a {
-    move || {
-        format!(
-            "Could not execute `{}`, is it installed?",
-            tool.as_ref().display()
-        )
-    }
+    move || format!("Could not execute `{}`, is it installed?", tool.as_ref().display())
 }
