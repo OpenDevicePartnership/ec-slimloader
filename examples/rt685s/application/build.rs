@@ -9,9 +9,11 @@ fn main() {
         .unwrap()
         .write_all(include_bytes!("memory.x"))
         .unwrap();
-    println!("cargo::rustc-link-search={}", out.display());
-    println!("cargo::rustc-link-arg=-Tlink.x");
-    println!("cargo::rustc-link-arg=-Tdefmt.x");
-    println!("cargo::rustc-link-arg=--nmagic");
+    println!("cargo:rustc-link-search={}", out.display());
+    println!("cargo:rustc-link-arg=-Tlink.x");
+    println!("cargo:rustc-link-arg=--nmagic");
     println!("cargo:rerun-if-changed=memory.x");
+
+    #[cfg(feature = "defmt")]
+    println!("cargo:rustc-link-arg=-Tdefmt.x");
 }

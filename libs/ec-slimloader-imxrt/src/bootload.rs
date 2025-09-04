@@ -9,8 +9,6 @@ use defmt_or_log::info;
 /// The loaded application must be a valid firmware image for the platform,
 /// and it must not return control to the caller.
 pub unsafe fn boot_application(boot_address: *const u32) -> ! {
-    cortex_m::asm::delay(10_000_000);
-
     unsafe {
         // Disable interrupts globally while we reset the NVIC.
         cortex_m::interrupt::disable();

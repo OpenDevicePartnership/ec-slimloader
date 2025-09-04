@@ -29,12 +29,12 @@ cortex-m = { version = "0.7.7", features = [
 ] }
 cortex-m-rt = { version = "0.7.3" }
 
-embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", branch = "tmp/ec-slimloader-deps", default-features = false, features = [
+embassy-imxrt = { workspace = true, features = [
     "mimxrt685s",
     "unstable-pac"
 ] }
 
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
+embassy-executor = { workspace = true, features = [
     "arch-cortex-m",
     "executor-thread"
 ] }
@@ -44,6 +44,6 @@ partition-manager = { workspace = true, features = ["esa", "macros"] }
 
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
-defmt-rtt = { version = "0.4.0", optional = true }
+defmt-rtt = { workspace = true, optional = true }
 
 panic-probe = "*"

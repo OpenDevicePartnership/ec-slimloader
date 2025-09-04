@@ -1,9 +1,10 @@
 #![no_std]
 #![no_main]
 
-use cortex_m_rt::exception;
-use defmt::info;
+#[cfg(feature = "defmt")]
 use defmt_rtt as _;
+
+use cortex_m_rt::exception;
 use ec_slimloader_state::journal::{
     flash::FlashJournal,
     state::{Slot, State, Status},
@@ -30,18 +31,18 @@ const JOURNAL_BUFFER_SIZE: usize = 1024;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    info!("Example application");
+    defmt_or_log::info!("Example application");
 
     let p = embassy_imxrt::init(Default::default());
 
     let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, 2, 2) } {
         Ok(ext_flash) => ext_flash,
-        Err(e) => defmt::panic!("Failed to initialize FlexSPI peripheral: {:?}", e),
+        Err(e) => defmt_or_log::panic!("Failed to initialize FlexSPI peripheral: {:?}", e),
     };
 
     let ext_flash = match unsafe { FlexSpiNorStorage::<2, 2, 4096>::new(ext_flash) } {
         Ok(ext_flash) => ext_flash,
-        Err(e) => defmt::panic!(
+        Err(e) => defmt_or_log::panic!(
             "Failed to wrap FlexSPI flash in embedded_storage adaptor: {:?}",
             e
         ),
@@ -54,19 +55,19 @@ async fn main(_spawner: Spawner) {
 
     let mut journal = match FlashJournal::new::<{ crate::JOURNAL_BUFFER_SIZE }>(bl_state).await {
         Ok(journal) => journal,
-        Err(e) => defmt::panic!("Failed to initialize the flash state journal: {:?}", e),
+        Err(e) => defmt_or_log::panic!("Failed to initialize the flash state journal: {:?}", e),
     };
 
-    let slot_a = defmt::unwrap!(Slot::try_from(0));
-    let slot_b = defmt::unwrap!(Slot::try_from(1));
+    let slot_a = defmt_or_log::unwrap!(Slot::try_from(0));
+    let slot_b = defmt_or_log::unwrap!(Slot::try_from(1));
 
     let state = match journal.get() {
         Some(state) => {
-            defmt::info!("Read state {}", state);
+            defmt_or_log::info!("Read state {}", state);
             *state
         }
         None => {
-            defmt::info!("Initial state loaded");
+            defmt_or_log::info!("Initial state loaded");
             State::new(
                 Status::Confirmed,
                 slot_a,
@@ -77,7 +78,7 @@ async fn main(_spawner: Spawner) {
 
     let (slot, is_confirmed, is_backup) = match state.status() {
         Status::Initial => {
-            defmt::warn!("Booted into 'Initial' state, which should not be possible if the bootloader is flashed");
+            defmt_or_log::warn!("Booted into 'Initial' state, which should not be possible if the bootloader is flashed");
             (state.target(), false, false)
         }
         Status::Attempting => (state.target(), false, false),
@@ -148,7 +149,7 @@ async fn main(_spawner: Spawner) {
     // or want to confirm the current slot.
     let button1_fut = async move {
         button1.wait_for_falling_edge().await;
-        info!("USER1");
+        defmt_or_log::info!("USER1");
 
         let new_state = if is_confirmed {
             // Swap around
@@ -161,15 +162,15 @@ async fn main(_spawner: Spawner) {
             state.with_status(Status::Confirmed)
         };
 
-        defmt::info!("Writing new state: {}", new_state);
-        defmt::unwrap!(journal.set::<JOURNAL_BUFFER_SIZE>(&new_state).await);
+        defmt_or_log::info!("Writing new state: {}", new_state);
+        defmt_or_log::unwrap!(journal.set::<JOURNAL_BUFFER_SIZE>(&new_state).await);
         drop(journal);
     };
 
     // Task to reboot.
     let button2_fut = async {
         button2.wait_for_falling_edge().await;
-        info!("USER2");
+        defmt_or_log::info!("USER2");
 
         Timer::after_millis(100).await; // Await for defmt.
         cortex_m::peripheral::SCB::sys_reset()

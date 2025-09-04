@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use anyhow::{Context, anyhow};
+use anyhow::{anyhow, Context};
 
 fn input_tmpfile(data: &[u8]) -> tempfile::NamedTempFile {
     let mut file = tempfile::NamedTempFile::with_prefix_in("signtmp", ".").unwrap();
@@ -20,10 +20,7 @@ pub fn generate(
 ) -> anyhow::Result<()> {
     let mut config: BTreeMap<String, String> = BTreeMap::default();
 
-    config.insert(
-        "outputImageExecutionAddress".to_owned(),
-        format!("{base_addr:#x}"),
-    );
+    config.insert("outputImageExecutionAddress".to_owned(), format!("{base_addr:#x}"));
 
     let input_image_file = input_tmpfile(input_image);
     config.insert(
@@ -79,12 +76,6 @@ pub fn generate(
 
     log::debug!("Output len: 0x{:x}", output.len());
     log::debug!("Added len: 0x{diff_len:x}");
-
-    if diff_len > 0x744 {
-        return Err(anyhow::anyhow!(
-            "Added more than expected to output image when signing"
-        ));
-    }
 
     // Performing checks on output image
     let expected_image_type = if is_bootloader { 0x4001u32 } else { 0x4004u32 };

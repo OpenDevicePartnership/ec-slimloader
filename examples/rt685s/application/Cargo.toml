@@ -3,6 +3,19 @@ name = "example-application"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "defmt-or-log/defmt",
+    "panic-probe/defmt",
+    "embassy-imxrt/defmt",
+    "embassy-time/defmt",
+    "embassy-time/defmt-timestamp-uptime",
+    "ec-slimloader-state/defmt"
+]
+log = ["defmt-or-log/log"]
+
 [dependencies]
 example-bsp = { path = "../bsp", features = ["application"] }
 
@@ -14,31 +27,27 @@ cortex-m = { version = "0.7.7", features = [
 ] }
 cortex-m-rt = { version = "0.7.5" }
 
-defmt = { workspace = true }
-defmt-rtt = "0.4.0"
-panic-probe = { version = "0.3.1", features = ["print-defmt"] }
+defmt = { workspace = true, optional = true }
+defmt-or-log = { workspace = true }
+defmt-rtt = { workspace = true, optional = true }
+panic-probe = { version = "*" }
 
 embassy-imxrt = { workspace = true, features = [
-    "defmt",
-    "time-driver",
+    "rt",
+    "time-driver-os-timer",
     "time",
     "mimxrt685s",
     "unstable-pac"
 ] }
 
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", features = [
+embassy-executor = { workspace = true, features = [
     "arch-cortex-m",
     "executor-thread",
-    "executor-interrupt",
-    "defmt",
 ] }
 
-embassy-time = { git = "https://github.com/embassy-rs/embassy", features = [
-    "defmt",
-    "defmt-timestamp-uptime",
-] }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy"}
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
+embassy-time = { version = "0.5" }
+embassy-futures = "0.1.2"
+embassy-embedded-hal = "0.5.0"
 
 embassy-sync = { workspace = true }
 partition-manager = { workspace = true, features = ["esa", "macros", "defmt"] }
