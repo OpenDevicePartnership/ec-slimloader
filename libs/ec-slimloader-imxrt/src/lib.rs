@@ -34,7 +34,7 @@ use static_cell::StaticCell;
 
 use ec_slimloader::{Board, BootError};
 
-const IMAGE_TYPE_XIP_SIGNED: u32 = 0x0004;
+const IMAGE_TYPE_TZ_XIP_SIGNED: u32 = 0x0004;
 const READ_ALIGNMENT: u32 = 2;
 const WRITE_ALIGNMENT: u32 = 2;
 const ERASE_SIZE: u32 = 4096;
@@ -71,7 +71,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         // we get nondeterministic behaviour from the ROM API.
         let mut hal_config = embassy_imxrt::config::Config::default();
         hal_config.clocks.main_clk.src = MainClkSrc::PllMain;
-        hal_config.clocks.main_clk.div_int = 4.into();
+        hal_config.clocks.main_clk.div_int = 2.into();
+        hal_config.clocks.main_pll_clk.pfd0 = 20;
         let p = embassy_imxrt::init(hal_config);
 
         let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, READ_ALIGNMENT, WRITE_ALIGNMENT) }
@@ -130,7 +131,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             };
 
             // Note: skboot_authenticate only supports checking XIP_SIGNED, even though we are loading it to RAM here.
-            if ivt.image_type & 0xFF != IMAGE_TYPE_XIP_SIGNED {
+            if ivt.image_type != IMAGE_TYPE_TZ_XIP_SIGNED {
                 return BootError::Markers;
             }
             if ivt.image_len > slot_size {
