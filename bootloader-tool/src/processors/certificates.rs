@@ -36,7 +36,7 @@ fn generate_private_key(cert_descr: &CertDescr, nxpcrypto: impl AsRef<Path>, con
     let mut command = Command::new(nxpcrypto.as_ref());
     command.current_dir(&config.artifacts_path);
 
-    command.args(["key", "generate", "-k", "rsa3096", "-e", "PEM", "-o"]);
+    command.args(["key", "generate", "-k", "rsa3072", "-e", "PEM", "-o"]);
     command.arg(output_path);
 
     let output = command
