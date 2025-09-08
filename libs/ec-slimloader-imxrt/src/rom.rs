@@ -1,6 +1,10 @@
+#![allow(unused)]
+
 use core::ptr::{null, null_mut};
 use defmt_or_log::{error, warn};
 use embassy_imxrt::pac::interrupt;
+
+use crate::SYSTEM_CORE_CLOCK_HZ;
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -106,6 +110,19 @@ struct IAPDriver {
     pub execute: unsafe extern "C" fn(*mut KbSessionRef, *const u8, u32) -> u32,
 }
 
+#[repr(C)]
+struct OTPDriver {
+    pub init: unsafe extern "C" fn(src_clk_freq: u32) -> u32,
+    pub deinit: unsafe extern "C" fn() -> u32,
+    pub fuse_read: unsafe extern "C" fn(addr: u32, *mut u8) -> u32,
+    pub fuse_program: unsafe extern "C" fn(addr: u32, data: u32, lock: bool) -> u32,
+    pub crc_calc: unsafe extern "C" fn(src: *const u32, number_of_worlds: u32, crc_checksum: *const u32) -> u32,
+    pub reload: unsafe extern "C" fn() -> u32,
+    pub crc_check: unsafe extern "C" fn(start_addr: u32, end_addr: u32, crc_addr: u32) -> u32,
+}
+
+const OTP_LAST_WORD: u32 = 512;
+
 /// ROM API layout 42.9.3.1, RT6xx user manual UM11147.
 #[repr(C)]
 struct ApiTable {
@@ -117,8 +134,8 @@ struct ApiTable {
     reserved1: u32,
     reserved2: u32,
     flash_driver: &'static [u8; 0], // stubbed
-    otp_driver: &'static [u8; 0],   // stubbed
-    pub skboot: &'static SKBoot,
+    otp_driver: &'static OTPDriver,
+    skboot: &'static SKBoot,
 }
 
 extern "C" {
@@ -202,7 +219,15 @@ pub enum AuthenticateError {
     IsSignVerifiedUnknown,
 }
 
-pub fn skboot_authenticate(start: *const u32, max_image_length: u32) -> Result<(), AuthenticateError> {
+/// Perform ROM authentication of an image.
+///
+/// If RHK is provided it will use that hash to verify the certificate chain instead.
+#[allow(dead_code)]
+pub fn skboot_authenticate(
+    start: *const u32,
+    max_image_length: u32,
+    rhk: Option<[u8; 32]>,
+) -> Result<(), AuthenticateError> {
     // Note:
     // The ROM reserved space for global variables in RAM on this device is:
     // 0x1001_2000 to 0x1000_A000
@@ -211,6 +236,8 @@ pub fn skboot_authenticate(start: *const u32, max_image_length: u32) -> Result<(
 
     let mut session_ref = null_mut();
     let mut user_buf = [0u32; 1024];
+
+    let user_rhk = rhk.map(|rhk| rhk.as_ptr() as *const u32).unwrap_or(null());
 
     let options = KbOptions {
         version: 1,
@@ -222,7 +249,7 @@ pub fn skboot_authenticate(start: *const u32, max_image_length: u32) -> Result<(
                 profile: 0,
                 min_build_number: 0,
                 max_image_length,
-                user_rhk: null(), // TODO perhaps application-specific RHK?
+                user_rhk,
             },
         },
     };
@@ -263,6 +290,47 @@ pub fn skboot_authenticate(start: *const u32, max_image_length: u32) -> Result<(
         BootStatus::InvalidArgument => Err(AuthenticateError::UnexpectedValueInImage),
         BootStatus::KeyStoreMarkerInvalid => Err(AuthenticateError::KeyStoreMarkerInvalid),
         _ => Err(AuthenticateError::BootStatusUnknown),
+    }
+}
+
+fn otp_context<T>(f: impl FnOnce() -> T) -> T {
+    // Note(cs): we do not want any other process also using the OTP block at the same time.
+    cortex_m::interrupt::free(|_| unsafe {
+        (api_table().otp_driver.init)(SYSTEM_CORE_CLOCK_HZ);
+        let result = f();
+        (api_table().otp_driver.deinit)();
+        result
+    })
+}
+
+pub fn otp_read_fuse(addr: u32) -> Result<u32, ()> {
+    let mut result = [0u8; 4];
+    let status = otp_context(|| unsafe { (api_table().otp_driver.fuse_read)(addr, result.as_mut_ptr()) });
+    if status == KbStatus::Success as u32 {
+        Ok(u32::from_le_bytes(result))
+    } else {
+        Err(())
+    }
+}
+
+pub fn otp_reload() -> Result<(), ()> {
+    let status = otp_context(|| unsafe { (api_table().otp_driver.reload)() });
+
+    // Fix for EVK without fuses
+    #[cfg(feature = "mimxrt685s-evk")]
+    {
+        use crate::shadow;
+
+        // Configure the EVK NOR flash @ port 2, pin 12 to be reset on a system reset.
+        let mut boot1 = shadow::Boot1::read_shadow();
+        boot1.set_qspi_reset_pin(2, 12);
+        boot1.write_shadow();
+    }
+
+    if status == KbStatus::Success as u32 {
+        Ok(())
+    } else {
+        Err(())
     }
 }
 

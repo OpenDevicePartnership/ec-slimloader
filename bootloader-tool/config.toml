@@ -7,7 +7,7 @@ otp_path = "./artifacts/otp_master_key.txt"
 
 [bootloader]
 flash_start = 0x08001000
-run_start = 0x10170000
+run_start = 0x08001000
 max_size = 0x8000
 state = { start = 0x0800B000, size = 0x2000 }
 

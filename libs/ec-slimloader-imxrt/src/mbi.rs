@@ -1,9 +1,12 @@
 use embedded_storage_async::nor_flash::ReadNorFlash;
 
+use crate::rkh::Rkh;
+
 #[derive(Debug, PartialEq)]
 pub struct Ivt {
     pub image_len: usize,
     pub image_type: u32,
+    pub header_offset: u32,
     pub target_ptr: *mut u32,
 }
 
@@ -27,6 +30,7 @@ impl Ivt {
         Ok(Self {
             image_len: u32::from_le_bytes(unsafe { data[0x20..0x24].try_into().unwrap_unchecked() }) as usize,
             image_type: u32::from_le_bytes(unsafe { data[0x24..0x28].try_into().unwrap_unchecked() }),
+            header_offset: u32::from_le_bytes(unsafe { data[0x28..0x2C].try_into().unwrap_unchecked() }),
             target_ptr: u32::from_le_bytes(unsafe { data[0x34..0x38].try_into().unwrap_unchecked() }) as *mut u32,
         })
     }
@@ -35,5 +39,38 @@ impl Ivt {
         (self.target_ptr as usize)
             .checked_add(self.image_len)
             .map(|ptr| ptr as *mut u32)
+    }
+}
+
+#[repr(C)]
+pub struct CertificateBlockHeader {
+    pub signature: u32,
+    pub header_minor_version: u16,
+    pub header_major_version: u16,
+    pub header_length: u32,
+    pub flags: u32,
+    pub build_number: u32,
+    pub total_image_length: u32,
+    pub certificate_count: u32,
+    pub certificate_table_length: u32,
+}
+
+impl CertificateBlockHeader {
+    pub fn read_from_slice(data: &[u8]) -> Option<CertificateBlockHeader> {
+        if data.len() < core::mem::size_of::<CertificateBlockHeader>() {
+            return None;
+        }
+
+        Some(unsafe { (data.as_ptr() as *const CertificateBlockHeader).read_unaligned() })
+    }
+}
+
+impl Rkh {
+    pub fn read_all_from_slice(data: &[u8]) -> Option<[Rkh; 4]> {
+        if data.len() < core::mem::size_of::<[Rkh; 4]>() {
+            return None;
+        }
+
+        Some(unsafe { (data.as_ptr() as *const [Rkh; 4]).read_unaligned() })
     }
 }

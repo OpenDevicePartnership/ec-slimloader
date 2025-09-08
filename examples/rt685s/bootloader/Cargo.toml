@@ -12,12 +12,16 @@ defmt = [
     "ec-slimloader-imxrt/defmt",
     "embassy-imxrt/defmt",
     "embassy-executor/defmt",
-    "partition-manager/defmt"
+    "partition-manager/defmt",
 ]
+
+non-secure = ["ec-slimloader-imxrt/non-secure"]
 
 [dependencies]
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
-ec-slimloader-imxrt = { path = "../../../libs/ec-slimloader-imxrt", features = ["mimxrt685s-evk"], default-features = false }
+ec-slimloader-imxrt = { path = "../../../libs/ec-slimloader-imxrt", features = [
+    "mimxrt685s-evk",
+], default-features = false }
 
 example-bsp = { path = "../bsp", features = ["bootloader"] }
 
@@ -29,14 +33,11 @@ cortex-m = { version = "0.7.7", features = [
 ] }
 cortex-m-rt = { version = "0.7.3" }
 
-embassy-imxrt = { workspace = true, features = [
-    "mimxrt685s",
-    "unstable-pac"
-] }
+embassy-imxrt = { workspace = true, features = ["mimxrt685s", "unstable-pac"] }
 
 embassy-executor = { workspace = true, features = [
     "arch-cortex-m",
-    "executor-thread"
+    "executor-thread",
 ] }
 
 embassy-sync = { workspace = true }

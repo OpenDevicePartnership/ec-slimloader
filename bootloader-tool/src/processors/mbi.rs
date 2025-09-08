@@ -498,8 +498,10 @@ fn load_image(
     let plain_image = std::fs::read(&input_path)?;
 
     let image_type = if is_bootloader {
-        ImageKind::PlainSigned
+        // Note: ROM bootloader only accepts xip plain signed images when secure_boot_en bit is unset.
+        ImageKind::XipPlainSigned
     } else {
+        // Note: ec-slimloader loads the application to RAM, but skboot_authenticate requires the image to be marked for XIP.
         ImageKind::XipPlainSigned
     };
 

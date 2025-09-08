@@ -3,8 +3,9 @@
 #[cfg(feature = "fcb")]
 mod fcb;
 
-#[cfg(not(feature = "non-secure"))]
+mod rkh;
 mod rom;
+mod shadow;
 
 #[cfg(feature = "empty-otfad")]
 #[link_section = ".otfad"]
@@ -23,6 +24,8 @@ use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_imxrt::{
     clocks::MainClkSrc,
     flexspi::{embedded_storage::FlexSpiNorStorage, nor_flash::FlexSpiNorFlash},
+    peripherals::HASHCRYPT,
+    Peri,
 };
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -33,6 +36,10 @@ use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
 
 use ec_slimloader::{Board, BootError};
+
+use crate::mbi::CertificateBlockHeader;
+
+const SYSTEM_CORE_CLOCK_HZ: u32 = (475 * 1000 * 1000) / 2;
 
 const IMAGE_TYPE_TZ_XIP_SIGNED: u32 = 0x0004;
 const READ_ALIGNMENT: u32 = 2;
@@ -60,6 +67,7 @@ pub trait ImxrtConfig {
 pub struct Imxrt<C> {
     journal: FlashJournal<Partition<'static, ExternalStorage, RW>>,
     slots: Vec<Partition<'static, ExternalStorage, RO, NoopRawMutex>, MAX_SLOT_COUNT>,
+    hashcrypt: Peri<'static, HASHCRYPT>,
     _config: C,
 }
 
@@ -101,6 +109,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         Self {
             journal,
             slots,
+            hashcrypt: p.HASHCRYPT,
             _config: config,
         }
     }
@@ -177,6 +186,61 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             ram_ivt
         };
 
+        // Compute RKTH from image.
+        let image_rkth = {
+            // Safety: whilst we do not know if the image is valid by itself,
+            // this slice at least is what we just copied. (should be identical to target_slice)
+            let ram_image_slice =
+                unsafe { core::slice::from_raw_parts(ram_ivt.target_ptr as *const u8, ram_ivt.image_len) };
+            let cert_block_header_offset = ram_ivt.header_offset as usize;
+
+            // Fetch certificate block
+            let cert_block_header = if let Some(cert_block_header) =
+                CertificateBlockHeader::read_from_slice(&ram_image_slice[cert_block_header_offset..])
+            {
+                cert_block_header
+            } else {
+                return BootError::TooLarge;
+            };
+
+            if cert_block_header.header_length != 0x20 {
+                defmt_or_log::warn!("Certificate block header is not expected length");
+            }
+
+            let rkhs_offset = cert_block_header_offset
+                + cert_block_header.header_length as usize
+                + cert_block_header.certificate_table_length as usize;
+
+            let rkhs = if let Some(rkhs) = rkh::Rkh::read_all_from_slice(&ram_image_slice[rkhs_offset..]) {
+                rkhs
+            } else {
+                return BootError::TooLarge;
+            };
+
+            rkh::Rkth::from_rkhs(&rkhs, self.hashcrypt.reborrow())
+        };
+
+        // Reload shadow registers.
+        defmt_or_log::unwrap!(rom::otp_reload());
+
+        // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
+        let dev_mode = !shadow::Boot0::read_shadow().secure_boot();
+
+        if image_rkth != rkh::Rkth::read_shadow() {
+            if dev_mode {
+                // If no SECURE_BOOT fuse set => overwrite shadow RKTH with image RKTH
+                defmt_or_log::warn!("Development mode detected, using new image RKTH");
+                image_rkth.write_shadow();
+            } else {
+                // If SECURE_BOOT fuse set => do nothing as skboot_authenticate should be annoyed (perhaps assert afterwards)
+                defmt_or_log::error!(
+                    "Shadow and image RKTH do not concur, but we call skboot_authenticate in any case"
+                );
+            }
+        } else {
+            defmt_or_log::info!("Shadow and image RKTH concur!")
+        }
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "non-secure")] {
                 warn!("Authentication skipped");
@@ -185,7 +249,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 // Call the ROM API to ensure that the image is signed and not broken or tampered with.
                 // Note: skboot_authenticate will show false-negatives if your clock jitter is too high.
                 // We noticed this with FFROdiv2 and MainClk > 475MHz.
-                match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32) {
+                match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32, None) {
                     Ok(()) => {}
                     Err(e) => {
                         warn!("Failed to authenticate {:?}", e);
