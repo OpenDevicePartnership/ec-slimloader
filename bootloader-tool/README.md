@@ -44,7 +44,27 @@ And then flash the bootloader to test that it works:
 cargo run -- run bootloader --input-path ./example/bootloader/target/thumbv8m.main-none-eabihf/release/example-bootloader
 ```
 
-**Note**: initially flashing the application causes the target to lock up, and you might need to powercycle before running the bootloader.
+**Note**: initially flashing the application causes the target to lock up, and you might need to powercycle before
+running the bootloader.
+
+### Signing an image using an HSM
+
+```bash
+# Copy in your image
+mkdir sign_me
+cp example/bootloader/target/thumbv8m.main-none-eabihf/release/example-bootloader sign_me/
+
+# Prepare image for signing
+cargo run -- sign bootloader --input-path sign_me/example-bootloader --dont-sign
+
+# This will generate example-bootloader.mbi-proto.bin which you can pass to your HSM
+openssl dgst -sign artifacts/cert-img1-user-key.pem -sha256 -out sign_me/signature.bin -binary sign_me/example-bootloader.mbi-proto.bin
+
+# Lastly merge the signature into the image (this also verifies that the signature is correct)
+cargo run -- sign bootloader --input-path sign_me/example-bootloader --signature-path sign_me/signature.bin
+
+# The final signed image for flashing is then in sign_me/example-bootloader.signed.bin
+```
 
 ## Binary layout
 

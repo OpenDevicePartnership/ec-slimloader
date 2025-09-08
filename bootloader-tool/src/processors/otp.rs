@@ -1,3 +1,7 @@
+use aes::{
+    Aes256,
+    cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray},
+};
 use anyhow::Context;
 
 use crate::{
@@ -5,6 +9,7 @@ use crate::{
     util::{bytes_to_u32_be, generate_hex, parse_hex},
 };
 
+#[derive(Clone)]
 pub struct Otp(pub [u8; 32]);
 
 impl Otp {
@@ -29,7 +34,18 @@ impl Otp {
         result.reverse();
         result
     }
+
+    pub fn hmac_key(&self) -> anyhow::Result<HmacKey> {
+        // See UM11147 page 1246, 43.2.3.1 HMAC_KEY
+        let aes = Aes256::new_from_slice(&self.0)?;
+        let mut block = GenericArray::from([0u8; 16]);
+        aes.encrypt_block(&mut block);
+
+        Ok(HmacKey(block.as_slice().try_into().unwrap()))
+    }
 }
+
+pub struct HmacKey(pub [u8; 16]);
 
 pub fn generate(config: &Config) -> anyhow::Result<Otp> {
     if std::fs::exists(&config.otp_path)? {

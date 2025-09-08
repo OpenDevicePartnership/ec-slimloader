@@ -1,5 +1,7 @@
 artifacts_path = "./artifacts"
 
+key_type = "rsa3072"
+
 rkth_path = "./artifacts/rkth.txt"
 otp_path = "./artifacts/otp_master_key.txt"
 
@@ -12,4 +14,4 @@ state = { start = 0x0800B000, size = 0x2000 }
 [application]
 slot_starts = [0x800D000, 0x80F9000]
 run_start = 0x10020000
-slot_size = 0xEC000 # 944K
+slot_size = 0xEC000                  # 944K

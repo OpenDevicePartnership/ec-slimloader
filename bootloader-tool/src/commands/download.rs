@@ -44,6 +44,10 @@ pub async fn process(config: &Config, command: DownloadCommands) -> anyhow::Resu
 
     let SignOutput { output_path } = super::sign::process(config, sign_command).await?;
 
+    let Some(output_path) = output_path else {
+        return Err(anyhow::anyhow!("Image was not signed so nothing to run"));
+    };
+
     log::debug!("Starting probe session...");
     let mut session = probe::start_session(&run_args.probe_args.chip, run_args.probe_args.probe.clone()).await?;
 

@@ -8,6 +8,9 @@ pub struct Config {
     /// Path of the directory where artifacts are put and can be found.
     pub artifacts_path: PathBuf,
 
+    /// Key type to generate
+    pub key_type: KeyType,
+
     /// Path of the file containing the Root Key Table Hash, generated from the Certificate Block.
     ///
     /// This hash is either uploaded to the shadow registers when testing, or fused to the permanent register.
@@ -55,6 +58,24 @@ pub struct ApplicationArgs {
     ///
     /// This size is hard-coded and checked in the bootloader.
     pub slot_size: u64,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyType {
+    Rsa2048,
+    Rsa3072,
+    Rsa4096,
+}
+
+impl KeyType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            KeyType::Rsa2048 => "rsa2048",
+            KeyType::Rsa3072 => "rsa3072",
+            KeyType::Rsa4096 => "rsa4096",
+        }
+    }
 }
 
 impl Config {
