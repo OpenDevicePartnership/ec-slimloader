@@ -68,7 +68,7 @@ certBlock: cert-block.yaml
 # -------------------------------------===== Signer configuration [Required] =====--------------------------------------
 # Description: Signature provider configuration in format 'type=<sp_type>;<key1>=<value1>;<key2>=<value2>' or path to a
 # private key.
-signer: type=file;file_path=cert-img1-user-key.pem
+signer: type=file;file_path=cert-img2-user-key.pem
 # ======================================================================================================================
 #                                               == Encryption Settings ==
 # ======================================================================================================================

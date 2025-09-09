@@ -8,22 +8,38 @@ pub struct Config {
     /// Path of the directory where artifacts are put and can be found.
     pub artifacts_path: PathBuf,
 
-    /// Key type to generate
-    pub key_type: KeyType,
-
-    /// Path of the file containing the Root Key Table Hash, generated from the Certificate Block.
-    ///
-    /// This hash is either uploaded to the shadow registers when testing, or fused to the permanent register.
-    pub rkth_path: PathBuf,
-
     /// Path of the file containing the OTP Master Key, used to encrypt the bootloader image.
     pub otp_path: PathBuf,
+
+    /// Certificate chains as used by this project.
+    pub certificates: Vec<CertificateChain>,
 
     /// Arguments related to the setup of the bootloader.
     pub bootloader: Option<BootloaderArgs>,
 
     /// Arguments related to application images.
     pub application: Option<ApplicationArgs>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CertificateChain(pub Vec<Certificate>);
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Certificate {
+    /// Path of the file containing the public facing certificate.
+    pub path: PathBuf,
+
+    /// When set, the certificate can be generated and the private key can be directly used to generate signatures for binaries.
+    pub prototype: Option<CertificatePrototype>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct CertificatePrototype {
+    /// Key type to generate.
+    pub key_type: KeyType,
+
+    /// Path of the file containing the private key, used to generate signatures for binaries.
+    pub key_path: PathBuf,
 }
 
 #[derive(Deserialize, Debug)]
@@ -60,7 +76,7 @@ pub struct ApplicationArgs {
     pub slot_size: u64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum KeyType {
     Rsa2048,

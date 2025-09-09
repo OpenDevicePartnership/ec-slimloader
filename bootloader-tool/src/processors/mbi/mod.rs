@@ -1,24 +1,25 @@
 #![allow(clippy::len_without_is_empty)]
 
+pub mod cert_block;
+
 use sha2::Digest;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 use crate::processors::certificates::Rkth;
+use crate::processors::mbi::cert_block::CertBlock;
 use crate::processors::otp::Otp;
 use anyhow::{Context, anyhow, bail};
 use hmac::{Hmac, Mac};
-use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
-use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey};
+use rsa::RsaPrivateKey;
+use rsa::pkcs1v15::{Signature, SigningKey};
+use rsa::pkcs8::DecodePrivateKey;
 use rsa::signature::{SignatureEncoding, SignerMut, Verifier};
-use rsa::traits::PublicKeyParts;
-use rsa::{RsaPrivateKey, RsaPublicKey};
 use sha2::Sha256;
 use x509_parser::asn1_rs::FromDer;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::oid_registry::Oid;
-use x509_parser::public_key::PublicKey;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -146,205 +147,6 @@ pub enum TrustZonePreset {
     Included = 1,
 }
 
-/// Cert block as described in UM11147 Fig 239
-#[derive(Debug, Clone)]
-pub struct CertBlock {
-    data: Vec<u8>,
-}
-
-impl CertBlock {
-    /// Read cert block from file that was generated with `nxpimage cert-block export -c ./cert-block.yaml`
-    ///
-    /// That file contains padding data, so we read out the lengths from the header in that file to determine the correct length.
-    pub fn from_file(filename: impl AsRef<Path>, rkth: Option<&Rkth>) -> anyhow::Result<Self> {
-        let data = std::fs::read(filename)?;
-        let mut me = Self { data };
-
-        // Strip padding
-        let cert_block_len = me.header_len() + me.cert_table_len() + 4 * Sha256::output_size() as u32;
-        assert!(me.data.len() >= cert_block_len as usize);
-        me.data.truncate(cert_block_len as usize);
-
-        // Ensure the cert block is valid
-        me.verify(rkth)?;
-
-        Ok(me)
-    }
-
-    /// Get the raw bytes of the cert block
-    pub fn raw(&self) -> &[u8] {
-        &self.data
-    }
-
-    fn cert_count(&self) -> u32 {
-        u32::from_le_bytes(self.data[0x18..0x1c].try_into().unwrap())
-    }
-
-    fn cert_table_len(&self) -> u32 {
-        u32::from_le_bytes(self.data[0x1c..0x20].try_into().unwrap())
-    }
-
-    fn header_len(&self) -> u32 {
-        let len = u32::from_le_bytes(self.data[0x08..0x0c].try_into().unwrap());
-
-        if len != 0x20 {
-            log::warn!("Header length mismatch, expected {:x?}, got {:x?}", 0x20, len);
-        }
-
-        len
-    }
-
-    /// Sets the total length of signed bytes, this needs to be updated before signing
-    pub fn set_total_image_length_in_bytes(&mut self, total_image_length_in_bytes: usize) {
-        let total_image_length_in_bytes = total_image_length_in_bytes.try_into().unwrap();
-        self.data[0x14..0x18].copy_from_slice(&u32::to_le_bytes(total_image_length_in_bytes));
-    }
-
-    fn root_key_hashes(&self) -> [[u8; 256 / 8]; 4] {
-        let rkh_start = (self.header_len() + self.cert_table_len()) as usize;
-        let data = &self.data[rkh_start..];
-        assert_eq!(data.len(), 4 * Sha256::output_size());
-
-        data.chunks_exact(Sha256::output_size())
-            .map(|chunk| chunk.try_into().unwrap())
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap()
-    }
-
-    /// Calculate the RKTH of the contained root key hashes
-    pub fn rkth(&self) -> Rkth {
-        let mut hash = Sha256::default();
-        for rkh in self.root_key_hashes() {
-            hash.update(rkh);
-        }
-        Rkth(hash.finalize().into())
-    }
-
-    fn certificates(&self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let mut out = vec![];
-        let mut next_cert = self.header_len() as usize;
-
-        for i in 0..self.cert_count() {
-            let cert_len = u32::from_le_bytes(self.data[next_cert..next_cert + 4].try_into().unwrap()) as usize;
-            if !cert_len.is_multiple_of(4) {
-                bail!("Certificate of cert {i} length is not divisible by 4");
-            }
-            next_cert += 4;
-            out.push(self.data[next_cert..next_cert + cert_len].to_vec());
-            next_cert += cert_len;
-        }
-
-        assert_eq!(next_cert, (self.header_len() + self.cert_table_len()) as usize);
-
-        Ok(out)
-    }
-
-    /// Check if this CertBlock is consistent with itself and the Rkth
-    fn verify(&self, rkth: Option<&Rkth>) -> anyhow::Result<()> {
-        log::info!("Checking cert block is consistent");
-
-        // Ensure the rkth is correct if the user has one
-        match rkth {
-            Some(rkth) if &self.rkth() != rkth => {
-                bail!(
-                    "CertBlock RKTH does not match provided Rkth, in block: {:x?}, to check: {rkth:x?}",
-                    self.rkth()
-                );
-            }
-            _ => {}
-        }
-
-        // Unpack the certificates
-        let certs = self.certificates().context("Could not parse certificate list")?;
-
-        // Check root cert is in root key hashes
-        let Some(raw_root_cert) = certs.first() else {
-            bail!("CertBlock contains no certificates");
-        };
-
-        // Get the root public key
-        let root_cert = parse_x509_cert(raw_root_cert)?;
-        let root_public_key = root_cert
-            .public_key()
-            .parsed()
-            .context("could not parse root public key")?;
-        let PublicKey::RSA(root_public_key) = root_public_key else {
-            bail!("Invalid public key type: {root_public_key:?} Must be RSA");
-        };
-
-        // Hash modulus || exponent, but ensure to strip leading zero bytes from the modulus
-        let mut rkh = Sha256::default();
-        rkh.update(
-            root_public_key
-                .modulus
-                .strip_prefix(&[0])
-                .unwrap_or(root_public_key.modulus),
-        );
-        rkh.update(root_public_key.exponent);
-        let rkh: [u8; 32] = rkh.finalize().into();
-
-        // Walk the root key hashes to find the right slot
-        match self.root_key_hashes().iter().position(|&slot| slot == rkh) {
-            Some(slot) => log::info!("Found key hash in slot {slot}"),
-            None => bail!(
-                "Root cert is not in root key hashes! Cert hash: {rkh:x?}, Hash table: {:x?}",
-                self.root_key_hashes()
-            ),
-        }
-
-        // Check root_cert is a CA cert
-        if !root_cert.is_ca() {
-            bail!("Root cert is not marked as CA");
-        }
-
-        // Walk the certificate chain
-        let mut signing_cert = root_cert;
-        for (i, cert) in certs.iter().skip(1).enumerate() {
-            // Check that all intermediate certificates are CA certs
-            if !signing_cert.is_ca() {
-                bail!("Root cert is not marked as CA");
-            }
-
-            let cert = parse_x509_cert(cert)?;
-            cert.verify_signature(Some(signing_cert.public_key()))
-                .with_context(|| format!("Could not verify cert number {i}"))?;
-
-            signing_cert = cert;
-        }
-
-        // Check that the last cert is NOT a CA cert, except for if it is the root cert
-        if signing_cert.is_ca() && certs.len() > 1 {
-            bail!("Signing cert is marked as CA cert");
-        }
-
-        // Check that the last public key can be parsed
-        RsaPublicKey::from_public_key_der(signing_cert.public_key().raw)
-            .context("Could not parse image signing key")?;
-
-        Ok(())
-    }
-
-    /// Get the public key of the certificates that is used to sign the image
-    pub fn verifying_key(&self) -> VerifyingKey<Sha256> {
-        let certs = self.certificates().expect("Ensured in verify");
-        let signing_cert = certs.last().expect("Ensured in verify").as_slice();
-        let signing_cert = parse_x509_cert(signing_cert).expect("Ensured in verify");
-
-        // Parse the final public key into something the rsa crate can work with
-        let image_signing_key = RsaPublicKey::from_public_key_der(signing_cert.public_key().raw)
-            .expect("Ensured by verify being called in from file");
-
-        VerifyingKey::new(image_signing_key)
-    }
-
-    /// Get the length of the signature for the image
-    pub fn signature_len(&self) -> usize {
-        let key: RsaPublicKey = self.verifying_key().into();
-        key.size()
-    }
-}
-
 fn parse_x509_cert(bytes: &[u8]) -> anyhow::Result<X509Certificate<'_>> {
     let (rem, cert) = X509Certificate::from_der(bytes)?;
     if rem.len() >= 4 {
@@ -469,9 +271,9 @@ impl Image {
     /// Combine the signature with this image
     ///
     /// This also inserts the HMAC of the header if it is needed for this image type.
-    pub fn merge(&self, signature: &[u8], rkth: &Rkth, otp: Option<Otp>) -> anyhow::Result<Vec<u8>> {
+    pub fn merge(&self, signature: &[u8], otp: Option<Otp>) -> anyhow::Result<Vec<u8>> {
         // Ensure the signature matches what we have
-        self.check(signature, rkth)?;
+        self.check(signature, &self.cert_block.rkth())?;
 
         let mut out = vec![];
         out.extend(self.header.raw());
@@ -493,7 +295,7 @@ fn load_image(
     input_path: &impl AsRef<Path>,
     base_addr: u32,
     is_bootloader: bool,
-    rkth: &Rkth,
+    cert_block: CertBlock,
 ) -> anyhow::Result<Image> {
     let plain_image = std::fs::read(&input_path)?;
 
@@ -505,8 +307,6 @@ fn load_image(
         ImageKind::XipPlainSigned
     };
 
-    let cert_block = CertBlock::from_file("artifacts/cert_block.bin", Some(rkth))?;
-
     let image = Image::new(plain_image, base_addr, ImageType::new(image_type), cert_block);
     Ok(image)
 }
@@ -517,9 +317,9 @@ pub fn prepare_to_sign(
     base_addr: u32,
     output_path: impl AsRef<Path>,
     is_bootloader: bool,
-    rkth: &Rkth,
+    cert_block: CertBlock,
 ) -> anyhow::Result<()> {
-    let image = load_image(&input_path, base_addr, is_bootloader, rkth)?;
+    let image = load_image(&input_path, base_addr, is_bootloader, cert_block)?;
     let signing_body = image.sign_me();
 
     std::fs::write(output_path, &signing_body).context("Could not write prepared image")?;
@@ -535,19 +335,23 @@ pub fn merge_with_signature(
     output_path: impl AsRef<Path>,
     is_bootloader: bool,
     otp: Option<Otp>,
-    rkth: &Rkth,
+    cert_block: CertBlock,
 ) -> anyhow::Result<()> {
-    let image = load_image(&input_path, base_addr, is_bootloader, rkth)?;
+    let image = load_image(&input_path, base_addr, is_bootloader, cert_block)?;
     let signature = std::fs::read(&signature_path)?;
 
-    std::fs::write(output_path.as_ref(), image.merge(&signature, rkth, otp)?)?;
+    std::fs::write(output_path.as_ref(), image.merge(&signature, otp)?)?;
 
     Ok(())
 }
 
 /// Sign the image (useful for testing without HSM)
-pub fn sign(signature_path: impl AsRef<Path>, prepared_path: impl AsRef<Path>) -> anyhow::Result<()> {
-    let private_key = std::fs::read_to_string("artifacts/cert-img1-user-key.pem")?; // TODO
+pub fn sign(
+    signature_path: impl AsRef<Path>,
+    prepared_path: impl AsRef<Path>,
+    private_key_path: impl AsRef<Path>,
+) -> anyhow::Result<()> {
+    let private_key = std::fs::read_to_string(private_key_path)?;
     let private_key = RsaPrivateKey::from_pkcs8_pem(&private_key)?;
     let mut signing_key = SigningKey::<Sha256>::new(private_key);
 
@@ -564,15 +368,22 @@ pub fn generate_pure(
     output_path: impl AsRef<Path>,
     is_bootloader: bool,
     otp: Option<Otp>,
-    rkth: &Rkth,
+    cert_block: CertBlock,
+    private_key_path: impl AsRef<Path>,
 ) -> anyhow::Result<()> {
     let mut prepared_path = output_path.as_ref().to_path_buf();
     prepared_path.set_extension(".prepared.bin");
-    prepare_to_sign(&input_path, base_addr, &prepared_path, is_bootloader, rkth)?;
+    prepare_to_sign(
+        &input_path,
+        base_addr,
+        &prepared_path,
+        is_bootloader,
+        cert_block.clone(),
+    )?;
 
     let mut signature_path = output_path.as_ref().to_path_buf();
     signature_path.set_extension(".signature.bin");
-    sign(&signature_path, &prepared_path)?;
+    sign(&signature_path, &prepared_path, private_key_path)?;
 
     merge_with_signature(
         input_path,
@@ -581,7 +392,7 @@ pub fn generate_pure(
         output_path,
         is_bootloader,
         otp,
-        rkth,
+        cert_block,
     )?;
 
     Ok(())
@@ -619,11 +430,12 @@ pub fn generate(
     log::debug!("Config: {config:#?}");
 
     let mut command = Command::new(nxpimage.as_ref());
+    command.current_dir("./artifacts");
 
     let mbi_conf_path = if is_bootloader {
-        "artifacts/mbi-bootloader.yaml"
+        "mbi-bootloader.yaml"
     } else {
-        "artifacts/mbi-application.yaml"
+        "mbi-application.yaml"
     };
 
     command.args(["mbi", "export", "-c", mbi_conf_path]);

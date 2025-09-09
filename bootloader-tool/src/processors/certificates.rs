@@ -4,51 +4,45 @@ use std::{
 };
 
 use anyhow::Context;
-use serde::Deserialize;
+use serde::Serialize;
 
 use crate::{
     GenerateCertificatesArguments,
-    config::Config,
+    config::{Certificate, CertificatePrototype, Config},
     util::{bytes_to_u32_le, generate_hex, parse_hex},
 };
 
-#[derive(Deserialize, Debug)]
-struct CertDescr {
-    subject_public_key: PathBuf,
+#[derive(Serialize)]
+struct BasicConstraints {
+    ca: bool,
 }
 
-fn generate_private_key(
-    cert_descr: &CertDescr,
-    nxpcrypto: impl AsRef<Path>,
-    config: &Config,
-) -> anyhow::Result<()> {
-    // nxpcrypto key generate -k rsa2048 -e PEM -o IMG1_1_sha256_2048_65537_v3_usr_key.pem
+#[derive(Serialize)]
+struct CertificateExtensions {
+    #[serde(rename = "BASIC_CONSTRAINTS")]
+    basic_constraints: BasicConstraints,
+}
 
+#[derive(Serialize)]
+struct CertificateConfig {
+    issuer_private_key: PathBuf,
+    subject_public_key: PathBuf,
+    extensions: CertificateExtensions,
+}
+
+fn generate_private_key(nxpcrypto: impl AsRef<Path>, prototype: &CertificatePrototype) -> anyhow::Result<()> {
     // Note: apparently the field name refers to a public key, but it is for the private key.
-    let output_path = &cert_descr.subject_public_key;
-    let output_path_abs = config.artifacts_path.join(output_path);
-    if std::fs::exists(&output_path_abs)? {
-        log::warn!(
-            "Private key {} already generated, skipping...",
-            output_path_abs.display()
-        );
+    let output_path = &prototype.key_path;
+    if std::fs::exists(output_path)? {
+        log::warn!("Private key {} already generated, skipping...", output_path.display());
         return Ok(());
     }
 
     log::info!("Generating private key {}", output_path.display());
 
     let mut command = Command::new(nxpcrypto.as_ref());
-    command.current_dir(&config.artifacts_path);
 
-    command.args([
-        "key",
-        "generate",
-        "-k",
-        config.key_type.as_str(),
-        "-e",
-        "PEM",
-        "-o",
-    ]);
+    command.args(["key", "generate", "-k", prototype.key_type.as_str(), "-e", "PEM", "-o"]);
     command.arg(output_path);
 
     let output = command
@@ -59,42 +53,65 @@ fn generate_private_key(
         .with_context(failed_exec(nxpcrypto))?;
 
     if !output.status.success() {
-        Err(anyhow::anyhow!(format!(
-            "Failed to generate private key {}",
-            cert_descr.subject_public_key.display()
-        ))
-        .context(String::from_utf8(output.stdout)?))
+        Err(
+            anyhow::anyhow!(format!("Failed to generate private key {}", output_path.display()))
+                .context(String::from_utf8(output.stdout)?),
+        )
     } else {
         Ok(())
     }
 }
 
 fn generate_certificate(
-    input: impl AsRef<Path>,
     nxpcrypto: impl AsRef<Path>,
-    config: &Config,
+    certificate: &Certificate,
+    parent_certificate: &Option<Certificate>,
+    is_leaf: bool,
 ) -> anyhow::Result<()> {
-    // nxpcrypto cert generate -c ROT1_2048_csr.yaml -e PEM -o ROT1_sha256_2048_65537_v3_ca_crt.PEM
+    let Some(prototype) = &certificate.prototype else {
+        return Err(anyhow::anyhow!(
+            "Request generation of private key for {}, but no prototype has been defined",
+            certificate.path.display()
+        ));
+    };
 
-    let mut output_path = input.as_ref().to_path_buf();
-    output_path.set_extension("pem");
+    let issuer_private_key = if let Some(parent_certificate) = &parent_certificate {
+        let Some(parent_prototype) = &parent_certificate.prototype else {
+            return Err(anyhow::anyhow!(
+                "Request generation of private key for {}, but no prototype has been defined",
+                certificate.path.display()
+            ));
+        };
 
-    let output_path_abs = config.artifacts_path.join(&output_path);
-    if std::fs::exists(&output_path_abs)? {
-        log::warn!(
-            "Certificate {} already generated, skipping...",
-            output_path_abs.display()
-        );
+        parent_prototype.key_path.clone()
+    } else {
+        // This certificate is the root certificate, and hence self-signed.
+        prototype.key_path.clone()
+    };
+
+    let input = CertificateConfig {
+        issuer_private_key,
+        subject_public_key: prototype.key_path.clone(),
+        extensions: CertificateExtensions {
+            basic_constraints: BasicConstraints { ca: !is_leaf },
+        },
+    };
+
+    let mut input_file = tempfile::NamedTempFile::new()?;
+    serde_yml::to_writer(&mut input_file, &input)?;
+
+    let output_path = &certificate.path;
+    if std::fs::exists(&output_path)? {
+        log::warn!("Certificate {} already generated, skipping...", output_path.display());
         return Ok(());
     }
 
     log::info!("Generating certificate {}", output_path.display());
 
     let mut command = Command::new(nxpcrypto.as_ref());
-    command.current_dir(&config.artifacts_path);
 
     command.args(["cert", "generate", "-e", "PEM", "-c"]);
-    command.arg(input.as_ref());
+    command.arg(input_file.path());
     command.arg("-o");
     command.arg(output_path);
 
@@ -107,8 +124,8 @@ fn generate_certificate(
 
     if !output.status.success() {
         Err(anyhow::anyhow!(format!(
-            "Failed to build certificate from {}",
-            input.as_ref().display()
+            "Failed to build certificate from {:?} (parent: {:?})",
+            certificate, parent_certificate
         ))
         .context(String::from_utf8(output.stdout)?))
     } else {
@@ -117,16 +134,20 @@ fn generate_certificate(
 }
 
 fn generate_single(
-    input: impl AsRef<Path>,
     nxpcrypto: impl AsRef<Path>,
-    config: &Config,
+    certificate: &Certificate,
+    parent_certificate: &Option<Certificate>,
+    is_leaf: bool,
 ) -> anyhow::Result<()> {
-    let input_abs = config.artifacts_path.join(&input);
+    let Some(prototype) = &certificate.prototype else {
+        return Err(anyhow::anyhow!(
+            "Request generation of private key for {}, but no prototype has been defined",
+            certificate.path.display()
+        ));
+    };
 
-    let cert_descr: CertDescr = serde_yml::from_reader(std::fs::File::open(&input_abs)?)?;
-
-    generate_private_key(&cert_descr, &nxpcrypto, config)?;
-    generate_certificate(input, &nxpcrypto, config)?;
+    generate_private_key(&nxpcrypto, prototype)?;
+    generate_certificate(&nxpcrypto, certificate, parent_certificate, is_leaf)?;
 
     Ok(())
 }
@@ -140,9 +161,11 @@ impl Rkth {
     }
 
     pub fn from_hex(str: &str) -> anyhow::Result<Self> {
-        Ok(Self(parse_hex(str)?.try_into().map_err(|_| {
-            anyhow::anyhow!("Input not appropriate size")
-        })?))
+        Ok(Self(
+            parse_hex(str)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Input not appropriate size"))?,
+        ))
     }
 
     pub fn as_u32_le(&self) -> Vec<u32> {
@@ -150,87 +173,20 @@ impl Rkth {
     }
 }
 
-fn generate_cert_block_rkth(
-    input: impl AsRef<Path>,
-    nxpimage: impl AsRef<Path>,
-    config: &Config,
-) -> anyhow::Result<Rkth> {
-    // nxpimage cert-block export -c ./cert-block.yaml
-
-    if std::fs::exists(&config.rkth_path)? {
-        log::warn!(
-            "RKTH file {} already generated, skipping...",
-            &config.rkth_path.display()
-        );
-        return get_rkth(config);
-    }
-
-    log::info!(
-        "Generating RKTH file from certificate block {}",
-        &config.rkth_path.display()
-    );
-
-    let mut command = Command::new(nxpimage.as_ref());
-    command.current_dir(&config.artifacts_path);
-
-    command.args(["cert-block", "export", "-c"]);
-    command.arg(input.as_ref());
-
-    let output = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .output()
-        .with_context(failed_exec(nxpimage))?;
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!(format!(
-            "Failed to build certificate block from {}",
-            input.as_ref().display()
-        ))
-        .context(String::from_utf8(output.stdout)?));
-    }
-
-    let rkth_str = String::from_utf8(output.stdout)?
-        .lines()
-        .find(|line| line.contains("RKTH"))
-        .map(|line| line.trim().trim_start_matches("RKTH: "))
-        .ok_or_else(|| anyhow::anyhow!("nxpimage output does not contain RKTH"))?
-        .to_owned();
-    let rkth = Rkth::from_hex(&rkth_str)?;
-    let rkth_str = rkth.as_hex(); // Canonicalize
-
-    log::info!("RKTH: {rkth_str}");
-    std::fs::write(&config.rkth_path, rkth_str)?;
-
-    Ok(rkth)
-}
-
-const ROOT_KEY_DESCR_PATH: &str = "./cert-rot1.yaml";
-const IMG_KEY_DESCR_PATH: &str = "./cert-img1.yaml";
-const CERT_BLOCK_DESCR_PATH: &str = "./cert-block.yaml";
-
 pub fn generate(args: GenerateCertificatesArguments, config: &Config) -> anyhow::Result<()> {
-    generate_single(ROOT_KEY_DESCR_PATH, &args.nxpcrypto_path, config)?;
-    generate_single(IMG_KEY_DESCR_PATH, &args.nxpcrypto_path, config)?;
-    generate_cert_block_rkth(CERT_BLOCK_DESCR_PATH, &args.nxpimage_path, config)?;
+    for chain in &config.certificates {
+        let mut parent = None;
+        let mut iter = chain.0.iter().peekable();
+        while let Some(certificate) = iter.next() {
+            let is_leaf = iter.peek().is_none();
+            generate_single(&args.nxpcrypto_path, certificate, &parent, is_leaf)?;
+            parent = Some(certificate.clone());
+        }
+    }
 
     Ok(())
 }
 
-pub fn get_rkth(config: &Config) -> anyhow::Result<Rkth> {
-    let path = &config.rkth_path;
-    let rkth_hex_str = std::fs::read_to_string(&config.rkth_path)
-        .with_context(|| format!("Failed to open RKTH file {}", path.display()))?;
-
-    Rkth::from_hex(&rkth_hex_str)
-}
-
 fn failed_exec<'a>(tool: impl AsRef<Path> + 'a) -> impl Fn() -> String + 'a {
-    move || {
-        format!(
-            "Could not execute `{}`, is it installed?",
-            tool.as_ref().display()
-        )
-    }
+    move || format!("Could not execute `{}`, is it installed?", tool.as_ref().display())
 }

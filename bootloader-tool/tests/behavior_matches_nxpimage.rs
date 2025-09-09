@@ -1,27 +1,48 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::Context;
 use bootloader_tool::Config;
-use bootloader_tool::processors::certificates::{Rkth, get_rkth};
+use bootloader_tool::processors::mbi::cert_block::{self, CertBlock};
 use bootloader_tool::processors::otp::Otp;
 use bootloader_tool::processors::{mbi, objcopy, otp};
 use object::read::elf::ElfFile32;
 
+fn get_private_key(config: &Config, certificate_idx: usize) -> PathBuf {
+    config.certificates[certificate_idx]
+        .0
+        .last()
+        .as_ref()
+        .unwrap()
+        .prototype
+        .as_ref()
+        .unwrap()
+        .key_path
+        .clone()
+}
+
 #[test]
 fn test_app() {
+    const CERTIFICATE_IDX: usize = 0;
+
     let config = Config::read("config.toml").unwrap();
-    let rkth = get_rkth(&config).unwrap();
+    let cert_block = cert_block::generate("nxpimage", &config, CERTIFICATE_IDX).unwrap();
+    let private_key_path = get_private_key(&config, CERTIFICATE_IDX);
 
     let (data, base_addr) = read_example("application");
-    assert_same(&data, base_addr, false, None, &rkth);
+    assert_same(&data, base_addr, false, None, cert_block, private_key_path);
 }
 
 #[test]
 fn test_bootloader() {
+    const CERTIFICATE_IDX: usize = 0;
+
     let config = Config::read("config.toml").unwrap();
     let otp = otp::generate(&config).unwrap();
-    let rkth = get_rkth(&config).unwrap();
+    let cert_block = cert_block::generate("nxpimage", &config, CERTIFICATE_IDX).unwrap();
+    let private_key_path = get_private_key(&config, CERTIFICATE_IDX);
 
     let (data, base_addr) = read_example("bootloader");
-    assert_same(&data, base_addr, true, Some(otp), &rkth);
+    assert_same(&data, base_addr, true, Some(otp), cert_block, private_key_path);
 }
 
 #[test]
@@ -43,18 +64,37 @@ fn test_bootloader_padding_17() {
 }
 
 fn test_bootloader_padding(added_bytes: u8) {
+    const CERTIFICATE_IDX: usize = 0;
+
     let config = Config::read("config.toml").unwrap();
     let otp = otp::generate(&config).unwrap();
-    let rkth = get_rkth(&config).unwrap();
+    let cert_block = cert_block::generate("nxpimage", &config, CERTIFICATE_IDX).unwrap();
+    let private_key_path = config.certificates[CERTIFICATE_IDX]
+        .0
+        .last()
+        .as_ref()
+        .unwrap()
+        .prototype
+        .as_ref()
+        .unwrap()
+        .key_path
+        .clone();
 
     let (mut data, base_addr) = read_example("bootloader");
     for i in 0..added_bytes {
         data.push(0x42 + i);
     }
-    assert_same(&data, base_addr, true, Some(otp), &rkth);
+    assert_same(&data, base_addr, true, Some(otp), cert_block, private_key_path);
 }
 
-fn assert_same(input_data: &[u8], base_addr: u32, is_bootloader: bool, otp: Option<Otp>, rkth: &Rkth) {
+fn assert_same(
+    input_data: &[u8],
+    base_addr: u32,
+    is_bootloader: bool,
+    otp: Option<Otp>,
+    cert_block: CertBlock,
+    private_key_path: impl AsRef<Path>,
+) {
     let output_dir = tempfile::tempdir().unwrap();
 
     let input_path = output_dir.path().join("input.bin");
@@ -63,7 +103,16 @@ fn assert_same(input_data: &[u8], base_addr: u32, is_bootloader: bool, otp: Opti
     let pure_out = output_dir.path().join("pure.bin");
     let nxp_out = output_dir.path().join("nxp.bin");
 
-    mbi::generate_pure(&input_path, base_addr, &pure_out, is_bootloader, otp, rkth).unwrap();
+    mbi::generate_pure(
+        &input_path,
+        base_addr,
+        &pure_out,
+        is_bootloader,
+        otp,
+        cert_block,
+        private_key_path,
+    )
+    .unwrap();
     mbi::generate("nxpimage", &input_path, base_addr, &nxp_out, is_bootloader).unwrap();
 
     let pure = std::fs::read(&pure_out).unwrap();

@@ -85,6 +85,13 @@ pub struct SignArguments {
     /// Do not actually sign the image only export the prestage for external signing by HSM
     #[arg(long)]
     dont_sign: bool,
+    /// Index of the certificate intended to sign the image with
+    ///
+    /// Used to generate the appropriate certificate block for this image
+    ///
+    /// When this tool is used to generate a signature, the private key also needs to be configured
+    #[arg(long, value_name = "CERTIFICATE_IDX", default_value = "0")]
+    certificate: usize,
     /// Prelude output file path (BIN) [default: <INPUT_FILE>.prelude.bin]
     #[arg(long)]
     prelude_path: Option<PathBuf>,

@@ -1,6 +1,7 @@
 use crate::SignCommands;
 use crate::config::Config;
-use crate::processors::certificates::get_rkth;
+use crate::processors::certificates::Rkth;
+use crate::processors::mbi::cert_block;
 use crate::processors::otp::get_otp;
 use crate::processors::{mbi, objcopy};
 use anyhow::Context;
@@ -9,6 +10,7 @@ use std::path::PathBuf;
 
 pub struct SignOutput {
     pub output_path: Option<PathBuf>,
+    pub rkth: Rkth,
 }
 
 pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<SignOutput> {
@@ -58,19 +60,21 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
     std::fs::write(&output_unsigned_path, &image)?;
 
     let otp = get_otp(config)?;
-    let rkth = get_rkth(config)?;
 
     let output_prestage_path = args.output_prestage_path_with_default();
     log::info!(
         "Generating prestage MBI using pure Rust in {}",
         output_prestage_path.display()
     );
+
+    let cert_block = cert_block::generate(&args.nxpimage_path, config, args.certificate)?;
+
     mbi::prepare_to_sign(
         &output_unsigned_path,
         base_addr,
         &output_prestage_path,
         is_bootloader,
-        &rkth,
+        cert_block.clone(),
     )
     .context("Could not generate prestage MBI")?;
 
@@ -79,10 +83,27 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
     if !args.dont_sign && signature_path.is_none() {
         log::info!("Signing image {}", args.input_path.display());
 
+        let Some(cert_chain) = config.certificates.get(args.certificate) else {
+            return Err(anyhow::anyhow!("Certificate chain {} does not exist", args.certificate));
+        };
+
+        let Some(cert) = cert_chain.0.last() else {
+            return Err(anyhow::anyhow!("Empty certificate chain"));
+        };
+
+        let Some(cert_proto) = &cert.prototype else {
+            return Err(anyhow::anyhow!(
+                "No prototype configured for leaf of chain {}",
+                args.certificate
+            ));
+        };
+
         let default_path = args.input_path.clone().with_extension("signature.bin");
-        mbi::sign(&default_path, &output_prestage_path).context("Could not sign image")?;
+        mbi::sign(&default_path, &output_prestage_path, &cert_proto.key_path).context("Could not sign image")?;
         signature_path = Some(default_path);
     }
+
+    let rkth = cert_block.rkth();
 
     if let Some(signature_path) = signature_path {
         let output_path = args.output_path_with_default();
@@ -94,14 +115,18 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
             &output_path,
             is_bootloader,
             Some(otp),
-            &rkth,
+            cert_block,
         )
         .context("Could not merge image with signature")?;
         log::info!("Written merged image to {}", output_path.display());
         Ok(SignOutput {
             output_path: Some(output_path),
+            rkth,
         })
     } else {
-        Ok(SignOutput { output_path: None })
+        Ok(SignOutput {
+            output_path: None,
+            rkth,
+        })
     }
 }
