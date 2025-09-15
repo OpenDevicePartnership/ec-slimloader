@@ -17,7 +17,7 @@ mod mbi;
 
 use core::ops::Range;
 
-use defmt_or_log::{info, warn};
+use defmt_or_log::{info, panic, warn};
 use ec_slimloader_state::flash::FlashJournal;
 use ec_slimloader_state::state::Slot;
 use embassy_embedded_hal::adapter::BlockingAsync;
@@ -119,9 +119,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
     }
 
     async fn check_and_boot(&mut self, slot: &Slot) -> BootError {
-        let slot_partition = match self.slots.get_mut(u8::from(*slot) as usize) {
-            Some(slot) => slot,
-            None => return BootError::SlotUnknown,
+        let Some(slot_partition) = self.slots.get_mut(u8::from(*slot) as usize) else {
+            return BootError::SlotUnknown;
         };
 
         // Copy the image to RAM from flash, and ensure that everything from flash is no longer available.
@@ -134,9 +133,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
 
             // Verify IVT fields.
-            let ivt = match mbi::Ivt::read(slot_partition).await {
-                Ok(ivt) => ivt,
-                Err(_) => return BootError::IO,
+            let Ok(ivt) = mbi::Ivt::read(slot_partition).await else {
+                return BootError::IO;
             };
 
             // Note: skboot_authenticate only supports checking XIP_SIGNED, even though we are loading it to RAM here.
@@ -152,9 +150,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
 
             // Check if the target_ptr is within the allowed range.
             // In MBI this is called the 'load_addr', which is located in 0x34 of IVT.
-            let image_target_end_ptr = match ivt.target_end_ptr() {
-                Some(ptr) => ptr,
-                None => return BootError::TooLarge,
+            let Some(image_target_end_ptr) = ivt.target_end_ptr() else {
+                return BootError::TooLarge;
             };
 
             if !C::LOAD_RANGE.contains(&ivt.target_ptr) || !C::LOAD_RANGE.contains(&image_target_end_ptr) {
@@ -174,9 +171,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
             info!("Copy done");
 
-            let ram_ivt = match mbi::Ivt::read_from_slice(target_slice) {
-                Ok(ram_ivt) => ram_ivt,
-                Err(mbi::BufferTooSmall) => return BootError::TooSmall,
+            let Ok(ram_ivt) = mbi::Ivt::read_from_slice(target_slice) else {
+                return BootError::TooSmall;
             };
 
             if ivt != ram_ivt {
@@ -195,11 +191,9 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             let cert_block_header_offset = ram_ivt.header_offset as usize;
 
             // Fetch certificate block
-            let cert_block_header = if let Some(cert_block_header) =
+            let Some(cert_block_header) =
                 CertificateBlockHeader::read_from_slice(&ram_image_slice[cert_block_header_offset..])
-            {
-                cert_block_header
-            } else {
+            else {
                 return BootError::TooLarge;
             };
 
@@ -211,9 +205,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 + cert_block_header.header_length as usize
                 + cert_block_header.certificate_table_length as usize;
 
-            let rkhs = if let Some(rkhs) = rkh::Rkh::read_all_from_slice(&ram_image_slice[rkhs_offset..]) {
-                rkhs
-            } else {
+            let Some(rkhs) = rkh::Rkh::read_all_from_slice(&ram_image_slice[rkhs_offset..]) else {
                 return BootError::TooLarge;
             };
 

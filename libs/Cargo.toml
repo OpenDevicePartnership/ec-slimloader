@@ -1,10 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "ec-slimloader",
-    "ec-slimloader-imxrt",
-    "ec-slimloader-state"
-]
+members = ["ec-slimloader", "ec-slimloader-imxrt", "ec-slimloader-state"]
 
 [workspace.package]
 version = "0.2.0"
@@ -14,6 +10,9 @@ repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 
 [workspace.lints.rust]
 warnings = "deny"
+
+[workspace.lints.clippy]
+manual_let_else = "deny"
 
 [workspace.dependencies]
 defmt = "0.3.7"

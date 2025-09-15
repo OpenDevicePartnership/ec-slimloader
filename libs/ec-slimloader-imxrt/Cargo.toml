@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # Skips all security and verification checks
 non-secure = []
@@ -40,7 +43,7 @@ defmt = [
     "ec-slimloader/defmt",
     "ec-slimloader-state/defmt",
     "embassy-imxrt/defmt",
-    "partition-manager/defmt"
+    "partition-manager/defmt",
 ]
 log = ["defmt-or-log/log"]
 
@@ -51,7 +54,9 @@ ec-slimloader = { path = "../ec-slimloader" }
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 
 mimxrt600-fcb = { version = "0.2.2", optional = true }
-embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = ["unstable-pac"] }
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = [
+    "unstable-pac",
+] }
 
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
@@ -63,7 +68,10 @@ cortex-m = { version = "0.7.7", features = [
 embassy-embedded-hal = "0.5.0"
 
 embassy-sync = { workspace = true }
-partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = ["esa", "macros"], default-features = false }
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = [
+    "esa",
+    "macros",
+], default-features = false }
 embedded-storage = "0.3.1"
 embedded-storage-async = { workspace = true }
 
