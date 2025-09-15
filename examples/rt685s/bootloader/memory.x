@@ -4,7 +4,7 @@ MEMORY {
   PRELUDE_BIV   : ORIGIN = 0x08000600, LENGTH = 4
 
   RAM                : ORIGIN = 0x30176000, LENGTH = 16K
-  FLASH              : ORIGIN = 0x08001000, LENGTH = 24K /* running in xip mode */
+  FLASH              : ORIGIN = 0x10170000, LENGTH = 24K /* running in xip mode */
   ROM_TABLE (r)      : ORIGIN = 0x1303F000, LENGTH = 64
 }
 
