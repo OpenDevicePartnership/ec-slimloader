@@ -42,29 +42,29 @@ defmt = [
     "defmt-or-log/defmt",
     "ec-slimloader/defmt",
     "ec-slimloader-state/defmt",
+    "imxrt-rom/defmt",
     "embassy-imxrt/defmt",
     "partition-manager/defmt",
 ]
-log = ["defmt-or-log/log"]
+log = ["defmt-or-log/log", "imxrt-rom/log"]
 
 default = []
 
 [dependencies]
 ec-slimloader = { path = "../ec-slimloader" }
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
+imxrt-rom = { path = "../imxrt-rom", features = ["rt"] }
 
-mimxrt600-fcb = { version = "0.2.2", optional = true }
+cortex-m = { workspace = true }
 embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = [
     "unstable-pac",
 ] }
 
+mimxrt600-fcb = { version = "0.2.2", optional = true }
+
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 
-cortex-m = { version = "0.7.7", features = [
-    "inline-asm",
-    "critical-section-single-core",
-] }
 embassy-embedded-hal = "0.5.0"
 
 embassy-sync = { workspace = true }

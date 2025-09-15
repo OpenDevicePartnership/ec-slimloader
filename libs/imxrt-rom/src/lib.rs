@@ -1,10 +1,12 @@
-#![allow(unused)]
+#![no_std]
 
 use core::ptr::{null, null_mut};
 use defmt_or_log::{error, warn};
+
+#[cfg(feature = "rt")]
 use embassy_imxrt::pac::interrupt;
 
-use crate::SYSTEM_CORE_CLOCK_HZ;
+pub mod otp;
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -120,8 +122,6 @@ struct OTPDriver {
     pub reload: unsafe extern "C" fn() -> u32,
     pub crc_check: unsafe extern "C" fn(start_addr: u32, end_addr: u32, crc_addr: u32) -> u32,
 }
-
-const OTP_LAST_WORD: u32 = 512;
 
 /// ROM API layout 42.9.3.1, RT6xx user manual UM11147.
 #[repr(C)]
@@ -272,7 +272,7 @@ pub fn skboot_authenticate(
 
     let status = unsafe { (api_table().iap_driver.deinit)(session_ref) };
     if status != KbStatus::Success as u32 {
-        error!("kdeinit failed");
+        error!("kdeinit failed with {:?}", status);
         return Err(AuthenticateError::Fail);
     }
 
@@ -293,47 +293,7 @@ pub fn skboot_authenticate(
     }
 }
 
-fn otp_context<T>(f: impl FnOnce() -> T) -> T {
-    // Note(cs): we do not want any other process also using the OTP block at the same time.
-    cortex_m::interrupt::free(|_| unsafe {
-        (api_table().otp_driver.init)(SYSTEM_CORE_CLOCK_HZ);
-        let result = f();
-        (api_table().otp_driver.deinit)();
-        result
-    })
-}
-
-pub fn otp_read_fuse(addr: u32) -> Result<u32, ()> {
-    let mut result = [0u8; 4];
-    let status = otp_context(|| unsafe { (api_table().otp_driver.fuse_read)(addr, result.as_mut_ptr()) });
-    if status == KbStatus::Success as u32 {
-        Ok(u32::from_le_bytes(result))
-    } else {
-        Err(())
-    }
-}
-
-pub fn otp_reload() -> Result<(), ()> {
-    let status = otp_context(|| unsafe { (api_table().otp_driver.reload)() });
-
-    // Fix for EVK without fuses
-    #[cfg(feature = "mimxrt685s-evk")]
-    {
-        use crate::shadow;
-
-        // Configure the EVK NOR flash @ port 2, pin 12 to be reset on a system reset.
-        let mut boot1 = shadow::Boot1::read_shadow();
-        boot1.set_qspi_reset_pin(2, 12);
-        boot1.write_shadow();
-    }
-
-    if status == KbStatus::Success as u32 {
-        Ok(())
-    } else {
-        Err(())
-    }
-}
-
+#[cfg(feature = "rt")]
 #[interrupt]
 fn HASHCRYPT() {
     unsafe { (api_table().skboot.hashcrypt_irq_handler)() }

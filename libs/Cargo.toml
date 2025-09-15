@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["ec-slimloader", "ec-slimloader-imxrt", "ec-slimloader-state"]
+members = [
+    "ec-slimloader",
+    "ec-slimloader-imxrt",
+    "ec-slimloader-state",
+    "imxrt-rom",
+]
 
 [workspace.package]
 version = "0.2.0"
@@ -20,3 +25,5 @@ defmt-or-log = { version = "0.2.2", default-features = false }
 embedded-storage-async = "0.4.1"
 embassy-sync = "0.7.2"
 log = "0.4"
+
+cortex-m = { version = "0.7.7" }

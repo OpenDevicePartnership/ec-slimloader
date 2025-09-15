@@ -4,7 +4,6 @@
 mod fcb;
 
 mod rkh;
-mod rom;
 mod shadow;
 
 #[cfg(feature = "empty-otfad")]
@@ -31,6 +30,7 @@ use embassy_imxrt::{
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 use heapless::Vec;
+use imxrt_rom::otp::Otp;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 
 use static_cell::StaticCell;
@@ -213,7 +213,19 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         };
 
         // Reload shadow registers.
-        defmt_or_log::unwrap!(rom::otp_reload());
+        {
+            let mut otp = Otp::init(SYSTEM_CORE_CLOCK_HZ);
+            defmt_or_log::unwrap!(otp.reload_shadow());
+        }
+
+        // Fix for EVK without fuses.
+        #[cfg(feature = "mimxrt685s-evk")]
+        {
+            // Configure the EVK NOR flash @ port 2, pin 12 to be reset on a system reset.
+            let mut boot1 = shadow::Boot1::read_shadow();
+            boot1.set_qspi_reset_pin(2, 12);
+            boot1.write_shadow();
+        }
 
         // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
         let dev_mode = !shadow::Boot0::read_shadow().secure_boot();
@@ -241,7 +253,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 // Call the ROM API to ensure that the image is signed and not broken or tampered with.
                 // Note: skboot_authenticate will show false-negatives if your clock jitter is too high.
                 // We noticed this with FFROdiv2 and MainClk > 475MHz.
-                match rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32, None) {
+                match imxrt_rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32, None) {
                     Ok(()) => {}
                     Err(e) => {
                         warn!("Failed to authenticate {:?}", e);
