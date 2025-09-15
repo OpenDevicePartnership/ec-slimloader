@@ -17,20 +17,30 @@ use crate::{
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CertBlockConfig {
-    family: String,
-    revision: String,
+pub struct CertBlockConfig {
+    pub family: String,
+    pub revision: String,
 
     #[serde(flatten)]
-    certificates: BTreeMap<String, PathBuf>,
+    pub certificates: BTreeMap<String, PathBuf>,
 
-    main_root_cert_id: usize,
-    container_output_file: PathBuf,
+    pub main_root_cert_id: usize,
+    pub container_output_file: Option<PathBuf>,
 }
 
-pub fn generate(nxpimage: impl AsRef<Path>, config: &Config, certificate_idx: usize) -> anyhow::Result<CertBlock> {
-    // nxpimage cert-block export -c ./cert-block.yaml
+/// Best-effort attempt to canonicalize the path, if it exists.
+fn canonicalize_or_leave(path: impl AsRef<Path>) -> PathBuf {
+    match path.as_ref().canonicalize() {
+        Ok(path) => path,
+        Err(_) => path.as_ref().to_owned(),
+    }
+}
 
+pub fn generate_config(
+    config: &Config,
+    certificate_idx: usize,
+    output_file: Option<impl AsRef<Path>>,
+) -> CertBlockConfig {
     let mut certificates = BTreeMap::default();
     for (chain_i, chain) in config.certificates.iter().enumerate() {
         for (cert_i, cert) in chain.0.iter().enumerate() {
@@ -39,20 +49,28 @@ pub fn generate(nxpimage: impl AsRef<Path>, config: &Config, certificate_idx: us
             } else {
                 format!("chainCertificate{}File{}", chain_i, cert_i - 1)
             };
-            certificates.insert(name, cert.path.clone());
+            certificates.insert(name, canonicalize_or_leave(&cert.path));
         }
     }
 
-    let mut input_file = tempfile::NamedTempFile::new()?;
-    let output_file = tempfile::NamedTempFile::new()?;
-    let config = CertBlockConfig {
+    CertBlockConfig {
         family: "mimxrt685s".to_owned(),
         revision: "latest".to_owned(),
         certificates,
         main_root_cert_id: certificate_idx,
-        container_output_file: output_file.path().to_owned(),
-    };
-    serde_yml::to_writer(&mut input_file, &config)?;
+        container_output_file: output_file.map(|output_file| output_file.as_ref().to_owned()),
+    }
+}
+
+pub fn generate(nxpimage: impl AsRef<Path>, config: &Config, certificate_idx: usize) -> anyhow::Result<CertBlock> {
+    // nxpimage cert-block export -c ./cert-block.yaml
+
+    let mut input_file = tempfile::NamedTempFile::new()?;
+    let output_file = tempfile::NamedTempFile::new()?;
+    serde_yml::to_writer(
+        &mut input_file,
+        &generate_config(config, certificate_idx, Some(output_file.path())),
+    )?;
 
     let mut command = Command::new(nxpimage.as_ref());
 

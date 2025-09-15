@@ -6,9 +6,10 @@ use sha2::Digest;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use tempfile::NamedTempFile;
 
 use crate::processors::certificates::Rkth;
-use crate::processors::mbi::cert_block::CertBlock;
+use crate::processors::mbi::cert_block::{CertBlock, CertBlockConfig};
 use crate::processors::otp::Otp;
 use anyhow::{Context, anyhow, bail};
 use hmac::{Hmac, Mac};
@@ -362,6 +363,7 @@ pub fn sign(
     Ok(())
 }
 
+/// Generate a MBI using our pure Rust implementation.
 pub fn generate_pure(
     input_path: impl AsRef<Path>,
     base_addr: u32,
@@ -398,14 +400,28 @@ pub fn generate_pure(
     Ok(())
 }
 
-pub fn generate(
+/// Generate a MBI using the original NXP SPSDK tooling.
+pub fn generate_nxp(
     nxpimage: impl AsRef<Path>,
     input_path: impl AsRef<Path>,
     base_addr: u32,
     output_path: impl AsRef<Path>,
     is_bootloader: bool,
+    cert_block: CertBlockConfig,
 ) -> anyhow::Result<()> {
     let mut config: BTreeMap<String, String> = BTreeMap::default();
+
+    let mut cert_block_file = NamedTempFile::new()?;
+    serde_yml::to_writer(&mut cert_block_file, &cert_block)?;
+
+    config.insert(
+        "certBlock".to_owned(),
+        cert_block_file
+            .path()
+            .to_str()
+            .ok_or_else(|| anyhow!("Path not a string"))?
+            .to_owned(),
+    );
 
     config.insert("outputImageExecutionAddress".to_owned(), format!("{base_addr:#x}"));
 
@@ -444,6 +460,8 @@ pub fn generate(
         command.args(["-oc", &format!("{k}={v}")]);
     }
 
+    eprintln!("{:?}", command);
+
     let output = command
         .stdin(Stdio::inherit())
         .stdout(Stdio::piped())
@@ -472,7 +490,7 @@ pub fn generate(
     }
 
     // Performing checks on output image
-    let expected_image_type = if is_bootloader { 0x0001u32 } else { 0x0004u32 };
+    let expected_image_type = if is_bootloader { 0x0004u32 } else { 0x0004u32 };
 
     let image_type = u32::from_le_bytes((&output[0x24..0x28]).try_into().unwrap());
     if image_type != expected_image_type {

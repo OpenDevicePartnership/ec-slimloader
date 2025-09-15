@@ -16,7 +16,7 @@ revision: latest
 # --------------------------------------===== Application target [Required] =====---------------------------------------
 # Description: Definition if application is Execute in Place(XiP) or loaded to RAM during reset sequence.
 # Possible options: <xip, load-to-ram>
-outputImageExecutionTarget: load-to-ram
+outputImageExecutionTarget: xip
 # -------------------------------===== Type of boot image authentication [Required] =====-------------------------------
 # Description: Specification of final master boot image authentication.
 # Possible options: <signed, plain, crc, signed-encrypted>
@@ -61,7 +61,7 @@ enableTrustZone: true
 # ======================================================================================================================
 # -----------------------------===== Certificate Block binary/config file [Required] =====------------------------------
 # Description: Path to certificate block binary or config file.
-certBlock: cert-block.yaml
+certBlock: placeholder # filled in by tooling
 # ======================================================================================================================
 #                                              == Image Signing Settings ==
 # ======================================================================================================================
@@ -76,7 +76,7 @@ signer: type=file;file_path=cert-img1-user-key.pem
 # Description: The OTP Master key that is used to compute HMAC encryption key. Could be defined as hex number and also
 # as hex/binary file.\n Used algorithm by tool the get HMAC Key; AES_ENCRYPT (OTP_MASTER_KEK,
 # 0x00000000000000000000000000000000)
-outputImageEncryptionKeyFile: otp_master_key.txt
+# outputImageEncryptionKeyFile: otp_master_key.txt
 # ------------------------------------===== The Key store data file [Optional] =====------------------------------------
 # Description: Optional KeyStore data file for included keystore in LoadToRam images. If defined the KeyStore is added
 # into MBI.
