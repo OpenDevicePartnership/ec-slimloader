@@ -9,7 +9,6 @@ use ec_slimloader_state::{
     flash::FlashJournal,
     state::{Slot, State, Status},
 };
-use example_bsp::application::{ExternalStorageConfig, ExternalStorageMap};
 use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_executor::Spawner;
 use embassy_imxrt::{
@@ -17,7 +16,8 @@ use embassy_imxrt::{
     gpio::{self, DriveMode, DriveStrength, Level, Output, SlewRate},
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_time::Timer;
+use embassy_time::{Duration, Instant, Timer};
+use example_bsp::application::{ExternalStorageConfig, ExternalStorageMap};
 use partition_manager::PartitionManager;
 
 #[allow(dead_code)]
@@ -28,11 +28,13 @@ struct Leds<'a> {
 }
 
 const JOURNAL_BUFFER_SIZE: usize = 1024;
+const FUSE_DELAY: Duration = Duration::from_secs(5);
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     defmt_or_log::info!("Example application");
 
+    const SYSTEM_CORE_CLOCK_HZ: u32 = 500_000_000;
     let p = embassy_imxrt::init(Default::default());
 
     let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, 2, 2) } {
@@ -42,14 +44,10 @@ async fn main(_spawner: Spawner) {
 
     let ext_flash = match unsafe { FlexSpiNorStorage::<2, 2, 4096>::new(ext_flash) } {
         Ok(ext_flash) => ext_flash,
-        Err(e) => defmt_or_log::panic!(
-            "Failed to wrap FlexSPI flash in embedded_storage adaptor: {:?}",
-            e
-        ),
+        Err(e) => defmt_or_log::panic!("Failed to wrap FlexSPI flash in embedded_storage adaptor: {:?}", e),
     };
 
-    let mut ext_flash_manager =
-        PartitionManager::<_, NoopRawMutex>::new(BlockingAsync::new(ext_flash));
+    let mut ext_flash_manager = PartitionManager::<_, NoopRawMutex>::new(BlockingAsync::new(ext_flash));
 
     let ExternalStorageMap { bl_state, .. } = ext_flash_manager.map(ExternalStorageConfig::new());
 
@@ -68,17 +66,15 @@ async fn main(_spawner: Spawner) {
         }
         None => {
             defmt_or_log::info!("Initial state loaded");
-            State::new(
-                Status::Confirmed,
-                slot_a,
-                slot_b,
-            )
+            State::new(Status::Confirmed, slot_a, slot_b)
         }
     };
 
     let (slot, is_confirmed, is_backup) = match state.status() {
         Status::Initial => {
-            defmt_or_log::warn!("Booted into 'Initial' state, which should not be possible if the bootloader is flashed");
+            defmt_or_log::warn!(
+                "Booted into 'Initial' state, which should not be possible if the bootloader is flashed"
+            );
             (state.target(), false, false)
         }
         Status::Attempting => (state.target(), false, false),
@@ -145,12 +141,19 @@ async fn main(_spawner: Spawner) {
         }
     };
 
+    {
+        let rkth_shadow = imxrt_rom::shadow::Rkth::read_shadow();
+        let mut otp = imxrt_rom::otp::Otp::init(SYSTEM_CORE_CLOCK_HZ);
+        let rkth_otp = defmt_or_log::unwrap!(imxrt_rom::shadow::Rkth::read_fuse(&mut otp));
+
+        defmt_or_log::info!("Shadow: {:?}", rkth_shadow);
+        defmt_or_log::info!("OTP:    {:?}", rkth_otp);
+    }
+
     // Task to handle writing the state if we want to either attempt the other slot,
     // or want to confirm the current slot.
     let button1_fut = async move {
-        button1.wait_for_falling_edge().await;
-        defmt_or_log::info!("USER1");
-
+        // Potential new state used, but only if USER1 is pressed for a short period.
         let new_state = if is_confirmed {
             // Swap around
             State::new(Status::Initial, other_slot, slot)
@@ -162,9 +165,32 @@ async fn main(_spawner: Spawner) {
             state.with_status(Status::Confirmed)
         };
 
-        defmt_or_log::info!("Writing new state: {}", new_state);
-        defmt_or_log::unwrap!(journal.set::<JOURNAL_BUFFER_SIZE>(&new_state).await);
-        drop(journal);
+        loop {
+            button1.wait_for_falling_edge().await;
+            let start = Instant::now();
+            button1.wait_for_rising_edge().await;
+            defmt_or_log::info!("USER1");
+
+            if start.elapsed() > FUSE_DELAY {
+                let rkth_shadow = imxrt_rom::shadow::Rkth::read_shadow();
+                let mut otp = imxrt_rom::otp::Otp::init(SYSTEM_CORE_CLOCK_HZ);
+                let rkth_otp = defmt_or_log::unwrap!(imxrt_rom::shadow::Rkth::read_fuse(&mut otp));
+
+                let rkth_shadow_is_default = rkth_shadow.0.as_slice().iter().all(|b| *b == 0x00);
+
+                if rkth_otp != rkth_shadow {
+                    if rkth_shadow_is_default {
+                        defmt_or_log::error!("Requesting write of fuses, but RKTH is not set to something useful");
+                    } else {
+                        defmt_or_log::info!("Writing fuses");
+                        defmt_or_log::unwrap!(rkth_shadow.write_fuse(&mut otp, false));
+                    }
+                }
+            } else {
+                defmt_or_log::info!("Writing new state: {}", new_state);
+                defmt_or_log::unwrap!(journal.set::<JOURNAL_BUFFER_SIZE>(&new_state).await);
+            }
+        }
     };
 
     // Task to reboot.

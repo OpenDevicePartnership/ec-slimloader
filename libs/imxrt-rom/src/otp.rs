@@ -44,6 +44,16 @@ impl Otp {
         }
     }
 
+    pub fn write_fuse(&mut self, addr: u32, data: u32, lock: bool) -> Result<(), Error> {
+        let status = unsafe { (api_table().otp_driver.fuse_program)(addr, data, lock) };
+        if status == KbStatus::Success as u32 {
+            Ok(())
+        } else {
+            defmt_or_log::error!("OTP write failed with {:x}", status);
+            Err(Error)
+        }
+    }
+
     /// Reload all shadow registers from what is stored in OTP fuses.
     pub fn reload_shadow(&mut self) -> Result<(), Error> {
         let status = unsafe { (api_table().otp_driver.reload)() };
@@ -60,5 +70,7 @@ impl Drop for Otp {
         unsafe {
             (api_table().otp_driver.deinit)();
         }
+
+        INITIALIZED.store(false, Ordering::Release);
     }
 }

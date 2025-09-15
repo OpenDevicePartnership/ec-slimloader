@@ -4,7 +4,6 @@
 mod fcb;
 
 mod rkh;
-mod shadow;
 
 #[cfg(feature = "empty-otfad")]
 #[link_section = ".otfad"]
@@ -30,7 +29,7 @@ use embassy_imxrt::{
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 use heapless::Vec;
-use imxrt_rom::otp::Otp;
+use imxrt_rom::{otp::Otp, shadow};
 use partition_manager::{Partition, PartitionManager, RO, RW};
 
 use static_cell::StaticCell;
@@ -209,8 +208,10 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 return BootError::TooLarge;
             };
 
-            rkh::Rkth::from_rkhs(&rkhs, self.hashcrypt.reborrow())
+            rkh::Rkh::to_rkth(&rkhs, self.hashcrypt.reborrow())
         };
+
+        defmt_or_log::info!("RKTH: {}", shadow::Rkth::read_shadow());
 
         // Reload shadow registers.
         {
@@ -227,10 +228,12 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             boot1.write_shadow();
         }
 
+        defmt_or_log::info!("RKTH: {}", shadow::Rkth::read_shadow());
+
         // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
         let dev_mode = !shadow::Boot0::read_shadow().secure_boot();
 
-        if image_rkth != rkh::Rkth::read_shadow() {
+        if image_rkth != shadow::Rkth::read_shadow() {
             if dev_mode {
                 // If no SECURE_BOOT fuse set => overwrite shadow RKTH with image RKTH
                 defmt_or_log::warn!("Development mode detected, using new image RKTH");

@@ -7,6 +7,7 @@ use defmt_or_log::{error, warn};
 use embassy_imxrt::pac::interrupt;
 
 pub mod otp;
+pub mod shadow;
 
 #[repr(C)]
 #[derive(Default, Debug)]

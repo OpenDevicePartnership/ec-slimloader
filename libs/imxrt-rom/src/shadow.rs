@@ -1,10 +1,34 @@
 //! OTP shadow registers
-#![allow(unused)]
 
-use crate::rkh::Rkth;
+/// A Root Key Table Hash.
+#[derive(PartialEq, Debug)]
+#[repr(C)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Rkth(pub [u8; 32]);
 
 impl Rkth {
     const PTR: *mut [u8; 32] = 0x401301E0 as *mut [u8; 32];
+    const OTP_ADDR: u32 = 0x1E0;
+
+    pub fn read_fuse(otp: &mut crate::otp::Otp) -> Result<Self, crate::otp::Error> {
+        let mut data = [0u32; 8];
+        for i in 0..8 {
+            data[i] = otp.read_fuse(Self::OTP_ADDR + i as u32)?;
+        }
+
+        let data: [u8; 32] = unsafe { core::mem::transmute(data) };
+        Ok(Self(data))
+    }
+
+    pub fn write_fuse(&self, otp: &mut crate::otp::Otp, lock: bool) -> Result<(), crate::otp::Error> {
+        let data: [u32; 8] = unsafe { core::mem::transmute(self.0) };
+        for i in 0..8 {
+            let addr = Self::OTP_ADDR + i as u32;
+            defmt_or_log::info!("Writing fuse {:x} with {:x} (lock: {})", addr, data[i], lock);
+            otp.write_fuse(addr, data[i], lock)?;
+        }
+        Ok(())
+    }
 
     pub fn read_shadow() -> Self {
         Self(unsafe { Self::PTR.read_volatile() })

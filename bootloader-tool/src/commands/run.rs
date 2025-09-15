@@ -36,7 +36,7 @@ pub async fn process(config: &Config, command: RunCommands) -> anyhow::Result<()
     let mut buf = [0u32; 1];
     core.read_32(0x40130194, &mut buf)?;
 
-    // buf[0] |= 0b1110; // Revoke root cert 2.
+    // buf[0] |= 0b1111; // Revoke root cert 2.
     buf[0] &= !(1 << 7); // Set USE_PUF to 0
 
     core.write_32(0x40130194, &buf)?;
