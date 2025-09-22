@@ -29,7 +29,10 @@ use embassy_imxrt::{
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 use heapless::Vec;
-use imxrt_rom::{otp::Otp, shadow};
+use imxrt_rom::{
+    otp::{Otp, OtpRegisterBlock},
+    registers::{self, ShadowRegister},
+};
 use partition_manager::{Partition, PartitionManager, RO, RW};
 
 use static_cell::StaticCell;
@@ -211,11 +214,13 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             rkh::Rkh::to_rkth(&rkhs, self.hashcrypt.reborrow())
         };
 
-        defmt_or_log::info!("RKTH: {}", shadow::Rkth::read_shadow());
+        defmt_or_log::info!("RKTH (shadow): {}", registers::Rkth::read_shadow());
 
         // Reload shadow registers.
         {
             let mut otp = Otp::init(SYSTEM_CORE_CLOCK_HZ);
+            defmt_or_log::info!("RKTH (fuse): {}", registers::Rkth::read_fuse(&mut otp));
+
             defmt_or_log::unwrap!(otp.reload_shadow());
         }
 
@@ -223,17 +228,17 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         #[cfg(feature = "mimxrt685s-evk")]
         {
             // Configure the EVK NOR flash @ port 2, pin 12 to be reset on a system reset.
-            let mut boot1 = shadow::Boot1::read_shadow();
+            let mut boot1 = registers::Boot1::read_shadow();
             boot1.set_qspi_reset_pin(2, 12);
             boot1.write_shadow();
         }
 
-        defmt_or_log::info!("RKTH: {}", shadow::Rkth::read_shadow());
+        defmt_or_log::info!("RKTH (shadow reloaded): {}", registers::Rkth::read_shadow());
 
         // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
-        let dev_mode = !shadow::Boot0::read_shadow().secure_boot();
+        let dev_mode = !registers::Boot0::read_shadow().secure_boot();
 
-        if image_rkth != shadow::Rkth::read_shadow() {
+        if image_rkth != registers::Rkth::read_shadow() {
             if dev_mode {
                 // If no SECURE_BOOT fuse set => overwrite shadow RKTH with image RKTH
                 defmt_or_log::warn!("Development mode detected, using new image RKTH");
@@ -256,7 +261,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 // Call the ROM API to ensure that the image is signed and not broken or tampered with.
                 // Note: skboot_authenticate will show false-negatives if your clock jitter is too high.
                 // We noticed this with FFROdiv2 and MainClk > 475MHz.
-                match imxrt_rom::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32, None) {
+                match imxrt_rom::skboot::skboot_authenticate(ram_ivt.target_ptr, ram_ivt.image_len as u32, None) {
                     Ok(()) => {}
                     Err(e) => {
                         warn!("Failed to authenticate {:?}", e);

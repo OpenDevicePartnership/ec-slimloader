@@ -1,6 +1,8 @@
+//! API to read and manipulate the OTP fuses.
+
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::{api_table, KbStatus};
+use crate::api::{api_table, KbStatus};
 
 /// Whether the Otp driver has been initialized.
 ///
@@ -63,6 +65,14 @@ impl Otp {
             Err(Error)
         }
     }
+}
+
+pub trait OtpRegisterBlock
+where
+    Self: Sized,
+{
+    fn read_fuse(otp: &mut Otp) -> Result<Self, Error>;
+    fn write_fuse(&self, otp: &mut Otp, lock: bool) -> Result<(), Error>;
 }
 
 impl Drop for Otp {
