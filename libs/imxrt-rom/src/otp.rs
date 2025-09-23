@@ -15,7 +15,7 @@ pub struct Otp {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Error;
+pub struct Error(u32);
 
 impl Otp {
     pub fn init(system_clock_frequency_hz: u32) -> Self {
@@ -42,7 +42,7 @@ impl Otp {
         if status == KbStatus::Success as u32 {
             Ok(u32::from_le_bytes(result))
         } else {
-            Err(Error)
+            Err(Error(status))
         }
     }
 
@@ -52,7 +52,7 @@ impl Otp {
             Ok(())
         } else {
             defmt_or_log::error!("OTP write failed with {:x}", status);
-            Err(Error)
+            Err(Error(status))
         }
     }
 
@@ -62,17 +62,9 @@ impl Otp {
         if status == KbStatus::Success as u32 {
             Ok(())
         } else {
-            Err(Error)
+            Err(Error(status))
         }
     }
-}
-
-pub trait OtpRegisterBlock
-where
-    Self: Sized,
-{
-    fn read_fuse(otp: &mut Otp) -> Result<Self, Error>;
-    fn write_fuse(&self, otp: &mut Otp, lock: bool) -> Result<(), Error>;
 }
 
 impl Drop for Otp {

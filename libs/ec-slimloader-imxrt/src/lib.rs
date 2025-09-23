@@ -13,7 +13,7 @@ static OTFAD: [u8; 256] = [0x00; 256];
 mod bootload;
 mod mbi;
 
-use core::ops::Range;
+use core::{convert::Infallible, ops::Range};
 
 use defmt_or_log::{info, panic, warn};
 use ec_slimloader_state::flash::FlashJournal;
@@ -30,8 +30,8 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 use heapless::Vec;
 use imxrt_rom::{
-    otp::{Otp, OtpRegisterBlock},
-    registers::{self, ShadowRegister},
+    otp::Otp,
+    registers::{field_sets::Rkth, OtpFuses, SecureBoot, ShadowRegisters},
 };
 use partition_manager::{Partition, PartitionManager, RO, RW};
 
@@ -73,6 +73,15 @@ pub struct Imxrt<C> {
     _config: C,
 }
 
+fn infallible<T>(res: Result<T, Infallible>) -> T {
+    // Safety: Infallible can not be instantiated.
+    unsafe { res.unwrap_unchecked() }
+}
+
+fn rkth(rkth: Rkth) -> [u8; 32] {
+    rkth.into()
+}
+
 impl<C: ImxrtConfig> Board for Imxrt<C> {
     type Config = C;
 
@@ -81,9 +90,14 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         // we get nondeterministic behaviour from the ROM API.
         let mut hal_config = embassy_imxrt::config::Config::default();
         hal_config.clocks.main_clk.src = MainClkSrc::PllMain;
-        hal_config.clocks.main_clk.div_int = 2.into();
+        hal_config.clocks.main_clk.div_int = 4.into();
         hal_config.clocks.main_pll_clk.pfd0 = 20;
         let p = embassy_imxrt::init(hal_config);
+
+        {
+            let p = unsafe { embassy_imxrt::pac::Peripherals::steal() };
+            defmt_or_log::info!("{}", p.clkctl0.pscctl0().read().otp_clk().variant());
+        }
 
         let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, READ_ALIGNMENT, WRITE_ALIGNMENT) }
         {
@@ -214,13 +228,25 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             rkh::Rkh::to_rkth(&rkhs, self.hashcrypt.reborrow())
         };
 
-        defmt_or_log::info!("RKTH (shadow): {}", registers::Rkth::read_shadow());
+        defmt_or_log::info!("RKTH (image) {:x}", rkth(image_rkth));
+
+        let mut shadow = ShadowRegisters::new();
+
+        {
+            defmt_or_log::info!("Boot0 (shadow) {}", infallible(shadow.boot_0().read()));
+            defmt_or_log::info!("Boot1 (shadow) {}", infallible(shadow.boot_1().read()));
+            defmt_or_log::info!("RKTH (shadow) {:x}", rkth(infallible(shadow.rkth().read())));
+        }
 
         // Reload shadow registers.
         {
             let mut otp = Otp::init(SYSTEM_CORE_CLOCK_HZ);
-            defmt_or_log::info!("RKTH (fuse): {}", registers::Rkth::read_fuse(&mut otp));
-
+            {
+                let mut fuses = OtpFuses::readonly(&mut otp);
+                defmt_or_log::info!("Boot0 (fuse): {}", defmt_or_log::unwrap!(fuses.boot_0().read()));
+                defmt_or_log::info!("Boot1 (fuse): {}", defmt_or_log::unwrap!(fuses.boot_1().read()));
+                defmt_or_log::info!("RKTH (fuse): {:x}", rkth(defmt_or_log::unwrap!(fuses.rkth().read())));
+            }
             defmt_or_log::unwrap!(otp.reload_shadow());
         }
 
@@ -228,21 +254,27 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         #[cfg(feature = "mimxrt685s-evk")]
         {
             // Configure the EVK NOR flash @ port 2, pin 12 to be reset on a system reset.
-            let mut boot1 = registers::Boot1::read_shadow();
-            boot1.set_qspi_reset_pin(2, 12);
-            boot1.write_shadow();
+            infallible(shadow.boot_1().modify(|w| {
+                w.set_qspi_reset_pin_enable(true);
+                w.set_qspi_reset_pin_port(2);
+                w.set_qspi_reset_pin_num(12);
+            }));
         }
 
-        defmt_or_log::info!("RKTH (shadow reloaded): {}", registers::Rkth::read_shadow());
+        {
+            defmt_or_log::info!("Boot0 (shadow reloaded) {}", infallible(shadow.boot_0().read()));
+            defmt_or_log::info!("Boot1 (shadow reloaded) {}", infallible(shadow.boot_1().read()));
+            defmt_or_log::info!("RKTH (shadow reloaded) {:x}", rkth(infallible(shadow.rkth().read())));
+        }
 
         // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
-        let dev_mode = !registers::Boot0::read_shadow().secure_boot();
+        let dev_mode = defmt_or_log::unwrap!(shadow.boot_0().read()).secure_boot_en() == SecureBoot::Disabled;
 
-        if image_rkth != registers::Rkth::read_shadow() {
+        if image_rkth != defmt_or_log::unwrap!(shadow.rkth().read()) {
             if dev_mode {
                 // If no SECURE_BOOT fuse set => overwrite shadow RKTH with image RKTH
                 defmt_or_log::warn!("Development mode detected, using new image RKTH");
-                image_rkth.write_shadow();
+                infallible(shadow.rkth().write(|w| *w = image_rkth));
             } else {
                 // If SECURE_BOOT fuse set => do nothing as skboot_authenticate should be annoyed (perhaps assert afterwards)
                 defmt_or_log::error!(
@@ -251,6 +283,10 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             }
         } else {
             defmt_or_log::info!("Shadow and image RKTH concur!")
+        }
+
+        {
+            defmt_or_log::info!("RKTH (shadow set) {}", rkth(infallible(shadow.rkth().read())));
         }
 
         cfg_if::cfg_if! {

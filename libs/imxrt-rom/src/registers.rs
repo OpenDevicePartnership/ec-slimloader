@@ -1,127 +1,175 @@
 //! Registers that are available as OTP fuses and as shadow registers.
 
-use crate::otp::OtpRegisterBlock;
+use core::convert::Infallible;
 
-const fn otp_addr(offset: u32) -> *mut u32 {
+use crate::otp::Otp;
+
+use device_driver::RegisterInterface;
+
+// Define a Device for all OTP registers,that exist both as fuses accessible from the OTP ROM API as well as the shadow registers.
+device_driver::create_device!(
+    device_name: Device,
+    manifest: "registers.yaml"
+);
+
+/// Interface to access the shadow registers.
+pub struct ShadowInterface {
+    _private: (),
+}
+
+const fn shadow_addr(offset: u32, word_i: u32) -> *mut u32 {
     const OTP_SHADOW_BASE_ADDR: usize = 0x40130000;
 
-    (OTP_SHADOW_BASE_ADDR + offset as usize) as *mut u32
+    (OTP_SHADOW_BASE_ADDR + otp_offset(offset, word_i) as usize) as *mut u32
 }
 
-pub trait ShadowRegister {
-    fn read_shadow() -> Self;
-    fn write_shadow(&self);
+const fn otp_offset(base: u32, word_i: u32) -> u32 {
+    base + word_i * 4
 }
 
-macro_rules! define_register {
-    ($name:ident, $otp_offset:literal) => {
-        #[derive(PartialEq, Debug)]
-        #[repr(C)]
-        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-        pub struct $name(pub u32);
+impl RegisterInterface for ShadowInterface {
+    type Error = Infallible;
+    type AddressType = u32;
 
-        impl $name {
-            const OTP_OFFSET: u32 = $otp_offset;
-            const PTR: *mut u32 = otp_addr(Self::OTP_OFFSET) as *mut u32;
+    fn write_register(&mut self, address: Self::AddressType, _size_bits: u32, data: &[u8]) -> Result<(), Self::Error> {
+        for (i, chunk) in data.chunks_exact(4).enumerate() {
+            // Safety: we have chunks of exactly 4 bytes, hence the conversion to [u8; 4] is safe.
+            let word = u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
+
+            // Safety: we assume that the register yaml definition is correct, and that each register is aligned.
+            unsafe { shadow_addr(address, i as u32).write_volatile(word) };
         }
+        Ok(())
+    }
 
-        impl ShadowRegister for $name {
-            fn read_shadow() -> Self {
-                Self(unsafe { Self::PTR.read_volatile() })
-            }
-
-            fn write_shadow(&self) {
-                unsafe { Self::PTR.write_volatile(self.0) }
-            }
-        }
-
-        impl OtpRegisterBlock for $name {
-            fn read_fuse(otp: &mut crate::otp::Otp) -> Result<Self, crate::otp::Error> {
-                Ok(Self(otp.read_fuse(Self::OTP_OFFSET as u32)?))
-            }
-
-            fn write_fuse(&self, otp: &mut crate::otp::Otp, lock: bool) -> Result<(), crate::otp::Error> {
-                let addr = Self::OTP_OFFSET as u32;
-                defmt_or_log::info!("Writing fuse {:x} with {:x} (lock: {})", addr, self.0, lock);
-                otp.write_fuse(addr, self.0, lock)?;
-                Ok(())
-            }
-        }
-    };
+    fn read_register(
+        &mut self,
+        address: Self::AddressType,
+        _size_bits: u32,
+        data: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        // Safety: we assume that the register yaml definition is correct, no need for volatile memory access.
+        let source = unsafe { core::slice::from_raw_parts(shadow_addr(address, 0) as *const u8, data.len()) };
+        data.copy_from_slice(source);
+        Ok(())
+    }
 }
 
-macro_rules! define_register_block {
-    ($name:ident, $otp_offset:literal, $register_num:literal) => {
-        #[derive(PartialEq, Debug)]
-        #[repr(C)]
-        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-        pub struct $name(pub [u32; $register_num]);
-
-        impl $name {
-            const OTP_OFFSET: u32 = $otp_offset;
-            const PTR: *mut [u32; $register_num] = otp_addr(Self::OTP_OFFSET) as *mut [u32; $register_num];
-
-            pub fn from_bytes(bytes: [u8; $register_num * 4]) -> Self {
-                let mut result = [0u32; $register_num];
-                for (i, chunk) in bytes.chunks(4).enumerate() {
-                    result[i] = u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                }
-                Self(result)
-            }
-        }
-
-        impl ShadowRegister for $name {
-            fn read_shadow() -> Self {
-                Self(unsafe { Self::PTR.read_volatile() })
-            }
-
-            fn write_shadow(&self) {
-                unsafe { Self::PTR.write_volatile(self.0) }
-            }
-        }
-
-        impl OtpRegisterBlock for $name {
-            fn read_fuse(otp: &mut crate::otp::Otp) -> Result<Self, crate::otp::Error> {
-                let mut data = [0u32; $register_num];
-                for i in 0..$register_num {
-                    data[i] = otp.read_fuse(Self::OTP_OFFSET + i as u32)?;
-                }
-                Ok(Self(data))
-            }
-
-            fn write_fuse(&self, otp: &mut crate::otp::Otp, lock: bool) -> Result<(), crate::otp::Error> {
-                for i in 0..$register_num {
-                    let addr = Self::OTP_OFFSET + i as u32;
-                    defmt_or_log::info!("Writing fuse {:x} with {:x} (lock: {})", addr, self.0[i], lock);
-                    otp.write_fuse(addr, self.0[i], lock)?;
-                }
-                Ok(())
-            }
-        }
-    };
+pub struct OtpInterface<'a> {
+    otp: &'a mut Otp,
+    allow_write: bool,
+    mode_locked: bool,
 }
 
-define_register!(Boot0, 0x180);
-define_register!(Boot1, 0x184);
-define_register_block!(Rkth, 0x1E0, 8);
-define_register_block!(Otp, 0x1C0, 8);
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum OtpError {
+    WriteNotAllowed,
+    Inner(crate::otp::Error),
+}
 
-impl Boot0 {
+impl From<crate::otp::Error> for OtpError {
+    fn from(value: crate::otp::Error) -> Self {
+        OtpError::Inner(value)
+    }
+}
+
+impl RegisterInterface for OtpInterface<'_> {
+    type Error = OtpError;
+    type AddressType = u32;
+
+    fn write_register(&mut self, address: Self::AddressType, _size_bits: u32, data: &[u8]) -> Result<(), Self::Error> {
+        if !self.allow_write {
+            return Err(OtpError::WriteNotAllowed);
+        }
+
+        for (i, chunk) in data.chunks_exact(4).enumerate() {
+            // Safety: we have chunks of exactly 4 bytes, hence the conversion to [u8; 4] is safe.
+            let word = u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
+
+            self.otp
+                .write_fuse(otp_offset(address, i as u32), word, self.mode_locked)?;
+        }
+        Ok(())
+    }
+
+    fn read_register(
+        &mut self,
+        address: Self::AddressType,
+        _size_bits: u32,
+        data: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        for (i, chunk) in data.chunks_exact_mut(4).enumerate() {
+            defmt_or_log::info!("{:x} {:x}", i, otp_offset(address, i as u32));
+            chunk.copy_from_slice(&self.otp.read_fuse(otp_offset(address, i as u32))?.to_le_bytes());
+            defmt_or_log::info!("{:x} {:x} {:x}", i, otp_offset(address, i as u32), chunk);
+        }
+        Ok(())
+    }
+}
+
+pub struct ShadowRegisters {
+    device: Device<ShadowInterface>,
+}
+
+impl ShadowRegisters {
     pub const fn new() -> Self {
-        Self(0)
-    }
-
-    pub fn secure_boot(&self) -> bool {
-        // 0b01, 0b10 and 0b11 imply 'secure boot'.
-        self.0 >> 20 & 0b11 != 0b00
+        Self {
+            device: Device::new(ShadowInterface { _private: () }),
+        }
     }
 }
 
-impl Boot1 {
-    pub fn set_qspi_reset_pin(&mut self, port: u8, pin: u8) {
-        self.0 &= 0b1_1111_1111 << 14;
-        self.0 |= 1 << 14; // Reset pin enable.
-        self.0 |= (port as u32) << 15; // Reset pin port 2.
-        self.0 |= (pin as u32) << 18; // Reset pin number 12.
+impl core::ops::Deref for ShadowRegisters {
+    type Target = Device<ShadowInterface>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.device
+    }
+}
+
+impl core::ops::DerefMut for ShadowRegisters {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.device
+    }
+}
+
+pub struct OtpFuses<'a> {
+    device: Device<OtpInterface<'a>>,
+}
+
+impl<'a> OtpFuses<'a> {
+    pub fn readonly(otp: &'a mut Otp) -> Self {
+        Self {
+            device: Device::new(OtpInterface {
+                otp,
+                allow_write: false,
+                mode_locked: false,
+            }),
+        }
+    }
+
+    pub fn writable(otp: &'a mut Otp, mode_locked: bool) -> Self {
+        Self {
+            device: Device::new(OtpInterface {
+                otp,
+                allow_write: true,
+                mode_locked,
+            }),
+        }
+    }
+}
+
+impl<'a> core::ops::Deref for OtpFuses<'a> {
+    type Target = Device<OtpInterface<'a>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.device
+    }
+}
+
+impl core::ops::DerefMut for OtpFuses<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.device
     }
 }

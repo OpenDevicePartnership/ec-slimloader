@@ -18,7 +18,10 @@ use embassy_imxrt::{
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Instant, Timer};
 use example_bsp::application::{ExternalStorageConfig, ExternalStorageMap};
-use imxrt_rom::{otp::OtpRegisterBlock, registers::ShadowRegister};
+use imxrt_rom::registers::{
+    field_sets::{Boot0, Rkth},
+    OtpFuses, ShadowRegisters,
+};
 use partition_manager::PartitionManager;
 
 #[allow(dead_code)]
@@ -142,15 +145,6 @@ async fn main(_spawner: Spawner) {
         }
     };
 
-    {
-        let rkth_shadow = imxrt_rom::registers::Rkth::read_shadow();
-        let mut otp = imxrt_rom::otp::Otp::init(SYSTEM_CORE_CLOCK_HZ);
-        let rkth_otp = defmt_or_log::unwrap!(imxrt_rom::registers::Rkth::read_fuse(&mut otp));
-
-        defmt_or_log::info!("Shadow: {:?}", rkth_shadow);
-        defmt_or_log::info!("OTP:    {:?}", rkth_otp);
-    }
-
     // Task to handle writing the state if we want to either attempt the other slot,
     // or want to confirm the current slot.
     let button1_fut = async move {
@@ -173,24 +167,35 @@ async fn main(_spawner: Spawner) {
             defmt_or_log::info!("USER1");
 
             if start.elapsed() > FUSE_DELAY {
-                {
-                    let rkth_shadow = imxrt_rom::registers::Rkth::read_shadow();
-                    let mut otp = imxrt_rom::otp::Otp::init(SYSTEM_CORE_CLOCK_HZ);
-                    let rkth_otp = defmt_or_log::unwrap!(imxrt_rom::registers::Rkth::read_fuse(&mut otp));
+                let mut otp = imxrt_rom::otp::Otp::init(SYSTEM_CORE_CLOCK_HZ);
+                let mut fuses = OtpFuses::writable(&mut otp, false);
+                let mut shadow = ShadowRegisters::new();
 
-                    let rkth_shadow_is_default = rkth_shadow.0.as_slice().iter().all(|b| *b == 0x00);
+                {
+                    let rkth_shadow = defmt_or_log::unwrap!(shadow.rkth().read());
+                    let rkth_otp = defmt_or_log::unwrap!(fuses.rkth().read());
 
                     if rkth_otp != rkth_shadow {
-                        if rkth_shadow_is_default {
+                        if rkth_shadow == Rkth::new_zero() {
                             defmt_or_log::error!("Requesting write of fuses, but RKTH is not set to something useful");
                         } else {
-                            defmt_or_log::info!("Writing fuses");
-                            defmt_or_log::unwrap!(rkth_shadow.write_fuse(&mut otp, false));
+                            defmt_or_log::info!("Writing RKTH fuses");
+                            defmt_or_log::unwrap!(fuses.rkth().write(|w| *w = rkth_shadow));
                         }
                     }
                 }
                 {
-                    // TODO boot0
+                    let boot0_shadow = defmt_or_log::unwrap!(shadow.boot_0().read());
+                    let boot0_otp = defmt_or_log::unwrap!(fuses.boot_0().read());
+
+                    if boot0_otp != boot0_shadow {
+                        if boot0_shadow == Boot0::new_zero() {
+                            defmt_or_log::error!("Requesting write of fuses, but Boot0 is not set to something useful");
+                        } else {
+                            defmt_or_log::info!("Writing boot0 fuse");
+                            defmt_or_log::unwrap!(fuses.boot_0().write(|w| *w = boot0_shadow));
+                        }
+                    }
                 }
             } else {
                 defmt_or_log::info!("Writing new state: {}", new_state);

@@ -1,5 +1,5 @@
 use embassy_imxrt::{hashcrypt::Hashcrypt, peripherals::HASHCRYPT, Peri};
-use imxrt_rom::registers::Rkth;
+use imxrt_rom::registers::field_sets::Rkth;
 
 /// A Root Key Hash as lives in the Certificate Block at the end.
 #[derive(PartialEq, Debug)]
@@ -17,6 +17,6 @@ impl Rkh {
 
         let mut result = [0u8; 32];
         hashcrypt.new_sha256().hash(rkhs, &mut result);
-        Rkth::from_bytes(result)
+        Rkth::from(result)
     }
 }
