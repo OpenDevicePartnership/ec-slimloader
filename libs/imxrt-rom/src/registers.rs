@@ -1,7 +1,5 @@
 //! Registers that are available as OTP fuses and as shadow registers.
 
-use core::convert::Infallible;
-
 use crate::otp::Otp;
 
 use device_driver::RegisterInterface;
@@ -17,39 +15,56 @@ pub struct ShadowInterface {
     _private: (),
 }
 
-const fn shadow_addr(offset: u32, word_i: u32) -> *mut u32 {
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct NotShadowRegister;
+
+/// Convert an OTP word index to address in the shadow register block.
+const fn otp_to_shadow_addr(otp_word_i: u32) -> Result<*mut u32, NotShadowRegister> {
     const OTP_SHADOW_BASE_ADDR: usize = 0x40130000;
 
-    (OTP_SHADOW_BASE_ADDR + otp_offset(offset, word_i) as usize) as *mut u32
-}
+    let shadow_offset = match otp_word_i {
+        8..=9 => (otp_word_i - 8) * 4 + 0x020,
+        95..=127 => (otp_word_i - 95) * 4 + 0x17C,
+        492..=495 => (otp_word_i - 492) * 4 + 0x7B0,
+        _ => return Err(NotShadowRegister),
+    };
 
-const fn otp_offset(base: u32, word_i: u32) -> u32 {
-    base + word_i * 4
+    Ok((OTP_SHADOW_BASE_ADDR + shadow_offset as usize) as *mut u32)
 }
 
 impl RegisterInterface for ShadowInterface {
-    type Error = Infallible;
+    type Error = NotShadowRegister;
     type AddressType = u32;
 
-    fn write_register(&mut self, address: Self::AddressType, _size_bits: u32, data: &[u8]) -> Result<(), Self::Error> {
-        for (i, chunk) in data.chunks_exact(4).enumerate() {
+    fn write_register(
+        &mut self,
+        otp_word_i: Self::AddressType,
+        _size_bits: u32,
+        data: &[u8],
+    ) -> Result<(), Self::Error> {
+        for (chunk_i, chunk) in data.chunks_exact(4).enumerate() {
+            let otp_word_i = otp_word_i + chunk_i as u32;
+            let shadow_addr = otp_to_shadow_addr(otp_word_i)?;
+
             // Safety: we have chunks of exactly 4 bytes, hence the conversion to [u8; 4] is safe.
             let word = u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
 
             // Safety: we assume that the register yaml definition is correct, and that each register is aligned.
-            unsafe { shadow_addr(address, i as u32).write_volatile(word) };
+            unsafe { shadow_addr.write_volatile(word) };
         }
         Ok(())
     }
 
     fn read_register(
         &mut self,
-        address: Self::AddressType,
+        otp_word_i: Self::AddressType,
         _size_bits: u32,
         data: &mut [u8],
     ) -> Result<(), Self::Error> {
         // Safety: we assume that the register yaml definition is correct, no need for volatile memory access.
-        let source = unsafe { core::slice::from_raw_parts(shadow_addr(address, 0) as *const u8, data.len()) };
+        let shadow_addr = otp_to_shadow_addr(otp_word_i)? as *const u8;
+        let source = unsafe { core::slice::from_raw_parts(shadow_addr, data.len()) };
         data.copy_from_slice(source);
         Ok(())
     }
@@ -87,8 +102,7 @@ impl RegisterInterface for OtpInterface<'_> {
             // Safety: we have chunks of exactly 4 bytes, hence the conversion to [u8; 4] is safe.
             let word = u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
 
-            self.otp
-                .write_fuse(otp_offset(address, i as u32), word, self.mode_locked)?;
+            self.otp.write_fuse(address + i as u32, word, self.mode_locked)?;
         }
         Ok(())
     }
@@ -100,9 +114,7 @@ impl RegisterInterface for OtpInterface<'_> {
         data: &mut [u8],
     ) -> Result<(), Self::Error> {
         for (i, chunk) in data.chunks_exact_mut(4).enumerate() {
-            defmt_or_log::info!("{:x} {:x}", i, otp_offset(address, i as u32));
-            chunk.copy_from_slice(&self.otp.read_fuse(otp_offset(address, i as u32))?.to_le_bytes());
-            defmt_or_log::info!("{:x} {:x} {:x}", i, otp_offset(address, i as u32), chunk);
+            chunk.copy_from_slice(&self.otp.read_fuse(address + i as u32)?.to_le_bytes());
         }
         Ok(())
     }

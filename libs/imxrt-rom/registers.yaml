@@ -6,7 +6,7 @@ config:
 BOOT0:
   type: register
   access: RW
-  address: 0x180
+  address: 96
   size_bits: 32
   fields:
     primary_boot_src:
@@ -179,21 +179,27 @@ BOOT0:
       base: bool
       start: 23
       description: If set, ROM skips computation of Composite Device Identifier (CDI) defined in DICE specification. But ROM will continue to hide UDS source in OTP and PUF (index 15) before passing control to user code.
-    boot_fail_pin:
+    boot_fail_pin_port:
       base: uint
       start: 24
+      end: 27
+      description: >
+        GPIO port to use for indicating boot failure.
+        Boot ROM will drive this pin high before locking the chip on error conditions.
+        Applications can use this pin to power cycle the system.
+    boot_fail_pin_num:
+      base: uint
+      start: 27
       end: 32
       description: >
-        GPIO port and pin number to use for indicating boot failure.  Boot ROM will drive this pin high before locking the chip on error conditions. Applications can use this pin to power cycle the system.
-
-        [2:0] - Defines GPIO port
-
-        [7:3] - Defines GPIO pin
+        GPIO pin number to use for indicating boot failure.
+        Boot ROM will drive this pin high before locking the chip on error conditions.
+        Applications can use this pin to power cycle the system.
 
 BOOT1:
   type: register
   access: RW
-  address: 0x184
+  address: 97
   size_bits: 32
   fields:
     qspi_reset_pin_enable:
@@ -213,5 +219,5 @@ BOOT1:
 RKTH:
   type: register
   access: RW
-  address: 0x1E0
+  address: 120
   size_bits: 256

@@ -179,7 +179,9 @@ async fn main(_spawner: Spawner) {
                         if rkth_shadow == Rkth::new_zero() {
                             defmt_or_log::error!("Requesting write of fuses, but RKTH is not set to something useful");
                         } else {
-                            defmt_or_log::info!("Writing RKTH fuses");
+                            let rkth_shadow_arr: [u8; 32] = rkth_shadow.into();
+                            defmt_or_log::info!("Writing RKTH fuses {:x}", rkth_shadow_arr);
+
                             defmt_or_log::unwrap!(fuses.rkth().write(|w| *w = rkth_shadow));
                         }
                     }
@@ -192,7 +194,8 @@ async fn main(_spawner: Spawner) {
                         if boot0_shadow == Boot0::new_zero() {
                             defmt_or_log::error!("Requesting write of fuses, but Boot0 is not set to something useful");
                         } else {
-                            defmt_or_log::info!("Writing boot0 fuse");
+                            defmt_or_log::info!("Writing boot0 fuse {}", boot0_shadow);
+
                             defmt_or_log::unwrap!(fuses.boot_0().write(|w| *w = boot0_shadow));
                         }
                     }
