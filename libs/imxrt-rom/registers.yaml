@@ -217,6 +217,70 @@ BOOT_CFG1:
       end: 23
       description: GPIO pin number to use for O/QSPI reset function.
 
+SEC_BOOT_CFG5:
+  type: register
+  access: RW
+  address: 101
+  size_bits: 16
+  fields:
+    revoke_rootkey:
+      base: uint
+      start: 0
+      end: 4
+      description: Revoke upto 4 root keys. When a bit is set corresponding root key is revoked.
+    fa_mode_en:
+      base: bool
+      start: 4
+      end: 5
+      description: >
+        Enable Fault Analysis mode.
+
+        - When set ROM checks and erases customer sensitive assets (AES keys or key codes) stored in IFR/OTP.
+
+        - Issues zeroized command to PUF (disables key decoding until POR).
+
+        - Blocks all HW routed OTP keys and set lock bits on those registers.
+
+        - Enables all debug ports and waits in loop for tester.
+    enable_crc_check:
+      base: uint
+      start: 5
+      end: 7
+      description: Enable CRC checking of OTP words.
+      conversion:
+        name: crc_check
+        disable: 0b00
+        enable: 0b01
+        nxp_only: 0b10
+        enable2: 0b11
+    use_puf:
+      base: uint
+      start: 7
+      end: 8
+      description: Use PUF to store AES keys and UDS.
+      conversion:
+        name: key_in
+        otp: 0b0
+        ouf: 0b1
+    puf_block_enroll:
+      base: uint
+      start: 8
+      end: 9
+      description: Block further enrollement of PUF block. When this bit is set ROM blocks generation of new activation codes.
+      conversion:
+        name: enroll
+        enable: 0b0
+        disable: 0b1
+    puf_block_set_key:
+      base: uint
+      start: 9
+      end: 10
+      description: Block further enrollement of PUF block. When this bit is set ROM blocks generation of new key codes.
+      conversion:
+        name: key_gen
+        enable: 0b0
+        disable: 0b1
+
 RKTH:
   type: register
   access: RW

@@ -244,7 +244,8 @@ mod tests {
         let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, true);
         embassy_futures::block_on(async {
             // Write garbage to pages 1 and 2.
-            mock.write(16, &[0xaa; 32]).await.unwrap();
+            let bytes = [0xaa; 32];
+            mock.write(16, &bytes).await.unwrap();
             let valid_address = test_journal(&mut mock, true).await;
 
             // Insert broken as we happen to have a valid address with this sequence.

@@ -15,22 +15,27 @@ pub struct ShadowInterface {
     _private: (),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NotShadowRegister;
 
-/// Convert an OTP word index to address in the shadow register block.
-const fn otp_to_shadow_addr(otp_word_i: u32) -> Result<*mut u32, NotShadowRegister> {
-    const OTP_SHADOW_BASE_ADDR: usize = 0x40130000;
-
+/// Convert an OTP word index to offset in the shadow register block.
+const fn otp_to_shadow_offset(otp_word_i: u32) -> Result<usize, NotShadowRegister> {
     let shadow_offset = match otp_word_i {
         8..=9 => (otp_word_i - 8) * 4 + 0x020,
-        95..=127 => (otp_word_i - 95) * 4 + 0x17C,
+        95..=104 => (otp_word_i - 95) * 4 + 0x17C,
+        106..=127 => (otp_word_i - 106) * 4 + 0x1A8,
         492..=495 => (otp_word_i - 492) * 4 + 0x7B0,
         _ => return Err(NotShadowRegister),
     };
 
-    Ok((OTP_SHADOW_BASE_ADDR + shadow_offset as usize) as *mut u32)
+    Ok(shadow_offset as usize)
+}
+
+/// Convert an OTP word index to address in the shadow register block.
+fn otp_to_shadow_addr(otp_word_i: u32) -> Result<*mut u32, NotShadowRegister> {
+    const OTP_SHADOW_BASE_ADDR: usize = 0x40130000;
+    Ok((OTP_SHADOW_BASE_ADDR + otp_to_shadow_offset(otp_word_i)?) as *mut u32)
 }
 
 impl RegisterInterface for ShadowInterface {
@@ -43,12 +48,18 @@ impl RegisterInterface for ShadowInterface {
         _size_bits: u32,
         data: &[u8],
     ) -> Result<(), Self::Error> {
-        for (chunk_i, chunk) in data.chunks_exact(4).enumerate() {
+        for (chunk_i, chunk) in data.chunks(4).enumerate() {
             let otp_word_i = otp_word_i + chunk_i as u32;
             let shadow_addr = otp_to_shadow_addr(otp_word_i)?;
 
-            // Safety: we have chunks of exactly 4 bytes, hence the conversion to [u8; 4] is safe.
-            let word = u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
+            let word = if chunk.len() != 4 {
+                let mut buf = [0u8; 4];
+                buf[..chunk.len()].copy_from_slice(chunk);
+                u32::from_le_bytes(buf)
+            } else {
+                // Safety: we have chunks of exactly 4 bytes, hence the conversion to [u8; 4] is safe.
+                u32::from_le_bytes(unsafe { chunk.try_into().unwrap_unchecked() })
+            };
 
             // Safety: we assume that the register yaml definition is correct, and that each register is aligned.
             unsafe { shadow_addr.write_volatile(word) };
@@ -183,5 +194,19 @@ impl<'a> core::ops::Deref for OtpFuses<'a> {
 impl core::ops::DerefMut for OtpFuses<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.device
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mapping() {
+        assert_eq!(otp_to_shadow_offset(96), Ok(0x180)); // BOOT_CFG[0]
+        assert_eq!(otp_to_shadow_offset(97), Ok(0x184)); // BOOT_CFG[1]
+        assert_eq!(otp_to_shadow_offset(101), Ok(0x194)); // SEC_BOOT_CFG[5]
+        assert_eq!(otp_to_shadow_offset(120), Ok(0x1E0)); // RKTH[0]
+        assert_eq!(otp_to_shadow_offset(127), Ok(0x1FC)); // RKTH[7]
     }
 }

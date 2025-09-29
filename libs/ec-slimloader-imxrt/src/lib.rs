@@ -252,6 +252,11 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         }
 
         {
+            // Revoke testing key
+            // defmt_or_log::unwrap!(shadow.sec_boot_cfg_5().write(|w| w.set_revoke_rootkey(0b0010)));
+        }
+
+        {
             defmt_or_log::info!(
                 "Boot0 (shadow reloaded) {}",
                 defmt_or_log::unwrap!(shadow.boot_cfg_0().read())
