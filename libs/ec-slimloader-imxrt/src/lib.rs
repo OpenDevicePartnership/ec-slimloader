@@ -223,8 +223,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         let mut shadow = ShadowRegisters::new();
 
         {
-            defmt_or_log::info!("Boot0 (shadow) {}", defmt_or_log::unwrap!(shadow.boot_0().read()));
-            defmt_or_log::info!("Boot1 (shadow) {}", defmt_or_log::unwrap!(shadow.boot_1().read()));
+            defmt_or_log::info!("Boot0 (shadow) {}", defmt_or_log::unwrap!(shadow.boot_cfg_0().read()));
+            defmt_or_log::info!("Boot1 (shadow) {}", defmt_or_log::unwrap!(shadow.boot_cfg_1().read()));
             defmt_or_log::info!("RKTH (shadow) {:x}", rkth(defmt_or_log::unwrap!(shadow.rkth().read())));
         }
 
@@ -233,8 +233,8 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             let mut otp = Otp::init(SYSTEM_CORE_CLOCK_HZ);
             {
                 let mut fuses = OtpFuses::readonly(&mut otp);
-                defmt_or_log::info!("Boot0 (fuse): {}", defmt_or_log::unwrap!(fuses.boot_0().read()));
-                defmt_or_log::info!("Boot1 (fuse): {}", defmt_or_log::unwrap!(fuses.boot_1().read()));
+                defmt_or_log::info!("Boot0 (fuse): {}", defmt_or_log::unwrap!(fuses.boot_cfg_0().read()));
+                defmt_or_log::info!("Boot1 (fuse): {}", defmt_or_log::unwrap!(fuses.boot_cfg_1().read()));
                 defmt_or_log::info!("RKTH (fuse): {:x}", rkth(defmt_or_log::unwrap!(fuses.rkth().read())));
             }
             defmt_or_log::unwrap!(otp.reload_shadow());
@@ -244,7 +244,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         #[cfg(feature = "mimxrt685s-evk")]
         {
             // Configure the EVK NOR flash @ port 2, pin 12 to be reset on a system reset.
-            defmt_or_log::unwrap!(shadow.boot_1().modify(|w| {
+            defmt_or_log::unwrap!(shadow.boot_cfg_1().modify(|w| {
                 w.set_qspi_reset_pin_enable(true);
                 w.set_qspi_reset_pin_port(2);
                 w.set_qspi_reset_pin_num(12);
@@ -254,11 +254,11 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         {
             defmt_or_log::info!(
                 "Boot0 (shadow reloaded) {}",
-                defmt_or_log::unwrap!(shadow.boot_0().read())
+                defmt_or_log::unwrap!(shadow.boot_cfg_0().read())
             );
             defmt_or_log::info!(
                 "Boot1 (shadow reloaded) {}",
-                defmt_or_log::unwrap!(shadow.boot_1().read())
+                defmt_or_log::unwrap!(shadow.boot_cfg_1().read())
             );
             defmt_or_log::info!(
                 "RKTH (shadow reloaded) {:x}",
@@ -267,7 +267,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         }
 
         // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
-        let dev_mode = defmt_or_log::unwrap!(shadow.boot_0().read()).secure_boot_en() == SecureBoot::Disabled;
+        let dev_mode = defmt_or_log::unwrap!(shadow.boot_cfg_0().read()).secure_boot_en() == SecureBoot::Disabled;
 
         if image_rkth != defmt_or_log::unwrap!(shadow.rkth().read()) {
             if dev_mode {
@@ -275,7 +275,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
                 defmt_or_log::warn!("Development mode detected, using new image RKTH {:x}", rkth(image_rkth));
                 defmt_or_log::unwrap!(shadow.rkth().write(|w| *w = image_rkth));
 
-                defmt_or_log::unwrap!(shadow.boot_0().write(|w| {
+                defmt_or_log::unwrap!(shadow.boot_cfg_0().write(|w| {
                     w.set_primary_boot_src(imxrt_rom::registers::BootSrc::QspiBBoot);
                     w.set_default_isp_mode(imxrt_rom::registers::DefaultIspMode::DisableIsp);
                     w.set_tzm_image_type(imxrt_rom::registers::TzmImageType::TzmEnable);

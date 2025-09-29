@@ -19,7 +19,7 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Instant, Timer};
 use example_bsp::application::{ExternalStorageConfig, ExternalStorageMap};
 use imxrt_rom::registers::{
-    field_sets::{Boot0, Rkth},
+    field_sets::{BootCfg0, Rkth},
     OtpFuses, ShadowRegisters,
 };
 use partition_manager::PartitionManager;
@@ -187,16 +187,16 @@ async fn main(_spawner: Spawner) {
                     }
                 }
                 {
-                    let boot0_shadow = defmt_or_log::unwrap!(shadow.boot_0().read());
-                    let boot0_otp = defmt_or_log::unwrap!(fuses.boot_0().read());
+                    let boot0_shadow = defmt_or_log::unwrap!(shadow.boot_cfg_0().read());
+                    let boot0_otp = defmt_or_log::unwrap!(fuses.boot_cfg_0().read());
 
                     if boot0_otp != boot0_shadow {
-                        if boot0_shadow == Boot0::new_zero() {
+                        if boot0_shadow == BootCfg0::new_zero() {
                             defmt_or_log::error!("Requesting write of fuses, but Boot0 is not set to something useful");
                         } else {
                             defmt_or_log::info!("Writing boot0 fuse {}", boot0_shadow);
 
-                            defmt_or_log::unwrap!(fuses.boot_0().write(|w| *w = boot0_shadow));
+                            defmt_or_log::unwrap!(fuses.boot_cfg_0().write(|w| *w = boot0_shadow));
                         }
                     }
                 }

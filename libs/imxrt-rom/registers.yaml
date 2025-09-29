@@ -3,7 +3,7 @@ config:
   register_address_type: u32
   defmt_feature: "defmt"
 
-BOOT0:
+BOOT_CFG0:
   type: register
   access: RW
   address: 96
@@ -196,7 +196,7 @@ BOOT0:
         Boot ROM will drive this pin high before locking the chip on error conditions.
         Applications can use this pin to power cycle the system.
 
-BOOT1:
+BOOT_CFG1:
   type: register
   access: RW
   address: 97
@@ -216,6 +216,7 @@ BOOT1:
       start: 18
       end: 23
       description: GPIO pin number to use for O/QSPI reset function.
+
 RKTH:
   type: register
   access: RW
