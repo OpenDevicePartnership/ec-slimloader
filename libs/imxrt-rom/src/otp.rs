@@ -14,6 +14,7 @@ pub struct Otp {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Error(u32);
 

@@ -94,11 +94,6 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
         hal_config.clocks.main_pll_clk.pfd0 = 20;
         let p = embassy_imxrt::init(hal_config);
 
-        {
-            let p = unsafe { embassy_imxrt::pac::Peripherals::steal() };
-            defmt_or_log::info!("{}", p.clkctl0.pscctl0().read().otp_clk().variant());
-        }
-
         let ext_flash = match unsafe { FlexSpiNorFlash::with_probed_config(p.FLEXSPI, READ_ALIGNMENT, WRITE_ALIGNMENT) }
         {
             Ok(ext_flash) => ext_flash,
