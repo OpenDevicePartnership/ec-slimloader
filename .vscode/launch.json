@@ -13,7 +13,7 @@
             },
             "coreConfigs": [
                 {
-                    "programBinary": "examples/target/thumbv8m.main-none-eabihf/release/example-bootloader",
+                    "programBinary": "examples/rt685s/target/thumbv8m.main-none-eabihf/release/example-bootloader",
                     "svdFile": ".vscode/MIMXRT685S_cm33.svd",
                     "rttEnabled": true,
                 }

@@ -21,7 +21,6 @@ concurrency:
   cancel-in-progress: true
 name: check
 jobs:
-
   fmt:
     runs-on: ubuntu-latest
     name: nightly / fmt
@@ -68,7 +67,7 @@ jobs:
       - name: cargo clippy
         uses: giraffate/clippy-action@v1
         with:
-          reporter: 'github-pr-check'
+          reporter: "github-pr-check"
           clippy_flags: -- -F clippy::suspicious -F clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -135,9 +134,13 @@ jobs:
       - name: cargo install cargo-batch
         run: cargo install --git https://github.com/embassy-rs/cargo-batch cargo --bin cargo-batch --locked
 
-      - name: cargo manual hack
+      - name: cargo manual hack (libs)
         run: ./ci.sh
         working-directory: "./libs"
+
+      - name: cargo manual hack (examples/rt685s)
+        run: ./ci.sh
+        working-directory: "./examples/rt685s"
 
   deny:
     # cargo-deny checks licenses, advisories, sources, and bans for
@@ -160,7 +163,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           log-level: warn
-          manifest-path: ./Cargo.toml
+          manifest-path: ./libs/Cargo.toml
           command: check
 
   msrv:
@@ -171,17 +174,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msrv: ["1.79"] # We're relying on namespaced-features, which
-                       # was released in 1.60
-                       #
-                       # We also depend on `fixed' which requires rust
-                       # 1.71
-                       #
-                       # Additionally, we depend on embedded-hal-async
-                       # which requires 1.75
-                       #
-                       # embassy-time requires 1.79 due to
-                       # collapse_debuginfo
+        msrv:
+          ["1.79"] # We're relying on namespaced-features, which
+          # was released in 1.60
+          #
+          # We also depend on `fixed' which requires rust
+          # 1.71
+          #
+          # Additionally, we depend on embedded-hal-async
+          # which requires 1.75
+          #
+          # embassy-time requires 1.79 due to
+          # collapse_debuginfo
         target: [thumbv8m.main-none-eabihf]
     name: ubuntu / ${{ matrix.msrv }}
     steps:
@@ -191,7 +195,7 @@ jobs:
       - name: Install ${{ matrix.msrv }}
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.msrv }}  
+          toolchain: ${{ matrix.msrv }}
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo +${{ matrix.msrv }} check
