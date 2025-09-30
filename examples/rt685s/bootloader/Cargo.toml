@@ -1,7 +1,9 @@
 [package]
 name = "example-bootloader"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [features]
 defmt = [
@@ -25,7 +27,7 @@ ec-slimloader-imxrt = { path = "../../../libs/ec-slimloader-imxrt", features = [
 
 example-bsp = { path = "../bsp", features = ["bootloader"] }
 
-heapless = "0.9.1"
+heapless = "0.8.0"
 
 cortex-m = { version = "0.7.7", features = [
     "inline-asm",
