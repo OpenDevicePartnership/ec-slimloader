@@ -127,16 +127,6 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
                 // If no SECURE_BOOT fuse set => overwrite shadow RKTH with image RKTH
                 warn!("Development mode detected, using new image RKTH {:x}", rkth(image_rkth));
                 unwrap!(shadow.rkth().write(|w| *w = image_rkth));
-
-                unwrap!(shadow.boot_cfg_0().write(|w| {
-                    w.set_primary_boot_src(imxrt_rom::registers::BootSrc::QspiBBoot);
-                    w.set_default_isp_mode(imxrt_rom::registers::DefaultIspMode::DisableIsp);
-                    w.set_tzm_image_type(imxrt_rom::registers::TzmImageType::TzmEnable);
-                    w.set_secure_boot_en(SecureBoot::Enabled);
-                    w.set_dice_skip(true);
-                    w.set_boot_fail_pin_port(5);
-                    w.set_boot_fail_pin_num(7);
-                }));
             } else {
                 // If SECURE_BOOT fuse set => do nothing as skboot_authenticate should be annoyed (perhaps assert afterwards)
                 error!("Shadow and image RKTH do not concur, but we call skboot_authenticate in any case");
