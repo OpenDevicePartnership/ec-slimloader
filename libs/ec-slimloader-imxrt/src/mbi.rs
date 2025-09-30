@@ -1,6 +1,6 @@
-use embedded_storage_async::nor_flash::ReadNorFlash;
+#![allow(dead_code)]
 
-use crate::rkh::Rkh;
+use embedded_storage_async::nor_flash::ReadNorFlash;
 
 #[derive(Debug, PartialEq)]
 pub struct Ivt {
@@ -62,15 +62,5 @@ impl CertificateBlockHeader {
         }
 
         Some(unsafe { (data.as_ptr() as *const CertificateBlockHeader).read_unaligned() })
-    }
-}
-
-impl Rkh {
-    pub fn read_all_from_slice(data: &[u8]) -> Option<[Rkh; 4]> {
-        if data.len() < core::mem::size_of::<[Rkh; 4]>() {
-            return None;
-        }
-
-        Some(unsafe { (data.as_ptr() as *const [Rkh; 4]).read_unaligned() })
     }
 }
