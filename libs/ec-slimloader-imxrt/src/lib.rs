@@ -15,16 +15,17 @@ mod bootload;
 mod mbi;
 
 use core::ops::Range;
+
 use defmt_or_log::{error, info, panic};
 use ec_slimloader::{Board, BootError};
-use ec_slimloader_state::{flash::FlashJournal, state::Slot};
+use ec_slimloader_state::flash::FlashJournal;
+use ec_slimloader_state::state::Slot;
 use embassy_embedded_hal::adapter::BlockingAsync;
-use embassy_imxrt::{
-    clocks::MainClkSrc,
-    flexspi::{embedded_storage::FlexSpiNorStorage, nor_flash::FlexSpiNorFlash},
-    peripherals::HASHCRYPT,
-    Peri,
-};
+use embassy_imxrt::clocks::MainClkSrc;
+use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
+use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
+use embassy_imxrt::peripherals::HASHCRYPT;
+use embassy_imxrt::Peri;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 use heapless::Vec;

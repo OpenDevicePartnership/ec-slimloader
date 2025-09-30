@@ -1,27 +1,21 @@
 #![no_std]
 #![no_main]
 
+use cortex_m_rt::exception;
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
-
-use cortex_m_rt::exception;
-use ec_slimloader_state::{
-    flash::FlashJournal,
-    state::{Slot, State, Status},
-};
+use ec_slimloader_state::flash::FlashJournal;
+use ec_slimloader_state::state::{Slot, State, Status};
 use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_executor::Spawner;
-use embassy_imxrt::{
-    flexspi::{embedded_storage::FlexSpiNorStorage, nor_flash::FlexSpiNorFlash},
-    gpio::{self, DriveMode, DriveStrength, Level, Output, SlewRate},
-};
+use embassy_imxrt::flexspi::embedded_storage::FlexSpiNorStorage;
+use embassy_imxrt::flexspi::nor_flash::FlexSpiNorFlash;
+use embassy_imxrt::gpio::{self, DriveMode, DriveStrength, Level, Output, SlewRate};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Instant, Timer};
 use example_bsp::application::{ExternalStorageConfig, ExternalStorageMap};
-use imxrt_rom::registers::{
-    field_sets::{BootCfg0, Rkth},
-    OtpFuses, ShadowRegisters,
-};
+use imxrt_rom::registers::field_sets::{BootCfg0, Rkth};
+use imxrt_rom::registers::{OtpFuses, ShadowRegisters};
 use partition_manager::PartitionManager;
 
 #[allow(dead_code)]

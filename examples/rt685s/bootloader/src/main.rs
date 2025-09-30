@@ -1,15 +1,13 @@
 #![no_std]
 #![no_main]
 
-use ec_slimloader_imxrt::{ExternalStorage, Partitions};
-use example_bsp::bootloader::{ExternalStorageMap, ExternalStorageConfig};
-use embassy_executor::Spawner;
-use heapless::Vec;
-
-use panic_probe as _;
-
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
+use ec_slimloader_imxrt::{ExternalStorage, Partitions};
+use embassy_executor::Spawner;
+use example_bsp::bootloader::{ExternalStorageConfig, ExternalStorageMap};
+use heapless::Vec;
+use panic_probe as _;
 
 // auto-generated version information from Cargo.toml
 include!(concat!(env!("OUT_DIR"), "/biv.rs"));
@@ -24,8 +22,7 @@ const JOURNAL_BUFFER_SIZE: usize = 4096;
 
 impl ec_slimloader_imxrt::ImxrtConfig for Config {
     const SLOT_SIZE_RANGE: core::ops::Range<usize> = 64..1024 * 1024;
-    const LOAD_RANGE: core::ops::Range<*mut u32> =
-        (0x1002_0000 as *mut u32)..0x1018_0000 as *mut u32;
+    const LOAD_RANGE: core::ops::Range<*mut u32> = (0x1002_0000 as *mut u32)..0x1018_0000 as *mut u32;
 
     fn partitions(
         &self,
@@ -44,10 +41,7 @@ impl ec_slimloader_imxrt::ImxrtConfig for Config {
         defmt_or_log::unwrap!(slots.push(app_slot0).map_err(|_| TooManySlots));
         defmt_or_log::unwrap!(slots.push(app_slot1).map_err(|_| TooManySlots));
 
-        Partitions {
-            state: bl_state,
-            slots,
-        }
+        Partitions { state: bl_state, slots }
     }
 }
 

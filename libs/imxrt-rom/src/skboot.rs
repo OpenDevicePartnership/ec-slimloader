@@ -1,12 +1,12 @@
 //! Interface to the skboot ROM function 'skboot_authenticate'.
 
 use core::ptr::{null, null_mut};
+
 use defmt_or_log::error;
-
-use crate::api::{api_table, BootStatus, KbAuthenticate, KbOperation, KbOptions, KbSettings, KbStatus, SecureBool};
-
 #[cfg(feature = "rt")]
 use embassy_imxrt::pac::interrupt;
+
+use crate::api::{api_table, BootStatus, KbAuthenticate, KbOperation, KbOptions, KbSettings, KbStatus, SecureBool};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

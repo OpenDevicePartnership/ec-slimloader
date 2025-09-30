@@ -110,8 +110,14 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
-      - name: cargo doc
+      - name: cargo doc (libs)
+        run: cargo doc --no-deps --features mimxrt685s
+        working-directory: "./libs"
+        env:
+          RUSTDOCFLAGS: --cfg docsrs
+      - name: cargo doc (examples)
         run: cargo doc --no-deps
+        working-directory: "./examples/rt685s"
         env:
           RUSTDOCFLAGS: --cfg docsrs
 
@@ -184,20 +190,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msrv:
-          ["1.79"] # We're relying on namespaced-features, which
-          # was released in 1.60
-          #
-          # We also depend on `fixed' which requires rust
-          # 1.71
-          #
-          # Additionally, we depend on embedded-hal-async
-          # which requires 1.75
-          #
-          # embassy-time requires 1.79 due to
-          # collapse_debuginfo
+        msrv: ["1.90"] # We are depending on embassy-imxrt.
         target: [thumbv8m.main-none-eabihf]
-    name: ubuntu / ${{ matrix.msrv }}
+    name: ubuntu / MSRV ${{ matrix.msrv }}
     steps:
       - uses: actions/checkout@v4
         with:

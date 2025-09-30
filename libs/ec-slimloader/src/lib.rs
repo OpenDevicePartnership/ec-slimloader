@@ -1,10 +1,8 @@
 #![no_std]
 
 use defmt_or_log::{debug, error, info, unwrap, warn};
-use ec_slimloader_state::{
-    flash::FlashJournal,
-    state::{Slot, State, Status},
-};
+use ec_slimloader_state::flash::FlashJournal;
+use ec_slimloader_state::state::{Slot, State, Status};
 use embedded_storage_async::nor_flash::NorFlash;
 
 /// A board that can boot an application image.

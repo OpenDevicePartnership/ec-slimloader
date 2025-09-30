@@ -1,8 +1,8 @@
 //! Registers that are available as OTP fuses and as shadow registers.
 
-use crate::otp::Otp;
-
 use device_driver::RegisterInterface;
+
+use crate::otp::Otp;
 
 // Define a Device for all OTP registers,that exist both as fuses accessible from the OTP ROM API as well as the shadow registers.
 device_driver::create_device!(

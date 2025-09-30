@@ -1,12 +1,14 @@
 use defmt_or_log::{error, info, unwrap, warn};
 use ec_slimloader::BootError;
-use embassy_imxrt::{hashcrypt::Hashcrypt, peripherals::HASHCRYPT, Peri};
-use imxrt_rom::{
-    otp::Otp,
-    registers::{field_sets::Rkth, OtpFuses, SecureBoot, ShadowRegisters},
-};
+use embassy_imxrt::hashcrypt::Hashcrypt;
+use embassy_imxrt::peripherals::HASHCRYPT;
+use embassy_imxrt::Peri;
+use imxrt_rom::otp::Otp;
+use imxrt_rom::registers::field_sets::Rkth;
+use imxrt_rom::registers::{OtpFuses, SecureBoot, ShadowRegisters};
 
-use crate::{mbi::Ivt, CheckImage, Imxrt, ImxrtConfig};
+use crate::mbi::Ivt;
+use crate::{CheckImage, Imxrt, ImxrtConfig};
 
 // TODO determine clock frequency from HAL.
 const SYSTEM_CORE_CLOCK_HZ: u32 = (5 * 1000 * 1000) / 2;
