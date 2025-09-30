@@ -298,7 +298,7 @@ fn load_image(
     is_bootloader: bool,
     cert_block: CertBlock,
 ) -> anyhow::Result<Image> {
-    let plain_image = std::fs::read(&input_path)?;
+    let plain_image = std::fs::read(input_path)?;
 
     let image_type = if is_bootloader {
         // Note: ROM bootloader only accepts xip plain signed images when secure_boot_en bit is unset.
@@ -490,6 +490,7 @@ pub fn generate_nxp(
     }
 
     // Performing checks on output image
+    #[allow(clippy::if_same_then_else)]
     let expected_image_type = if is_bootloader { 0x0004u32 } else { 0x0004u32 };
 
     let image_type = u32::from_le_bytes((&output[0x24..0x28]).try_into().unwrap());

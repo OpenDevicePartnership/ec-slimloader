@@ -34,25 +34,23 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
     let (image, base_addr) = objcopy::objcopy(&file)?;
 
     if is_bootloader {
-        if let Some(bootloader) = &config.bootloader {
-            if bootloader.run_start != base_addr as u64 {
-                return Err(anyhow::anyhow!(
-                    "Bootloader image will be run from unexpected address 0x{:x}, should be 0x{:x}",
-                    base_addr,
-                    bootloader.run_start
-                ));
-            }
+        if let Some(bootloader) = &config.bootloader
+            && bootloader.run_start != base_addr as u64
+        {
+            return Err(anyhow::anyhow!(
+                "Bootloader image will be run from unexpected address 0x{:x}, should be 0x{:x}",
+                base_addr,
+                bootloader.run_start
+            ));
         }
-    } else {
-        if let Some(application) = &config.application {
-            if application.run_start != base_addr as u64 {
-                return Err(anyhow::anyhow!(
-                    "Application image will be run from unexpected address 0x{:x}, should be 0x{:x}",
-                    base_addr,
-                    application.run_start
-                ));
-            }
-        }
+    } else if let Some(application) = &config.application
+        && application.run_start != base_addr as u64
+    {
+        return Err(anyhow::anyhow!(
+            "Application image will be run from unexpected address 0x{:x}, should be 0x{:x}",
+            base_addr,
+            application.run_start
+        ));
     }
 
     let output_unsigned_path = args.output_unsigned_path_with_default();

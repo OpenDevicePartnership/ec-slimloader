@@ -101,7 +101,7 @@ fn generate_certificate(
     serde_yml::to_writer(&mut input_file, &input)?;
 
     let output_path = &certificate.path;
-    if std::fs::exists(&output_path)? {
+    if std::fs::exists(output_path)? {
         log::warn!("Certificate {} already generated, skipping...", output_path.display());
         return Ok(());
     }

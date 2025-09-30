@@ -16,7 +16,7 @@ pub async fn process(config: &Config, command: RunCommands) -> anyhow::Result<()
 
     // Enable secure boot, skip DICE
     let mut boot0 = 0u32;
-    boot0 |= 0b0101 << 0; // Use QSPI B
+    boot0 |= 0b0101; // Use QSPI B
     boot0 |= 0b111 << 4; // Completely disable ISP mode
     boot0 |= 0b10 << 13; // Force Trust-Zone mode
     boot0 |= 0b01 << 20; // Enable secure boot
