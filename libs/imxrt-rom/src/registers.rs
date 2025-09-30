@@ -7,7 +7,7 @@ use device_driver::RegisterInterface;
 // Define a Device for all OTP registers,that exist both as fuses accessible from the OTP ROM API as well as the shadow registers.
 device_driver::create_device!(
     device_name: Device,
-    manifest: "registers.yaml"
+    manifest: "registers.json"
 );
 
 /// Interface to access the shadow registers.

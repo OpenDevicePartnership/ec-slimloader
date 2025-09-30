@@ -27,7 +27,7 @@ embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.
     "unstable-pac",
 ] }
 
-device-driver = { version = "1.0", default-features = false, features = ["yaml"] }
+device-driver = { version = "1.0", default-features = false, features = ["json"] }
 
 [lints]
 workspace = true

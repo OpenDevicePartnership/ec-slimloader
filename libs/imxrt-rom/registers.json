@@ -1,0 +1,326 @@
+{
+    "config": {
+        "default_byte_order": "LE",
+        "register_address_type": "u32",
+        "defmt_feature": "defmt"
+    },
+    "BOOT_CFG0": {
+        "type": "register",
+        "access": "RW",
+        "address": 96,
+        "size_bits": 32,
+        "fields": {
+            "primary_boot_src": {
+                "base": "uint",
+                "start": 0,
+                "end": 4,
+                "try_conversion": {
+                    "name": "boot_src",
+                    "description": "Primary boot Source. (a.k.a. Master boot source)",
+                    "isp_pin_boot": {
+                        "value": 0,
+                        "description": "ISP pins will determine boot source."
+                    },
+                    "qpsi_a_boot": {
+                        "value": 1,
+                        "description": "Boot from Octal/Quad SPI flash device using FlexSpi channel A interface pins."
+                    },
+                    "sdhc0_boot": {
+                        "value": 2,
+                        "description": "Boot from eMMC device or SD card connected to SDHC0 port."
+                    },
+                    "sdhc1_boot": {
+                        "value": 3,
+                        "description": "Boot from eMMC device or SD card connected to SDHC0 port."
+                    },
+                    "spi_slv_boot": {
+                        "value": 4,
+                        "description": "Boot using SPI slave interface using master boot mode."
+                    },
+                    "qspi_b_boot": {
+                        "value": 5,
+                        "description": "Boot from Octal/Quad SPI flash device using FlexSpi channel B interface pins. Only load-to-RAM image are supported in this mode."
+                    },
+                    "uart_boot": {
+                        "value": 6,
+                        "description": "Boot using UART interface using master boot mode."
+                    },
+                    "spi_fc_boot": {
+                        "value": 7,
+                        "description": "Boot from 1-bit SPI flash device from FlexCom interface pins selected by REDUNDANT_SPI_PORT field. Only load-to-RAM images are supported in this mode."
+                    },
+                    "isp_mode": {
+                        "value": 9,
+                        "description": "Always enter ISP mode. DEFAULT_ISP_MODE field will determine the ISP interface."
+                    },
+                    "qspi_b_rec_boot": {
+                        "value": 11,
+                        "description": "Boot from Octal/Quad SPI flash device using FlexSPI channel B interface pins. If image is not found check recovery boot using SPI-flash device through FlexComm."
+                    },
+                    "qspi_a_rec_boot": {
+                        "value": 12,
+                        "description": "Boot from Octal/Quad SPI flash device using FlexSPI channel A interface pins. If image is not found check recovery boot using SPI-flash device through FlexComm."
+                    },
+                    "sdhc0_rec_boot": {
+                        "value": 13,
+                        "description": "Boot from SDHC0 port device. If image is not found check recovery boot using SPI-flash device through FlexComm."
+                    },
+                    "sdhc1_rec_boot": {
+                        "value": 15,
+                        "description": "Boot from SDHC1 port device. If image is not found check recovery boot using SPI-flash device  through FlexComm."
+                    }
+                }
+            },
+            "default_isp_mode": {
+                "base": "uint",
+                "start": 4,
+                "end": 7,
+                "try_conversion": {
+                    "name": "default_isp_mode",
+                    "description": "When a valid image is not available to master boot, ROM switches to ISP mode for programming primary boot devices. This field determines the default ISP mode.",
+                    "auto_isp": {
+                        "value": 0,
+                        "description": "Auto detect ISP mode. ROM monitors USB, UART, SPI and I2C interfaces for any activity."
+                    },
+                    "usb_hid_isp": {
+                        "value": 1,
+                        "description": "Support ISP command interface using USB HID class only."
+                    },
+                    "uart_isp": {
+                        "value": 2,
+                        "description": "Support ISP command interface on UART port only."
+                    },
+                    "spi_isp": {
+                        "value": 3,
+                        "description": "Support ISP command interface on SPI port only."
+                    },
+                    "i2c_isp": {
+                        "value": 4,
+                        "description": "Support ISP command interface on I2C port only."
+                    },
+                    "disable_isp": {
+                        "value": 7,
+                        "description": "Disable ISP fall through when proper image is not found on primary boot device."
+                    }
+                }
+            },
+            "boot_clk_speed": {
+                "base": "uint",
+                "start": 7,
+                "end": 8,
+                "conversion": {
+                    "name": "boot_clk_speed",
+                    "description": "Defines clock speeds during boot.",
+                    "normal_clk": {
+                        "description": "Normal boot. All clocks are set to 48MHz using IRC48M, except USB block. USB block will use external XTAL clock."
+                    },
+                    "hispeed_clk": {
+                        "description": "High-speed boot.\n* Core clock is set to 198MHz using main_pll with IRC48M as input\n* UART, I2C : 48MHz (IRC48M)\n* SPI, SDHC: 198MHz (main_pll)\n* USB: external XTAL\n* OSPI: Set to differnet speed using aux0_pll. Speed of OSPI interface is obtained from Boot Configuration Block present on OSPI-flash device.\n    - SDR: 30/50/60/72/80/90/100 MHz\n    - DDR: 30/50/60/72/80 MHz\n"
+                    }
+                }
+            },
+            "rsa4k_en": {
+                "base": "bool",
+                "start": 8,
+                "description": "Use 4096 bit RSA keys only for certificate validations. By default the ROM assume 2048-bit keys."
+            },
+            "tzm_image_type": {
+                "base": "uint",
+                "start": 13,
+                "end": 15,
+                "conversion": {
+                    "name": "tzm_image_type",
+                    "tzm_normal": {
+                        "value": 0,
+                        "description": "TrustZone-M mode is determined by the image header."
+                    },
+                    "tzm_disable": {
+                        "value": 1,
+                        "description": "Disable TrustZone-M features. ROM will always boot to a non-secure code and all TZ-M features are disabled."
+                    },
+                    "tzm_enable": {
+                        "value": 2,
+                        "description": "TrustZone-M features are enabled. ROM will always boot to secure code."
+                    },
+                    "tzm_preset": {
+                        "value": 3,
+                        "description": "TrustZone-M features are enabled and setting are loaded from image header and locked before branching to user code."
+                    }
+                }
+            },
+            "psa_bstate_skip": {
+                "base": "bool",
+                "start": 15,
+                "description": "If set, ROM skips computation of boot state defined by PSA specification. As part of boot state computation ROM includes OTP words \n- Shadow register values of 95 to 104\n- Fuse values of words 128 to 147\n"
+            },
+            "psa_bstate_inc_keys": {
+                "base": "bool",
+                "start": 16,
+                "description": "If set, boot state computation includes OTP shadow register values of words 106 to 127."
+            },
+            "redundant_spi_port": {
+                "base": "uint",
+                "start": 17,
+                "end": 20,
+                "conversion": {
+                    "name": "redundant_spi_port",
+                    "description": "FlexComm port to use for redundant SPI flash boot.",
+                    "fc0": {
+                        "description": "Use FlexCom0 pins P0_0 (SCK), P0_1 (MISO), P0_2 (MOSI), P0_3 (SEL)"
+                    },
+                    "fc1": {
+                        "description": "Use FlexCom1 pins P0_7 (SCK), P0_8 (MISO), P0_9 (MOSI), P0_10 (SEL)"
+                    },
+                    "fc2": {
+                        "description": "Use FlexCom2 pins P0_14 (SCK), P0_15 (MISO), P0_16 (MOSI), P0_17 (SEL)"
+                    },
+                    "fc3": {
+                        "description": "Use FlexCom3 pins P0_21 (SCK), P0_22 (MISO), P0_23 (MOSI), P0_24 (SEL)"
+                    },
+                    "fc4": {
+                        "description": "Use FlexCom4 pins P0_28 (SCK), P0_29 (MISO), P0_30 (MOSI), P0_31 (SEL)"
+                    },
+                    "fc5": {
+                        "description": "Use FlexCom5 pins P1_3 (SCK), P1_4 (MISO), P1_5 (MOSI), P1_6 (SEL)"
+                    },
+                    "fc6": {
+                        "description": "Use FlexCom6 pins P3_25 (SCK), P3_26 (MISO), P3_27 (MOSI), P3_28 (SEL)"
+                    },
+                    "fc7": {
+                        "description": "Use FlexCom7 pins P4_0 (SCK), P4_1 (MISO), P4_2 (MOSI), P4_3 (SEL)"
+                    }
+                }
+            },
+            "secure_boot_en": {
+                "base": "uint",
+                "start": 20,
+                "end": 22,
+                "conversion": {
+                    "name": "secure_boot",
+                    "description": "Force secure image only.",
+                    "disabled": 0,
+                    "enabled": "default"
+                }
+            },
+            "dice_inc_otp": {
+                "base": "bool",
+                "start": 22,
+                "description": "Include non-field updatable OTP Fields in DICE computation. OTP values in shadow registers are used in computation for words 95, 96, 98, 99, 104, 120 - 127."
+            },
+            "dice_skip": {
+                "base": "bool",
+                "start": 23,
+                "description": "If set, ROM skips computation of Composite Device Identifier (CDI) defined in DICE specification. But ROM will continue to hide UDS source in OTP and PUF (index 15) before passing control to user code."
+            },
+            "boot_fail_pin_port": {
+                "base": "uint",
+                "start": 24,
+                "end": 27,
+                "description": "GPIO port to use for indicating boot failure. Boot ROM will drive this pin high before locking the chip on error conditions. Applications can use this pin to power cycle the system.\n"
+            },
+            "boot_fail_pin_num": {
+                "base": "uint",
+                "start": 27,
+                "end": 32,
+                "description": "GPIO pin number to use for indicating boot failure. Boot ROM will drive this pin high before locking the chip on error conditions. Applications can use this pin to power cycle the system.\n"
+            }
+        }
+    },
+    "BOOT_CFG1": {
+        "type": "register",
+        "access": "RW",
+        "address": 97,
+        "size_bits": 32,
+        "fields": {
+            "qspi_reset_pin_enable": {
+                "base": "bool",
+                "start": 14,
+                "description": "Use QSPI_RESET_PIN to reset the flash device."
+            },
+            "qspi_reset_pin_port": {
+                "base": "uint",
+                "start": 15,
+                "end": 18,
+                "description": "GPIO port to use for O/QSPI reset function."
+            },
+            "qspi_reset_pin_num": {
+                "base": "uint",
+                "start": 18,
+                "end": 23,
+                "description": "GPIO pin number to use for O/QSPI reset function."
+            }
+        }
+    },
+    "SEC_BOOT_CFG5": {
+        "type": "register",
+        "access": "RW",
+        "address": 101,
+        "size_bits": 16,
+        "fields": {
+            "revoke_rootkey": {
+                "base": "uint",
+                "start": 0,
+                "end": 4,
+                "description": "Revoke upto 4 root keys. When a bit is set corresponding root key is revoked."
+            },
+            "fa_mode_en": {
+                "base": "bool",
+                "start": 4,
+                "end": 5,
+                "description": "Enable Fault Analysis mode.\n- When set ROM checks and erases customer sensitive assets (AES keys or key codes) stored in IFR/OTP.\n- Issues zeroized command to PUF (disables key decoding until POR).\n- Blocks all HW routed OTP keys and set lock bits on those registers.\n- Enables all debug ports and waits in loop for tester.\n"
+            },
+            "enable_crc_check": {
+                "base": "uint",
+                "start": 5,
+                "end": 7,
+                "description": "Enable CRC checking of OTP words.",
+                "conversion": {
+                    "name": "crc_check",
+                    "disable": 0,
+                    "enable": 1,
+                    "nxp_only": 2,
+                    "enable2": 3
+                }
+            },
+            "use_puf": {
+                "base": "uint",
+                "start": 7,
+                "end": 8,
+                "description": "Use PUF to store AES keys and UDS.",
+                "conversion": {
+                    "name": "key_in",
+                    "otp": 0,
+                    "ouf": 1
+                }
+            },
+            "puf_block_enroll": {
+                "base": "uint",
+                "start": 8,
+                "end": 9,
+                "description": "Block further enrollement of PUF block. When this bit is set ROM blocks generation of new activation codes.",
+                "conversion": {
+                    "name": "enroll",
+                    "enable": 0,
+                    "disable": 1
+                }
+            },
+            "puf_block_set_key": {
+                "base": "uint",
+                "start": 9,
+                "end": 10,
+                "description": "Block further enrollement of PUF block. When this bit is set ROM blocks generation of new key codes.",
+                "conversion": {
+                    "name": "key_gen",
+                    "enable": 0,
+                    "disable": 1
+                }
+            }
+        }
+    },
+    "RKTH": {
+        "type": "register",
+        "access": "RW",
+        "address": 120,
+        "size_bits": 256
+    }
+}
