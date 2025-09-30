@@ -143,6 +143,12 @@ impl ShadowRegisters {
     }
 }
 
+impl Default for ShadowRegisters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl core::ops::Deref for ShadowRegisters {
     type Target = Device<ShadowInterface>;
 

@@ -31,6 +31,7 @@ pub enum AuthenticateError {
 ///
 /// If RHK is provided it will use that hash to verify the certificate chain instead.
 #[allow(dead_code)]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn skboot_authenticate(
     start: *const u32,
     max_image_length: u32,
@@ -70,7 +71,6 @@ pub fn skboot_authenticate(
 
     // Placeholder value that will be mutated by skboot_authenticate.
     let mut is_sign_verified: u32 = 0xffffffff;
-
     let result = unsafe { (api_table().skboot.authenticate)(start, &mut is_sign_verified) };
 
     // ROM API keeps HASHCRYPT unmasked

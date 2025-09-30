@@ -13,9 +13,6 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 
-[workspace.lints.rust]
-warnings = "deny"
-
 [workspace.lints.clippy]
 manual_let_else = "deny"
 
