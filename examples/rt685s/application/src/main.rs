@@ -181,17 +181,21 @@ async fn main(_spawner: Spawner) {
                     }
                 }
                 {
-                    let boot0_shadow = defmt_or_log::unwrap!(shadow.boot_cfg_0().read());
                     let boot0_otp = defmt_or_log::unwrap!(fuses.boot_cfg_0().read());
+                    if boot0_otp != BootCfg0::new_zero() {
+                        defmt_or_log::error!("Requesting write of fuses, but Boot0 seems to already be set");
+                    } else {
+                        defmt_or_log::info!("Writing boot0 fuse");
 
-                    if boot0_otp != boot0_shadow {
-                        if boot0_shadow == BootCfg0::new_zero() {
-                            defmt_or_log::error!("Requesting write of fuses, but Boot0 is not set to something useful");
-                        } else {
-                            defmt_or_log::info!("Writing boot0 fuse {}", boot0_shadow);
-
-                            defmt_or_log::unwrap!(fuses.boot_cfg_0().write(|w| *w = boot0_shadow));
-                        }
+                        defmt_or_log::unwrap!(fuses.boot_cfg_0().write(|w| {
+                            w.set_primary_boot_src(imxrt_rom::registers::BootSrc::QspiBBoot);
+                            w.set_default_isp_mode(imxrt_rom::registers::DefaultIspMode::DisableIsp);
+                            w.set_tzm_image_type(imxrt_rom::registers::TzmImageType::TzmEnable);
+                            w.set_secure_boot_en(imxrt_rom::registers::SecureBoot::Enabled);
+                            w.set_dice_skip(true);
+                            w.set_boot_fail_pin_port(5);
+                            w.set_boot_fail_pin_num(7);
+                        }));
                     }
                 }
             } else {
