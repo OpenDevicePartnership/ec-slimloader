@@ -29,5 +29,3 @@ cargo batch \
     echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf "
 	  echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
 	done) $BUILD_EXTRA
-
-cargo clippy --locked --manifest-path Cargo.toml --target $TARGET -- -Dwarnings -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style

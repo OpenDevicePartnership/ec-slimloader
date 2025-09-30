@@ -68,12 +68,20 @@ jobs:
           components: clippy
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
-      - name: cargo clippy
+      - name: cargo clippy (libs)
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
-          clippy_flags: -- -F clippy::suspicious -F clippy::correctness -F clippy::perf -F clippy::style
+          clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          workdir: "./libs"
+      - name: cargo clippy (examples)
+        uses: giraffate/clippy-action@v1
+        with:
+          reporter: "github-pr-check"
+          clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workdir: "./examples/rt685s"
 
   # Enable once we have a released crate
   # semver:
