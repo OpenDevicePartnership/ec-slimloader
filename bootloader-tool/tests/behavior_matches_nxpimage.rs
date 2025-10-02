@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use bootloader_tool::Config;
 use bootloader_tool::processors::{
     mbi::{self, cert_block},
     objcopy,
     otp::Otp,
 };
+use bootloader_tool::Config;
 use object::read::elf::ElfFile32;
 
 fn get_private_key(config: &Config, certificate_idx: usize) -> PathBuf {
@@ -43,15 +43,15 @@ fn test_bootloader_padding_1() {
 
 #[test]
 fn test_bootloader_padding_5() {
-    test_bootloader_padding(1);
+    test_bootloader_padding(5);
 }
 #[test]
 fn test_bootloader_padding_9() {
-    test_bootloader_padding(1);
+    test_bootloader_padding(9);
 }
 #[test]
 fn test_bootloader_padding_17() {
-    test_bootloader_padding(1);
+    test_bootloader_padding(17);
 }
 
 fn test_bootloader_padding(added_bytes: u8) {
