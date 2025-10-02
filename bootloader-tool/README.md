@@ -1,4 +1,4 @@
-# RT6xx Bootloader signing tool
+# RT6xx Bootloader signing tool **EXPERIMENTAL**
 
 This binary provides support for signing, downloading and running bootloaders via the secure pathway on the NXP RT6xx family of chips. It automates the signing process, as well as setting up the chip temporarily for running signed binaries. Note: It does not blow any fuses, unless using the `fuse` command, and any boot configuration changes made are erased on a power cycle.
 

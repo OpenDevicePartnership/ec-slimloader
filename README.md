@@ -1,4 +1,4 @@
-# ec-slimloader
+# ec-slimloader **OUTDATED**
 
 A light-weight stage-two bootloader written in Rust for loading an app image as configured by ec-slimloader-descriptors. Also contains a tool for signing images, flashing them to the device, setting fuses (or shadow registers) containing crypto keys, and an example application to showcase the bootloaders A/B state functionality.
 
