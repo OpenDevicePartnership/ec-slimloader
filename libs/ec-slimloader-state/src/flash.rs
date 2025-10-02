@@ -167,7 +167,7 @@ impl<T: NorFlash> FlashJournal<T> {
                 let second_page_i = 1;
                 self.erase_pages(second_page_i..Self::page_count(&self.inner)).await?;
 
-                // Write the state to the first address in the last page, immediately becoming the newest valid state.
+                // Write the state to the first address in the second page, immediately becoming the newest valid state.
                 let state_address = second_page_i * Self::PAGE_SIZE;
                 self.inner.write(state_address as u32, &state.as_bytes()).await?;
             }
