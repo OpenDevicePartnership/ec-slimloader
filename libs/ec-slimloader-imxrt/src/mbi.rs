@@ -45,8 +45,8 @@ impl Ivt {
 #[repr(C)]
 pub struct CertificateBlockHeader {
     pub signature: u32,
-    pub header_minor_version: u16,
     pub header_major_version: u16,
+    pub header_minor_version: u16,
     pub header_length: u32,
     pub flags: u32,
     pub build_number: u32,
