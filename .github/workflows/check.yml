@@ -65,7 +65,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          components: clippy
+          components: clippy,rustfmt
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo clippy (libs)
@@ -116,6 +116,8 @@ jobs:
           submodules: true
       - name: Install nightly
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt # required for device-driver
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo doc (libs)
@@ -145,6 +147,8 @@ jobs:
 
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt # required for device-driver
 
       - name: rustup target add thumbv8m.main-none-eabihf
         run: rustup target add thumbv8m.main-none-eabihf
@@ -209,6 +213,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.msrv }}
+          components: rustfmt # required for device-driver
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo +${{ matrix.msrv }} check (libs)
