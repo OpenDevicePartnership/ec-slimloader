@@ -90,7 +90,7 @@ impl<T: NorFlash> FlashJournal<T> {
         const CHUNK_SIZE: usize = 2;
 
         defmt_or_log::assert!(BLOCK_SIZE >= CHUNK_SIZE);
-        defmt_or_log::assert!(BLOCK_SIZE % CHUNK_SIZE == 0);
+        defmt_or_log::assert!(BLOCK_SIZE.is_multiple_of(CHUNK_SIZE));
 
         let mut buf = [0u8; BLOCK_SIZE];
         let block_count = inner.capacity().div_ceil(BLOCK_SIZE);
