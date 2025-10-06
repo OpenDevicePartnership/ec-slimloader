@@ -243,13 +243,13 @@ mod tests {
 
     #[test]
     fn journal_normal() {
-        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, true);
+        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, false);
         embassy_futures::block_on(test_journal(&mut mock, true));
     }
 
     #[test]
     fn journal_garbage() {
-        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, true);
+        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, false);
         embassy_futures::block_on(async {
             // Write garbage to pages 1 and 2.
             let bytes = [0xaa; 32];
@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn journal_realistic() {
         // Use a realistic page count and size.
-        let mut mock: MockFlashBase<2, 2, 2048> = MockFlashBase::new(None, true);
+        let mut mock: MockFlashBase<2, 2, 2048> = MockFlashBase::new(None, false);
         embassy_futures::block_on(async {
             for status in [Status::Initial, Status::Attempting, Status::Confirmed, Status::Failed] {
                 for i in 0b0..0b111u8 {
