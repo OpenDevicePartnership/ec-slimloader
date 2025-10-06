@@ -44,6 +44,9 @@ jobs:
       - name: cargo fmt --check (examples)
         run: cargo fmt --check
         working-directory: "./examples/rt685s"
+      - name: cargo fmt --check (bootloader-tool)
+        run: cargo fmt --check
+        working-directory: "./bootloader-tool"
 
   clippy:
     runs-on: ubuntu-latest
@@ -82,6 +85,13 @@ jobs:
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./examples/rt685s"
+      - name: cargo clippy (bootloader-tool)
+        uses: giraffate/clippy-action@v1
+        with:
+          reporter: "github-pr-check"
+          clippy_flags: -- -D clippy::suspicious -D clippy::correctness -D clippy::perf -D clippy::style
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workdir: "./bootloader-tool"
 
   # Enable once we have a released crate
   # semver:
@@ -206,6 +216,10 @@ jobs:
         target: [thumbv8m.main-none-eabihf]
     name: ubuntu / MSRV ${{ matrix.msrv }}
     steps:
+      - name: Install libudev (linux)
+        run: |
+          sudo apt update
+          sudo apt install -y libudev-dev
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -222,3 +236,6 @@ jobs:
       - name: cargo +${{ matrix.msrv }} check (examples)
         run: cargo check
         working-directory: "./examples/rt685s"
+      - name: cargo +${{ matrix.msrv }} check (bootloader-tool)
+        run: cargo check
+        working-directory: "./bootloader-tool"
