@@ -41,10 +41,6 @@ impl Rkh {
     }
 }
 
-fn rkth(rkth: Rkth) -> [u8; 32] {
-    rkth.into()
-}
-
 impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
     fn check_image(&mut self, ram_ivt: &Ivt) -> Result<(), BootError> {
         // Compute RKTH from image.
@@ -79,14 +75,14 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
             Rkh::to_rkth(&rkhs, self.hashcrypt.reborrow())
         };
 
-        info!("RKTH (image) {:x}", rkth(image_rkth));
+        info!("RKTH (image) {:?}", image_rkth);
 
         let mut shadow = ShadowRegisters::new();
 
         {
-            info!("Boot0 (shadow) {}", unwrap!(shadow.boot_cfg_0().read()));
-            info!("Boot1 (shadow) {}", unwrap!(shadow.boot_cfg_1().read()));
-            info!("RKTH (shadow) {:x}", rkth(unwrap!(shadow.rkth().read())));
+            info!("Boot0 (shadow) {:?}", unwrap!(shadow.boot_cfg_0().read()));
+            info!("Boot1 (shadow) {:?}", unwrap!(shadow.boot_cfg_1().read()));
+            info!("RKTH (shadow) {:?}", unwrap!(shadow.rkth().read()));
         }
 
         // Reload shadow registers.
@@ -94,9 +90,9 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
             let mut otp = Otp::init(SYSTEM_CORE_CLOCK_HZ);
             {
                 let mut fuses = OtpFuses::readonly(&mut otp);
-                info!("Boot0 (fuse): {}", unwrap!(fuses.boot_cfg_0().read()));
-                info!("Boot1 (fuse): {}", unwrap!(fuses.boot_cfg_1().read()));
-                info!("RKTH (fuse): {:x}", rkth(unwrap!(fuses.rkth().read())));
+                info!("Boot0 (fuse): {:?}", unwrap!(fuses.boot_cfg_0().read()));
+                info!("Boot1 (fuse): {:?}", unwrap!(fuses.boot_cfg_1().read()));
+                info!("RKTH (fuse): {:?}", unwrap!(fuses.rkth().read()));
             }
             unwrap!(otp.reload_shadow());
             info!("Shadow registers reloaded from fuses");
@@ -114,9 +110,9 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
         }
 
         {
-            info!("Boot0 (shadow reloaded) {}", unwrap!(shadow.boot_cfg_0().read()));
-            info!("Boot1 (shadow reloaded) {}", unwrap!(shadow.boot_cfg_1().read()));
-            info!("RKTH (shadow reloaded) {:x}", rkth(unwrap!(shadow.rkth().read())));
+            info!("Boot0 (shadow reloaded) {:?}", unwrap!(shadow.boot_cfg_0().read()));
+            info!("Boot1 (shadow reloaded) {:?}", unwrap!(shadow.boot_cfg_1().read()));
+            info!("RKTH (shadow reloaded) {}", unwrap!(shadow.rkth().read()));
         }
 
         // Whether the hardware is in 'development mode' is dependent on the secure_boot_en bit being asserted.
@@ -125,7 +121,7 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
         if image_rkth != unwrap!(shadow.rkth().read()) {
             if dev_mode {
                 // If no SECURE_BOOT fuse set => overwrite shadow RKTH with image RKTH
-                warn!("Development mode detected, using new image RKTH {:x}", rkth(image_rkth));
+                warn!("Development mode detected, using new image RKTH {}", image_rkth);
                 unwrap!(shadow.rkth().write(|w| *w = image_rkth));
             } else {
                 // If SECURE_BOOT fuse set => do nothing as skboot_authenticate should be annoyed (perhaps assert afterwards)

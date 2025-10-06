@@ -193,7 +193,7 @@ impl<C: ImxrtConfig> Board for Imxrt<C> {
             return e;
         }
 
-        info!("Booting into application @ {:x}...", ram_ivt.target_ptr);
+        info!("Booting into application @ {:?}...", ram_ivt.target_ptr);
 
         // Boot to application, and we do not return from this function.
         unsafe { bootload::boot_application(ram_ivt.target_ptr) }

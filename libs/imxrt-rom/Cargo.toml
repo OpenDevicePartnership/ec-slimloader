@@ -8,12 +8,8 @@ repository.workspace = true
 [features]
 rt = []
 
-log = ["defmt-or-log/log"]
-defmt = [
-    "dep:defmt",
-    "defmt-or-log/defmt",
-    "device-driver/defmt-03"
-]
+log = ["dep:log", "defmt-or-log/log"]
+defmt = ["dep:defmt", "defmt-or-log/defmt", "device-driver/defmt-03"]
 
 mimxrt685s = ["embassy-imxrt/mimxrt685s"]
 mimxrt633s = ["embassy-imxrt/mimxrt633s"]
@@ -21,13 +17,16 @@ mimxrt633s = ["embassy-imxrt/mimxrt633s"]
 [dependencies]
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
+log = { workspace = true, optional = true }
 
 cortex-m = { workspace = true }
 embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = [
     "unstable-pac",
 ] }
 
-device-driver = { version = "1.0", default-features = false, features = ["json"] }
+device-driver = { version = "1.0", default-features = false, features = [
+    "json",
+] }
 
 [lints]
 workspace = true

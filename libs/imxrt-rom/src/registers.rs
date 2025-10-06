@@ -3,7 +3,7 @@
 
 mod device;
 
-use device_driver::RegisterInterface;
+use device_driver::{FieldSet, RegisterInterface};
 
 use crate::otp::Otp;
 
@@ -202,6 +202,15 @@ impl<'a> core::ops::Deref for OtpFuses<'a> {
 impl core::ops::DerefMut for OtpFuses<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.device
+    }
+}
+
+impl core::fmt::Display for field_sets::Rkth {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for b in self.get_inner_buffer() {
+            f.write_fmt(format_args!("{:02x}", b))?;
+        }
+        Ok(())
     }
 }
 
