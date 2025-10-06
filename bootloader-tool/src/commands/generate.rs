@@ -1,4 +1,5 @@
-use crate::{GenerateCommands, config::Config, processors};
+use crate::config::Config;
+use crate::{GenerateCommands, processors};
 
 pub async fn process(config: &Config, command: GenerateCommands) -> anyhow::Result<()> {
     match command {

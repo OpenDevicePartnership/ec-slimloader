@@ -3,7 +3,8 @@ mod generate;
 mod run;
 mod sign;
 
-use crate::{Commands, config::Config};
+use crate::Commands;
+use crate::config::Config;
 
 pub async fn process(config: &Config, command: Commands) -> anyhow::Result<()> {
     match command {

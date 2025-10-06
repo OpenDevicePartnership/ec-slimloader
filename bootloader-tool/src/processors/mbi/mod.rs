@@ -2,25 +2,25 @@
 
 pub mod cert_block;
 
-use sha2::Digest;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use tempfile::NamedTempFile;
 
-use crate::processors::certificates::Rkth;
-use crate::processors::mbi::cert_block::{CertBlock, CertBlockConfig};
-use crate::processors::otp::Otp;
 use anyhow::{Context, anyhow, bail};
 use hmac::{Hmac, Mac};
 use rsa::RsaPrivateKey;
 use rsa::pkcs1v15::{Signature, SigningKey};
 use rsa::pkcs8::DecodePrivateKey;
 use rsa::signature::{SignatureEncoding, SignerMut, Verifier};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
+use tempfile::NamedTempFile;
 use x509_parser::asn1_rs::FromDer;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::oid_registry::Oid;
+
+use crate::processors::certificates::Rkth;
+use crate::processors::mbi::cert_block::{CertBlock, CertBlockConfig};
+use crate::processors::otp::Otp;
 
 type HmacSha256 = Hmac<Sha256>;
 

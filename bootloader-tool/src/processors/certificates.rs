@@ -1,16 +1,12 @@
-use std::{
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use anyhow::Context;
 use serde::Serialize;
 
-use crate::{
-    GenerateCertificatesArguments,
-    config::{Certificate, CertificatePrototype, Config},
-    util::{bytes_to_u32_le, generate_hex, parse_hex},
-};
+use crate::GenerateCertificatesArguments;
+use crate::config::{Certificate, CertificatePrototype, Config};
+use crate::util::{bytes_to_u32_le, generate_hex, parse_hex};
 
 #[derive(Serialize)]
 struct BasicConstraints {
