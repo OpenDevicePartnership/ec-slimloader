@@ -94,7 +94,7 @@ fn generate_certificate(
     };
 
     let mut input_file = tempfile::NamedTempFile::new()?;
-    serde_yml::to_writer(&mut input_file, &input)?;
+    serde_json::to_writer(&mut input_file, &input)?;
 
     let output_path = &certificate.path;
     if std::fs::exists(output_path)? {

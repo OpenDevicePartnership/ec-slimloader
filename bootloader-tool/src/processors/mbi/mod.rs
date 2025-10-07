@@ -412,7 +412,7 @@ pub fn generate_nxp(
     let mut config: BTreeMap<String, String> = BTreeMap::default();
 
     let mut cert_block_file = NamedTempFile::new()?;
-    serde_yml::to_writer(&mut cert_block_file, &cert_block)?;
+    serde_json::to_writer(&mut cert_block_file, &cert_block)?;
 
     config.insert(
         "certBlock".to_owned(),

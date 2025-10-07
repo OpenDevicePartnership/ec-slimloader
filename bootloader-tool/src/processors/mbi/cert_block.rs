@@ -67,7 +67,7 @@ pub fn generate(nxpimage: impl AsRef<Path>, config: &Config, certificate_idx: us
 
     let mut input_file = tempfile::NamedTempFile::new()?;
     let output_file = tempfile::NamedTempFile::new()?;
-    serde_yml::to_writer(
+    serde_json::to_writer(
         &mut input_file,
         &generate_config(config, certificate_idx, Some(output_file.path())),
     )?;
