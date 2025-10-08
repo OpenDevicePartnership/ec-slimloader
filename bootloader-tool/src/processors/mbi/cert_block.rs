@@ -1,19 +1,19 @@
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use anyhow::Context;
-use rsa::{RsaPublicKey, pkcs1v15::VerifyingKey, pkcs8::DecodePublicKey, traits::PublicKeyParts};
+use rsa::RsaPublicKey;
+use rsa::pkcs1v15::VerifyingKey;
+use rsa::pkcs8::DecodePublicKey;
+use rsa::traits::PublicKeyParts;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use x509_parser::public_key::PublicKey;
 
-use crate::{
-    Config,
-    processors::{certificates::Rkth, mbi::parse_x509_cert},
-};
+use crate::Config;
+use crate::processors::certificates::Rkth;
+use crate::processors::mbi::parse_x509_cert;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,7 +67,7 @@ pub fn generate(nxpimage: impl AsRef<Path>, config: &Config, certificate_idx: us
 
     let mut input_file = tempfile::NamedTempFile::new()?;
     let output_file = tempfile::NamedTempFile::new()?;
-    serde_yml::to_writer(
+    serde_json::to_writer(
         &mut input_file,
         &generate_config(config, certificate_idx, Some(output_file.path())),
     )?;

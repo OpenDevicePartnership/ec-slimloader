@@ -1,7 +1,8 @@
 #![allow(unused)]
 
-use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {

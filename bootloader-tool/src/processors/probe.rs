@@ -1,15 +1,12 @@
-use probe_rs::{
-    Permissions, Session,
-    probe::{DebugProbeSelector, list::Lister},
-};
+use probe_rs::probe::DebugProbeSelector;
+use probe_rs::probe::list::Lister;
+use probe_rs::{Permissions, Session};
 
 pub async fn start_session(chip: &str, probe_selector: Option<String>) -> anyhow::Result<Session> {
     let session = if let Some(ref probe) = probe_selector {
-        Lister::new()
-            .open(DebugProbeSelector::try_from(&**probe)?)
-            .await?
+        Lister::new().open(DebugProbeSelector::try_from(&**probe)?)?
     } else {
-        let probes = Lister::new().list_all().await;
+        let probes = Lister::new().list_all();
         let probe = match probes.len() {
             0 => return Err(anyhow::anyhow!("No probe found")),
             1 => probes.first().unwrap(),

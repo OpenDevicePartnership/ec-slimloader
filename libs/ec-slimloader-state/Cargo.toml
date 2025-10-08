@@ -11,9 +11,12 @@ num_enum = { version = "0.7.4", default-features = false }
 
 embedded-storage-async = { workspace = true }
 defmt = { workspace = true, optional = true }
+defmt-or-log = { workspace = true }
+log = { workspace = true, optional = true }
 
 [dev-dependencies]
 embassy-futures = "0.1.1"
 
 [features]
-defmt = ["dep:defmt"]
+defmt = ["dep:defmt", "defmt-or-log/defmt"]
+log = ["dep:log", "defmt-or-log/log"]

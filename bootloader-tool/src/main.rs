@@ -11,8 +11,8 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let config = Config::read(&cli.config)
-        .with_context(|| format!("Tried to open --config {}", cli.config.display()))?;
+    let config =
+        Config::read(&cli.config).with_context(|| format!("Tried to open --config {}", cli.config.display()))?;
 
     if let Some(command) = cli.commands {
         commands::process(&config, command).await

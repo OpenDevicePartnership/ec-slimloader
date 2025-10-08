@@ -82,19 +82,27 @@ impl<T: NorFlash> FlashJournal<T> {
 
     /// Walk through the entire NVM range, and find the last valid [State] entry
     /// and find the first empty slot of a [State] entry, if any.
-    async fn compute_cache<const N: usize>(inner: &mut T) -> Result<Cache, T::Error> {
-        let mut buf = [0u8; N];
-        let block_count = inner.capacity().div_ceil(N);
+    ///
+    /// `BLOCK_SIZE` denotes the number of bytes that are read in a single batch
+    /// and are analysed, before reading the next block.
+    /// A larger block size generally improves performance, and needs to be a non-zero multiple of 2 bytes.
+    async fn compute_cache<const BLOCK_SIZE: usize>(inner: &mut T) -> Result<Cache, T::Error> {
+        const CHUNK_SIZE: usize = 2;
+
+        defmt_or_log::assert!(BLOCK_SIZE >= CHUNK_SIZE);
+        defmt_or_log::assert!(BLOCK_SIZE.is_multiple_of(CHUNK_SIZE));
+
+        let mut buf = [0u8; BLOCK_SIZE];
+        let block_count = inner.capacity().div_ceil(BLOCK_SIZE);
 
         let mut result = Cache::default();
         for block_i in 0..block_count {
-            let block_start = block_i * N;
-            let block_end = (block_start + N).min(inner.capacity());
+            let block_start = block_i * BLOCK_SIZE;
+            let block_end = (block_start + BLOCK_SIZE).min(inner.capacity());
 
             let slice = &mut buf[0..block_end - block_start];
             inner.read(block_start as u32, slice).await?;
 
-            const CHUNK_SIZE: usize = 2;
             for (chunk_i, chunk) in slice.chunks_exact(CHUNK_SIZE).enumerate() {
                 // Note(unsafe): we are using chunks_exact and then cast the slice into the same size array.
                 let chunk: [u8; CHUNK_SIZE] = unsafe { chunk.try_into().unwrap_unchecked() };
@@ -235,13 +243,13 @@ mod tests {
 
     #[test]
     fn journal_normal() {
-        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, true);
+        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, false);
         embassy_futures::block_on(test_journal(&mut mock, true));
     }
 
     #[test]
     fn journal_garbage() {
-        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, true);
+        let mut mock: MockFlashBase<3, 2, 8> = MockFlashBase::new(None, false);
         embassy_futures::block_on(async {
             // Write garbage to pages 1 and 2.
             let bytes = [0xaa; 32];
@@ -258,7 +266,7 @@ mod tests {
     #[test]
     fn journal_realistic() {
         // Use a realistic page count and size.
-        let mut mock: MockFlashBase<2, 2, 2048> = MockFlashBase::new(None, true);
+        let mut mock: MockFlashBase<2, 2, 2048> = MockFlashBase::new(None, false);
         embassy_futures::block_on(async {
             for status in [Status::Initial, Status::Attempting, Status::Confirmed, Status::Failed] {
                 for i in 0b0..0b111u8 {

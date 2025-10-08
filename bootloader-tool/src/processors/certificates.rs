@@ -1,16 +1,12 @@
-use std::{
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use anyhow::Context;
 use serde::Serialize;
 
-use crate::{
-    GenerateCertificatesArguments,
-    config::{Certificate, CertificatePrototype, Config},
-    util::{bytes_to_u32_le, generate_hex, parse_hex},
-};
+use crate::GenerateCertificatesArguments;
+use crate::config::{Certificate, CertificatePrototype, Config};
+use crate::util::{bytes_to_u32_le, generate_hex, parse_hex};
 
 #[derive(Serialize)]
 struct BasicConstraints {
@@ -98,7 +94,7 @@ fn generate_certificate(
     };
 
     let mut input_file = tempfile::NamedTempFile::new()?;
-    serde_yml::to_writer(&mut input_file, &input)?;
+    serde_json::to_writer(&mut input_file, &input)?;
 
     let output_path = &certificate.path;
     if std::fs::exists(output_path)? {

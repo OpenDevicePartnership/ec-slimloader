@@ -33,6 +33,12 @@ impl From<Slot> for u8 {
     }
 }
 
+impl core::fmt::Display for Slot {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self, f)
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ParseResult {

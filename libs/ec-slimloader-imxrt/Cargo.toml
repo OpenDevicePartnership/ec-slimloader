@@ -46,7 +46,12 @@ defmt = [
     "embassy-imxrt/defmt",
     "partition-manager/defmt",
 ]
-log = ["defmt-or-log/log", "imxrt-rom/log"]
+log = [
+    "dep:log",
+    "defmt-or-log/log",
+    "imxrt-rom/log",
+    "ec-slimloader-state/log",
+]
 
 default = []
 
@@ -64,6 +69,7 @@ mimxrt600-fcb = { version = "0.2.2", optional = true }
 
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
+log = { workspace = true, optional = true }
 
 embassy-embedded-hal = "0.5.0"
 

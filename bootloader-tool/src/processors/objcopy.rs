@@ -1,8 +1,9 @@
+use std::ops::Range;
+
 use anyhow::Context;
 use object::elf::{SHT_NOBITS, SHT_PROGBITS};
 use object::read::elf::{ElfFile32, ProgramHeader};
 use object::{Object, ObjectSegment};
-use std::ops::Range;
 
 const PRELUDE_ADDRESS_RANGE: Range<u32> = 0x08000000..0x08001000;
 
@@ -78,8 +79,7 @@ pub fn objcopy(file: &ElfFile32) -> anyhow::Result<(Vec<u8>, u32)> {
     for segment in segments {
         let paddr = segment.elf_program_header().p_paddr(file.endianness());
 
-        image[paddr as usize - base_addr as usize
-            ..paddr as usize - base_addr as usize + segment.size() as usize]
+        image[paddr as usize - base_addr as usize..paddr as usize - base_addr as usize + segment.size() as usize]
             .copy_from_slice(segment.data().unwrap());
     }
 

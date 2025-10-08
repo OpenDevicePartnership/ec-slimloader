@@ -1,6 +1,9 @@
 use probe_rs::MemoryInterface;
 
-use crate::{RunCommands, commands::download::DownloadOutput, config::Config, processors::otp};
+use crate::RunCommands;
+use crate::commands::download::DownloadOutput;
+use crate::config::Config;
+use crate::processors::otp;
 
 pub async fn process(config: &Config, command: RunCommands) -> anyhow::Result<()> {
     let otp = otp::get_otp(config)?;

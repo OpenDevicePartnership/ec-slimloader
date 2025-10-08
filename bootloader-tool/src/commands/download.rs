@@ -1,13 +1,15 @@
+use std::path::Path;
+
+use DownloadCommands::Other;
+use anyhow::Context;
+use probe_rs::flashing::ElfOptions;
+use probe_rs::{Session, flashing};
+
 use crate::commands::sign::SignOutput;
 use crate::config::Config;
 use crate::processors::certificates::Rkth;
 use crate::processors::probe;
 use crate::{DownloadCommands, ProbeArgs, RunCommands, SignCommands};
-use DownloadCommands::Other;
-use anyhow::Context;
-use probe_rs::flashing::ElfOptions;
-use probe_rs::{Session, flashing};
-use std::path::Path;
 
 pub async fn process(config: &Config, command: DownloadCommands) -> anyhow::Result<()> {
     match command {

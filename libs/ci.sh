@@ -23,9 +23,11 @@ BUILD_EXTRA=""
 FEATURE_COMBINATIONS=(
   "mimxrt633s"
   "mimxrt633s,defmt"
+  "mimxrt633s,log"
   "mimxrt633s,non-secure"
   "mimxrt685s"
   "mimxrt685s,defmt"
+  "mimxrt685s,log"
   "mimxrt685s,non-secure"
 )
 cargo batch \

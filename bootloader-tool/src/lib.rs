@@ -1,6 +1,8 @@
-pub use crate::config::Config;
-use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
+
+use clap::{Args, Parser, Subcommand};
+
+pub use crate::config::Config;
 
 pub mod commands;
 mod config;

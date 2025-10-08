@@ -44,6 +44,9 @@ jobs:
       - name: cargo fmt --check (examples)
         run: cargo fmt --check
         working-directory: "./examples/rt685s"
+      - name: cargo fmt --check (bootloader-tool)
+        run: cargo fmt --check
+        working-directory: "./bootloader-tool"
 
   clippy:
     runs-on: ubuntu-latest
@@ -65,7 +68,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          components: clippy
+          components: clippy,rustfmt
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo clippy (libs)
@@ -82,6 +85,13 @@ jobs:
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./examples/rt685s"
+      - name: cargo clippy (bootloader-tool)
+        uses: giraffate/clippy-action@v1
+        with:
+          reporter: "github-pr-check"
+          clippy_flags: -- -D clippy::suspicious -D clippy::correctness -D clippy::perf -D clippy::style
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workdir: "./bootloader-tool"
 
   # Enable once we have a released crate
   # semver:
@@ -116,6 +126,8 @@ jobs:
           submodules: true
       - name: Install nightly
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt # required for device-driver
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo doc (libs)
@@ -145,6 +157,8 @@ jobs:
 
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt # required for device-driver
 
       - name: rustup target add thumbv8m.main-none-eabihf
         run: rustup target add thumbv8m.main-none-eabihf
@@ -202,6 +216,10 @@ jobs:
         target: [thumbv8m.main-none-eabihf]
     name: ubuntu / MSRV ${{ matrix.msrv }}
     steps:
+      - name: Install libudev (linux)
+        run: |
+          sudo apt update
+          sudo apt install -y libudev-dev
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -209,6 +227,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.msrv }}
+          components: rustfmt # required for device-driver
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo +${{ matrix.msrv }} check (libs)
@@ -217,3 +236,6 @@ jobs:
       - name: cargo +${{ matrix.msrv }} check (examples)
         run: cargo check
         working-directory: "./examples/rt685s"
+      - name: cargo +${{ matrix.msrv }} check (bootloader-tool)
+        run: cargo check
+        working-directory: "./bootloader-tool"

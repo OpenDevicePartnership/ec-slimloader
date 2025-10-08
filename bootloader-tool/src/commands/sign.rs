@@ -1,12 +1,14 @@
+use std::path::PathBuf;
+
+use anyhow::Context;
+use object::read::elf::ElfFile32;
+
 use crate::SignCommands;
 use crate::config::Config;
 use crate::processors::certificates::Rkth;
 use crate::processors::mbi::cert_block;
 use crate::processors::otp::get_otp;
 use crate::processors::{mbi, objcopy};
-use anyhow::Context;
-use object::read::elf::ElfFile32;
-use std::path::PathBuf;
 
 pub struct SignOutput {
     pub output_path: Option<PathBuf>,

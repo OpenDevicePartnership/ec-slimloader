@@ -1,12 +1,10 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use bootloader_tool::processors::{
-    mbi::{self, cert_block},
-    objcopy,
-    otp::Otp,
-};
 use bootloader_tool::Config;
+use bootloader_tool::processors::mbi::{self, cert_block};
+use bootloader_tool::processors::objcopy;
+use bootloader_tool::processors::otp::Otp;
 use object::read::elf::ElfFile32;
 
 fn get_private_key(config: &Config, certificate_idx: usize) -> PathBuf {

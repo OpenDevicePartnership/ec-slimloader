@@ -1,13 +1,10 @@
-use aes::{
-    Aes256,
-    cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray},
-};
+use aes::Aes256;
+use aes::cipher::generic_array::GenericArray;
+use aes::cipher::{BlockEncrypt, KeyInit};
 use anyhow::Context;
 
-use crate::{
-    config::Config,
-    util::{bytes_to_u32_be, generate_hex, parse_hex},
-};
+use crate::config::Config;
+use crate::util::{bytes_to_u32_be, generate_hex, parse_hex};
 
 #[derive(Clone)]
 pub struct Otp(pub [u8; 32]);
@@ -24,9 +21,11 @@ impl Otp {
     }
 
     pub fn from_hex(str: &str) -> anyhow::Result<Self> {
-        Ok(Self(parse_hex(str)?.try_into().map_err(|_| {
-            anyhow::anyhow!("Input not appropriate size")
-        })?))
+        Ok(Self(
+            parse_hex(str)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Input not appropriate size"))?,
+        ))
     }
 
     pub fn as_reversed_u32_be(&self) -> Vec<u32> {
@@ -49,10 +48,7 @@ pub struct HmacKey(pub [u8; 16]);
 
 pub fn generate(config: &Config) -> anyhow::Result<Otp> {
     if std::fs::exists(&config.otp_path)? {
-        log::warn!(
-            "OTP file {} already generated, skipping...",
-            &config.otp_path.display()
-        );
+        log::warn!("OTP file {} already generated, skipping...", &config.otp_path.display());
         return get_otp(config);
     }
 
