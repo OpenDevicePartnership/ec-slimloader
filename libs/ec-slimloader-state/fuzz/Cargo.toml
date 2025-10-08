@@ -1,0 +1,30 @@
+[package]
+name = "ec-slimloader-state-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[dependencies]
+ec-slimloader-state = { path = "..", features = ["_test"] }
+
+libfuzzer-sys = "0.4.9"
+arbitrary = { version = "1.4.1", features = ["derive"] }
+rand = "0.9.1"
+rand_pcg = "0.9.0"
+futures = { version = "0.3.31", features = ["executor"] }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "random-flash"
+path = "fuzz_targets/random-flash.rs"
+test = false
+doc = false

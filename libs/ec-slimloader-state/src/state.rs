@@ -39,6 +39,13 @@ impl core::fmt::Display for Slot {
     }
 }
 
+#[cfg(feature = "_test")]
+impl arbitrary::Arbitrary<'_> for Slot {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        Ok(Slot::try_from(u.int_in_range(0..=(MAX_SLOT_COUNT - 1) as u8)?).unwrap())
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ParseResult {
@@ -54,6 +61,7 @@ pub enum ParseResult {
 /// ensuring minimal wear on the storage.
 #[derive(Debug, PartialEq, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "_test", derive(arbitrary::Arbitrary))]
 #[repr(u8)]
 pub enum Status {
     /// Initial attempt at booting the target image.
@@ -76,6 +84,16 @@ pub enum Status {
 /// We ensure this by disallowing Slot value 0b111.
 #[derive(PartialEq, Clone, Copy)]
 pub struct State([u8; 2]);
+
+#[cfg(feature = "_test")]
+impl arbitrary::Arbitrary<'_> for State {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        let status = Status::arbitrary(u)?;
+        let slot_a = Slot::arbitrary(u)?;
+        let slot_b = Slot::arbitrary(u)?;
+        Ok(State::new(status, slot_a, slot_b))
+    }
+}
 
 impl State {
     pub const fn new(status: Status, target: Slot, backup: Slot) -> Self {

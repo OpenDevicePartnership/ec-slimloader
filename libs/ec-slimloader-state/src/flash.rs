@@ -1,5 +1,5 @@
-#[cfg(test)]
-mod mock;
+#[cfg(any(test, feature = "_test"))]
+pub mod mock;
 
 use core::ops::Range;
 

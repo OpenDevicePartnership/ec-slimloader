@@ -1,5 +1,5 @@
 //! Journal for the EC Slimloader containing [state::State].
-#![no_std]
+#![cfg_attr(not(feature = "_test"), no_std)]
 
 #[cfg(test)]
 #[macro_use]
