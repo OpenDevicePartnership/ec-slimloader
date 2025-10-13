@@ -25,4 +25,4 @@ log = ["dep:log", "defmt-or-log/log"]
 # Used for the fuzzing framework
 _test = ["dep:arbitrary"]
 
-default = ["_test"]
+default = []
