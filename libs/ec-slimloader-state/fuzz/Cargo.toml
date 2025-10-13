@@ -28,3 +28,9 @@ name = "random-flash"
 path = "fuzz_targets/random-flash.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "interrupted"
+path = "fuzz_targets/interrupted.rs"
+test = false
+doc = false

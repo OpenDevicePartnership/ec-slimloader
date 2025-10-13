@@ -88,6 +88,10 @@ impl<const PAGES: usize, const BYTES_PER_WORD: usize, const PAGE_WORDS: usize>
             Ok(())
         }
     }
+
+    pub fn remove_shutoff(&mut self) {
+        self.bytes_until_shutoff = None;
+    }
 }
 
 impl<const PAGES: usize, const BYTES_PER_WORD: usize, const PAGE_WORDS: usize> ErrorType
