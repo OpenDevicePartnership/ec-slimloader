@@ -239,3 +239,25 @@ jobs:
       - name: cargo +${{ matrix.msrv }} check (bootloader-tool)
         run: cargo check
         working-directory: "./bootloader-tool"
+
+  fuzz:
+    runs-on: ubuntu-latest
+    name: ubuntu / stable / fuzz
+    strategy:
+      fail-fast: false
+      matrix:
+        bin: [random-flash, interrupted]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: cargo fuzz (libs/state)
+        run: cargo fuzz run --sanitizer none -j`nproc` ${{ matrix.bin }} -- -max_total_time=10
+        working-directory: "./libs/ec-slimloader-state/fuzz"
