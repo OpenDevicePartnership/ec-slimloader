@@ -54,8 +54,8 @@ async fn main(_spawner: Spawner) {
         Err(e) => defmt_or_log::panic!("Failed to initialize the flash state journal: {:?}", e),
     };
 
-    let slot_a = defmt_or_log::unwrap!(Slot::try_from(0));
-    let slot_b = defmt_or_log::unwrap!(Slot::try_from(1));
+    let slot_a = Slot::S0;
+    let slot_b = Slot::S1;
 
     let state = match journal.get() {
         Some(state) => {

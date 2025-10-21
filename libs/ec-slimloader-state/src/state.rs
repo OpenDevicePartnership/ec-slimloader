@@ -6,10 +6,22 @@ const CRC: crc::Crc<u8> = crc::Crc::<u8>::new(&crc::CRC_8_OPENSAFETY);
 
 /// Image slot ID.
 ///
-/// Valid values from 0x00 to 0x06.
+/// Valid values from 0x00 to 0x06 for 7 slots maximum.
+/// Represented as a 3-bit wide value for use in [State].
+///
+/// 0b111 is deemed an invalid value because [State] can never be only 1's.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Slot(u8);
+#[repr(u8)]
+pub enum Slot {
+    S0 = 0x00,
+    S1 = 0x01,
+    S2 = 0x02,
+    S3 = 0x03,
+    S4 = 0x04,
+    S5 = 0x05,
+    S6 = 0x06,
+}
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -19,17 +31,22 @@ impl TryFrom<u8> for Slot {
     type Error = TooManyBits;
 
     fn try_from(val: u8) -> Result<Slot, Self::Error> {
-        if val >= MAX_SLOT_COUNT as u8 {
-            Err(TooManyBits)
-        } else {
-            Ok(Slot(val))
-        }
+        Ok(match val {
+            0x00 => Slot::S0,
+            0x01 => Slot::S1,
+            0x02 => Slot::S2,
+            0x03 => Slot::S3,
+            0x04 => Slot::S4,
+            0x05 => Slot::S5,
+            0x06 => Slot::S6,
+            _ => return Err(TooManyBits),
+        })
     }
 }
 
 impl From<Slot> for u8 {
     fn from(val: Slot) -> Self {
-        val.0
+        val as u8
     }
 }
 
@@ -99,8 +116,8 @@ impl State {
     pub const fn new(status: Status, target: Slot, backup: Slot) -> Self {
         let mut data = 0u8;
         data |= (status as u8) << 6;
-        data |= backup.0 << 3;
-        data |= target.0;
+        data |= (backup as u8) << 3;
+        data |= target as u8;
 
         let crc = CRC.checksum(&[data]);
 
@@ -221,8 +238,8 @@ mod tests {
     /// Try a few handpicked [State] values and assert Crc value.
     #[test]
     fn state_validity_crc() {
-        let slot_a = Slot::try_from(1).unwrap();
-        let slot_b = Slot::try_from(2).unwrap();
+        let slot_a = Slot::S1;
+        let slot_b = Slot::S2;
 
         let state = State::new(Status::Initial, slot_b, slot_a);
         assert_eq!(state.0[1], 12); // Crc
