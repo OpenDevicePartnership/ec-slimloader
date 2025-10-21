@@ -45,6 +45,8 @@ impl ec_slimloader_imxrt::ImxrtConfig for Config {
     }
 }
 
+impl ec_slimloader::BootStatePolicy for Config {}
+
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) -> ! {
     ec_slimloader::start::<ec_slimloader_imxrt::Imxrt<Config>, JOURNAL_BUFFER_SIZE>(Config).await

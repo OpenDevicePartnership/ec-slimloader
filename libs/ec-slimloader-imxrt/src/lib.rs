@@ -17,7 +17,7 @@ mod mbi;
 use core::ops::Range;
 
 use defmt_or_log::{error, info, panic};
-use ec_slimloader::{Board, BootError};
+use ec_slimloader::{Board, BootError, BootStatePolicy};
 use ec_slimloader_state::flash::FlashJournal;
 use ec_slimloader_state::state::Slot;
 use embassy_embedded_hal::adapter::BlockingAsync;
@@ -77,7 +77,7 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
     }
 }
 
-impl<C: ImxrtConfig> Board for Imxrt<C> {
+impl<C: ImxrtConfig + BootStatePolicy> Board for Imxrt<C> {
     type Config = C;
 
     async fn init<const JOURNAL_BUFFER_SIZE: usize>(config: Self::Config) -> Self {
