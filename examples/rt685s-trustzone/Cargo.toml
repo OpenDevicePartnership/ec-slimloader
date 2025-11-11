@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = [
+    "application-secure",
+    "bootloader",
+    "bsp",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.dependencies]
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false }
+
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", default-features = false }
+embassy-sync = "0.7.2"
+embassy-executor = "0.9.1"
+
+defmt = "1.0.1"
+defmt-or-log = { version = "0.2.2", default-features = false }
+defmt-rtt = "0.4.0"
+
+[profile.release]
+lto = true      # better optimizations
+debug = 2
+opt-level = "s"
+
+[patch.crates-io]
+# Required to get access to unreleased trustzone registers
+cortex-m = { git = "https://github.com/rust-embedded/cortex-m.git", rev="a3ff54b" }
+# Required to be able to pass a linker section to the init functions
+rtt-target = { git = "https://github.com/probe-rs/rtt-target.git", rev = "117d951" }
