@@ -1,10 +1,5 @@
 [target.thumbv8m.main-none-eabihf]
-runner = [
-  'probe-rs',
-  'run',
-  '--chip',
-  'MIMXRT685SFVKB'
-]
+runner = "probe-rs run --chip MIMXRT685SFVKB --no-catch-hardfault"
 
 rustflags = [
   "-C", "linker=arm-none-eabi-ld",
