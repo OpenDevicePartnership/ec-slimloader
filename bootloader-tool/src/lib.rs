@@ -68,8 +68,11 @@ pub enum GenerateCommands {
 #[derive(Args, Debug, Clone)]
 pub struct SignArguments {
     /// Input file path (ELF)
-    #[arg(short, long, value_name = "INPUT_FILE")]
-    input_path: PathBuf,
+    /// 
+    /// When this argument is provided multiple times, the last argument is used as the basis for non-provided arguments,
+    /// and when running provided to probe-rs for the RTT defmt catalogue.
+    #[arg(short, long, value_name = "INPUT_FILES")]
+    input_paths: Vec<PathBuf>,
     /// Signature file
     ///
     /// If present, will be checked against image and merged into output path
@@ -106,25 +109,31 @@ impl SignArguments {
     pub fn output_unsigned_path_with_default(&self) -> PathBuf {
         self.output_unsigned_path
             .clone()
-            .unwrap_or_else(|| self.input_path.clone().with_extension("unsigned.bin"))
+            .unwrap_or_else(|| self.input_paths.last().unwrap().clone().with_extension("unsigned.bin"))
     }
 
     pub fn output_prestage_path_with_default(&self) -> PathBuf {
         self.output_prestage_path
             .clone()
-            .unwrap_or_else(|| self.input_path.clone().with_extension("mbi-proto.bin"))
+            .unwrap_or_else(|| self.input_paths.last().unwrap().clone().with_extension("mbi-proto.bin"))
     }
 
     pub fn output_path_with_default(&self) -> PathBuf {
         self.output_path
             .clone()
-            .unwrap_or_else(|| self.input_path.clone().with_extension("signed.bin"))
+            .unwrap_or_else(|| self.input_paths.last().unwrap().clone().with_extension("signed.bin"))
+    }
+
+    pub fn signature_path_with_default(&self) -> PathBuf {
+        self.signature_path
+            .clone()
+            .unwrap_or_else(|| self.input_paths.last().unwrap().clone().with_extension("signature.bin"))
     }
 
     pub fn prelude_path_with_default(&self) -> PathBuf {
         self.prelude_path
             .clone()
-            .unwrap_or_else(|| self.input_path.clone().with_extension("prelude.elf"))
+            .unwrap_or_else(|| self.input_paths.last().unwrap().clone().with_extension("prelude.elf"))
     }
 }
 

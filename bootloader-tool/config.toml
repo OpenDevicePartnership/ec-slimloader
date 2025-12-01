@@ -23,6 +23,9 @@ max_size = 0x8000
 state = { start = 0x0800B000, size = 0x2000 }
 
 [application]
-slot_starts = [0x800D000, 0x80F9000]
+slot_starts = [0x0800D000, 0x080F9000]
 run_start = 0x10020000
 slot_size = 0xEC000                  # 944K
+address_mapping = [
+    { from_start = 0x00000000, from_end = 0x0FFFFFFF, to_start = 0x10000000 }
+]

@@ -16,7 +16,7 @@ pub struct SignOutput {
     pub rkth: Rkth,
 }
 
-fn perform_checks(config: &Config, is_bootloader: bool, image: &Vec<u8>, base_addr: u32) -> anyhow::Result<()> {
+fn perform_checks(config: &Config, is_bootloader: bool, image: &[u8], base_addr: u32) -> anyhow::Result<()> {
     struct Values {
         run_start: u64,
         max_size: u64,
@@ -67,19 +67,36 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
         SignCommands::Application(sign_arguments) => (false, sign_arguments),
     };
 
-    let input_data = std::fs::read(&args.input_path)?;
+    let files: Vec<Vec<u8>> = args.input_paths.iter().map(|input_path| {
+        log::info!("Reading ELF from {}", input_path.display());
+        std::fs::read(input_path)
+    }).collect::<Result<Vec<Vec<u8>>, std::io::Error>>()?;
 
-    log::info!("Reading ELF from {}", args.input_path.display());
-    let file = ElfFile32::parse(&input_data[..]).context("Could not parse ELF file")?;
+    let files: Vec<ElfFile32> = files.iter().map(|input_data| {
+        Ok(ElfFile32::parse(&input_data[..]).context("Could not parse ELF file")?)
+    }).collect::<Result<Vec<ElfFile32>, anyhow::Error>>()?;
 
     if is_bootloader {
         log::info!("Extracting prelude");
-        let out = objcopy::remove_non_prelude(&input_data)?;
+        let out = objcopy::remove_non_prelude(&files.first().unwrap())?;
         std::fs::write(args.prelude_path_with_default(), &out).context("Could not write prelude elf file")?;
     }
 
-    log::info!("Generating image for {}", args.input_path.display());
-    let (image, base_addr) = objcopy::objcopy(std::iter::once(&file), &BTreeSet::new())?;
+    let objcopy_config = if is_bootloader {
+        objcopy::Config {
+            mappings: &BTreeSet::new(),
+            max_size: Some(config.bootloader.as_ref().unwrap().max_size as u32),
+        }
+    } else {
+        let app = config.application.as_ref().unwrap();
+        objcopy::Config {
+            mappings: &app.address_mapping,
+            max_size: Some(app.slot_size as u32),
+        }
+    };
+
+    log::info!("Generating image");
+    let (image, base_addr) = objcopy::objcopy(files.iter(), objcopy_config)?;
 
     perform_checks(config, is_bootloader, &image, base_addr)?;
 
@@ -106,10 +123,11 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
     )
     .context("Could not generate prestage MBI")?;
 
-    let mut signature_path = args.signature_path.clone();
+    let rkth = cert_block.rkth();
+    let signature_path = args.signature_path_with_default();
 
-    if !args.dont_sign && signature_path.is_none() {
-        log::info!("Signing image {}", args.input_path.display());
+    if !args.dont_sign {
+        log::info!("Signing image");
 
         let Some(cert_chain) = config.certificates.get(args.certificate) else {
             return Err(anyhow::anyhow!("Certificate chain {} does not exist", args.certificate));
@@ -126,14 +144,8 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
             ));
         };
 
-        let default_path = args.input_path.clone().with_extension("signature.bin");
-        mbi::sign(&default_path, &output_prestage_path, &cert_proto.key_path).context("Could not sign image")?;
-        signature_path = Some(default_path);
-    }
-
-    let rkth = cert_block.rkth();
-
-    if let Some(signature_path) = signature_path {
+        mbi::sign(&signature_path, &output_prestage_path, &cert_proto.key_path).context("Could not sign image")?;
+    
         let output_path = args.output_path_with_default();
         log::info!("Merging signature into image");
         mbi::merge_with_signature(

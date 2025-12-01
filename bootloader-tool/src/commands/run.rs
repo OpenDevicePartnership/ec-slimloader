@@ -60,7 +60,7 @@ pub async fn process(config: &Config, command: RunCommands) -> anyhow::Result<()
         command.args(["--probe", probe]);
     }
 
-    command.arg(run_args.sign_args.input_path).status().unwrap();
+    command.arg(run_args.sign_args.input_paths.last().unwrap()).status().unwrap();
 
     Ok(())
 }

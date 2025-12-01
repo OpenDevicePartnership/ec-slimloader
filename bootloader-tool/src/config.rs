@@ -88,9 +88,12 @@ pub struct ApplicationArgs {
 
 #[derive(Deserialize, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct AddressMapping {
-    from_start: u64,
-    from_end: u64,
-    to_start: u64,
+    /// Start of the address range to be mapped.
+    pub from_start: u64,
+    /// End of the address range to be mapped.
+    pub from_end: u64,
+    /// Start of the offset the address should be mapped to.
+    pub to_start: u64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
