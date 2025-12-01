@@ -5,10 +5,12 @@ MEMORY {
 }
 
 SECTIONS {
-    .shared_rtt : {
+    .shared_rtt (NOLOAD) : ALIGN(4)
+    {
         . = ALIGN(4);
         KEEP(* (.shared_rtt.header))
         KEEP(* (.shared_rtt.buffer))
         . = ALIGN(4);
-    } > SHAREDRTT
+    } > SHAREDRTT AT>FLASH
+    . = ALIGN(4);
 }
