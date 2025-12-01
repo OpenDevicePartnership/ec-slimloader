@@ -1,6 +1,9 @@
 #![allow(unused)]
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
 use serde::Deserialize;
 
@@ -75,6 +78,19 @@ pub struct ApplicationArgs {
     ///
     /// This size is hard-coded and checked in the bootloader.
     pub slot_size: u64,
+    /// Mappings that move ELF file sections Load addresses (LMA).
+    ///
+    /// Typically this would be useful to move non-secure code to the secure memory range,
+    /// such that in plain binary format the file does not span the entire memory.
+    #[serde(default)]
+    pub address_mapping: BTreeSet<AddressMapping>,
+}
+
+#[derive(Deserialize, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub struct AddressMapping {
+    from_start: u64,
+    from_end: u64,
+    to_start: u64,
 }
 
 #[derive(Deserialize, Debug, Clone)]

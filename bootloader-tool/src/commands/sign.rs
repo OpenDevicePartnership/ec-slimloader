@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -18,27 +19,26 @@ pub struct SignOutput {
 fn perform_checks(config: &Config, is_bootloader: bool, image: &Vec<u8>, base_addr: u32) -> anyhow::Result<()> {
     struct Values {
         run_start: u64,
-        max_size: u64
+        max_size: u64,
     }
 
     let values = if is_bootloader {
         let Some(bootloader) = &config.bootloader else {
-            return Err(anyhow::anyhow!("Bootloader field not set in config"))
+            return Err(anyhow::anyhow!("Bootloader field not set in config"));
         };
 
         Values {
             run_start: bootloader.run_start,
-            max_size: bootloader.max_size
+            max_size: bootloader.max_size,
         }
-        
     } else {
         let Some(application) = &config.application else {
-            return Err(anyhow::anyhow!("Application field not set in config"))
+            return Err(anyhow::anyhow!("Application field not set in config"));
         };
 
         Values {
             run_start: application.run_start,
-            max_size: application.slot_size
+            max_size: application.slot_size,
         }
     };
 
@@ -47,14 +47,15 @@ fn perform_checks(config: &Config, is_bootloader: bool, image: &Vec<u8>, base_ad
             "Image will be run from unexpected address 0x{:x}, should be 0x{:x}",
             base_addr,
             values.run_start
-        ));  
+        ));
     }
 
     if values.max_size < image.len() as u64 {
         return Err(anyhow::anyhow!(
             "Image can not fit in 0x{:x}, actual size is 0x{:x}",
-            values.max_size, image.len(),
-        ));  
+            values.max_size,
+            image.len(),
+        ));
     }
 
     Ok(())
@@ -78,7 +79,7 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
     }
 
     log::info!("Generating image for {}", args.input_path.display());
-    let (image, base_addr) = objcopy::objcopy(&file)?;
+    let (image, base_addr) = objcopy::objcopy(std::iter::once(&file), &BTreeSet::new())?;
 
     perform_checks(config, is_bootloader, &image, base_addr)?;
 
