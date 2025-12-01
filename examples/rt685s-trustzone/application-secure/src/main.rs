@@ -382,9 +382,6 @@ fn main() -> ! {
         let nonsecure_reset =
             core::mem::transmute::<*const u32, extern "cmse-nonsecure-call" fn()>(nonsecure_reset as *const u32);
 
-        loop {
-            cortex_m::asm::nop();
-        }
         // Jump.
         nonsecure_reset();
 

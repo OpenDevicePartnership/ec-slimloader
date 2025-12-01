@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "application-nonsecure",
     "application-secure",
     "bootloader",
     "bsp",
@@ -16,7 +17,7 @@ repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 warnings = "deny"
 
 [workspace.dependencies]
-embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false }
+embassy-imxrt = { git = "https://github.com/Wassasin/embassy-imxrt.git", rev="cb164dab5066bf3d274f61a481159ec4a337328e", default-features = false }
 
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", default-features = false }
 embassy-sync = "0.7.2"
@@ -25,6 +26,10 @@ embassy-executor = "0.9.1"
 defmt = "1.0.1"
 defmt-or-log = { version = "0.2.2", default-features = false }
 defmt-rtt = "0.4.0"
+
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.3"
+rtt-target = "0.6.1"
 
 [profile.release]
 lto = true      # better optimizations

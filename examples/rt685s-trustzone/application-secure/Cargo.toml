@@ -5,13 +5,13 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-cortex-m = { version = "0.7.7", features = [
+cortex-m = { workspace = true, features = [
     "inline-asm",
     "critical-section-single-core",
 ] }
-cortex-m-rt = "0.7.3"
+cortex-m-rt.workspace = true
 mimxrt685s-pac = { version = "0.5.0", features = [
     "rt",
     "critical-section",
 ] }
-rtt-target = "0.6.1"
+rtt-target.workspace = true
