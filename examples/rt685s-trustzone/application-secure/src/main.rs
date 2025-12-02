@@ -18,11 +18,14 @@ use rtt_target::ChannelMode::NoBlockSkip;
 // Note: all RAM memory is expressed as being part of the non-secure data RAM range (0x2).
 // IDAU other classifications with or without cache are disregarded,
 // especially for configuring the RAM MPC.
-const SECURE_START_RAM: u32 = 0x2002_0000; // Up to NONSECURE_START_RAM is secure.
+const SECURE_START_RAM: u32 = 0x2000_0000; // Up to NONSECURE_START_RAM is secure.
 
 // Note: START_RAM address must also contain the NS IVT.
-const NONSECURE_START_RAM: u32 = 0x2002_6000;
-const NONSECURE_END_RAM: u32 = 0x2FFF_FFFF;
+const NONSECURE_DATA_START_RAM: u32 = 0x2002_6000;
+const NONSECURE_DATA_END_RAM: u32 = 0x2FFF_FFFF;
+
+const NONSECURE_CODE_START_RAM: u32 = NONSECURE_DATA_START_RAM - 0x2000_0000;
+const NONSECURE_CODE_END_RAM: u32 = NONSECURE_DATA_END_RAM - 0x2000_0000;
 
 const NONSECURE_START_PERIPHERALS: u32 = 0x4000_0000;
 const NONSECURE_END_PERIPHERALS: u32 = 0x4FFF_FFFF;
@@ -30,6 +33,10 @@ const NONSECURE_END_PERIPHERALS: u32 = 0x4FFF_FFFF;
 extern "Rust" {
     static __veneer_base: ();
     static __veneer_limit: ();
+}
+
+unsafe extern "C" {
+    static _application_start: u32;
 }
 
 const VTOR_NS: *mut u32 = 0xE002ED08 as *mut u32;
@@ -103,9 +110,10 @@ fn main() -> ! {
     let _dp = mimxrt685s_pac::Peripherals::take().unwrap();
 
     unsafe {
-        let [nonsecure_sp, nonsecure_reset] = (NONSECURE_START_RAM as *const [u32; 2]).read_volatile();
+        let application_ivt_ptr = core::ptr::from_ref(&_application_start);
+        let [nonsecure_sp, nonsecure_reset] = (application_ivt_ptr as *const [u32; 2]).read_volatile();
 
-        rprintln!("Running. NS SP: {:#010X}, RV: {:#010X}", nonsecure_sp, nonsecure_reset);
+        rprintln!("Running {:#010X}. NS SP: {:#010X}, RV: {:#010X}", application_ivt_ptr as u32, nonsecure_sp, nonsecure_reset);
 
         if nonsecure_sp == u32::MAX || nonsecure_reset == u32::MAX {
             loop {
@@ -130,12 +138,13 @@ fn main() -> ! {
 
         sau.ctrl().write(|w| w.enable().disabled());
 
-        let regions: [(RangeInclusive<u32>, SauRegionAttribute); 3] = [
+        let regions: [(RangeInclusive<u32>, SauRegionAttribute); 4] = [
             (
                 &raw const __veneer_base as u32..=&raw const __veneer_limit as u32 - 1,
                 SauRegionAttribute::NonSecureCallable,
             ),
-            (NONSECURE_START_RAM..=NONSECURE_END_RAM, SauRegionAttribute::NonSecure),
+            (NONSECURE_CODE_START_RAM..=NONSECURE_CODE_END_RAM, SauRegionAttribute::NonSecure),
+            (NONSECURE_DATA_START_RAM..=NONSECURE_DATA_END_RAM, SauRegionAttribute::NonSecure),
             (
                 NONSECURE_START_PERIPHERALS..=NONSECURE_END_PERIPHERALS,
                 SauRegionAttribute::NonSecure,
@@ -181,7 +190,7 @@ fn main() -> ! {
         }
 
         rprintln!("Set secure RAM to secure");
-        set_ram_secure(SECURE_START_RAM..NONSECURE_START_RAM, ahb_secure_ctrl);
+        set_ram_secure(SECURE_START_RAM..NONSECURE_DATA_START_RAM, ahb_secure_ctrl);
 
         rprintln!("Set FlexSPI memory to non-secure");
         reg_write_checked!(ahb_secure_ctrl.flexspi0_region0_rule(0), |w| w.bits(0));
@@ -355,7 +364,7 @@ fn main() -> ! {
         // reg_modify_checked!(ahb_secure_ctrl.misc_ctrl_dp_reg(), |_, w| w.write_lock().restricted());
 
         // Set the nonsecure VTOR.
-        VTOR_NS.write_volatile(NONSECURE_START_RAM as u32);
+        VTOR_NS.write_volatile(application_ivt_ptr as u32);
 
         // Set all interrupts to non-secure.
         for itns in &cp.NVIC.itns {

@@ -17,6 +17,7 @@ embassy-imxrt = { workspace = true, features = [
     "time",
     "mimxrt685s",
     "unstable-pac",
+    "rt",
 ] }
 embassy-executor = { workspace = true, features = [
     "arch-cortex-m",
