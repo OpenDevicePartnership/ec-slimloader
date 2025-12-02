@@ -1,10 +1,14 @@
 #!/bin/bash
 set -e
 
-pushd application-secure
+pushd bootloader > /dev/null
 cargo build --release
-popd
+popd > /dev/null
 
-pushd application-nonsecure
+pushd application-secure > /dev/null
 cargo build --release
-popd
+popd > /dev/null
+
+pushd application-nonsecure > /dev/null
+cargo build --release
+popd > /dev/null
