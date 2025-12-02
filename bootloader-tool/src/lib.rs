@@ -68,10 +68,10 @@ pub enum GenerateCommands {
 #[derive(Args, Debug, Clone)]
 pub struct SignArguments {
     /// Input file path (ELF)
-    ///
-    /// When this argument is provided multiple times, the last argument is used as the basis for non-provided arguments,
-    /// and when running provided to probe-rs for the RTT defmt catalogue.
-    #[arg(short, long, value_name = "INPUT_FILES")]
+    /// When this argument is provided multiple times, the ELF files are merged and turned into a single MBI container.
+    /// The sections of these ELF files *MUST* be consecutive and non-overlapping.
+    /// The last provided argument is considered to be the 'primary' <INPUT_FILE>.
+    #[arg(short, long, value_name = "INPUT_FILES", verbatim_doc_comment)]
     input_paths: Vec<PathBuf>,
     /// Signature file
     ///

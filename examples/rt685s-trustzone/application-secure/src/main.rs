@@ -431,7 +431,7 @@ fn set_ram_secure(mut region: Range<u32>, ahb_secure_ctrl: &ahb_secure_ctrl::Reg
             ];
 
             let (block_start, block_size, previous_blocks) = BLOCK_SIZE_TABLE
-                .into_iter()
+                .iter()
                 .find(|(block_address, _, _)| address >= *block_address)
                 .unwrap();
 

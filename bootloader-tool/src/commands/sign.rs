@@ -78,12 +78,12 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
 
     let files: Vec<ElfFile32> = files
         .iter()
-        .map(|input_data| Ok(ElfFile32::parse(&input_data[..]).context("Could not parse ELF file")?))
+        .map(|input_data| ElfFile32::parse(&input_data[..]).context("Could not parse ELF file"))
         .collect::<Result<Vec<ElfFile32>, anyhow::Error>>()?;
 
     if is_bootloader {
         log::info!("Extracting prelude");
-        let out = objcopy::remove_non_prelude(&files.first().unwrap())?;
+        let out = objcopy::remove_non_prelude(files.first().unwrap())?;
         std::fs::write(args.prelude_path_with_default(), &out).context("Could not write prelude elf file")?;
     }
 
