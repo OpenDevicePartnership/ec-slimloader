@@ -1,9 +1,7 @@
 #![allow(unused)]
 
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
