@@ -68,7 +68,7 @@ pub enum GenerateCommands {
 #[derive(Args, Debug, Clone)]
 pub struct SignArguments {
     /// Input file path (ELF)
-    /// 
+    ///
     /// When this argument is provided multiple times, the last argument is used as the basis for non-provided arguments,
     /// and when running provided to probe-rs for the RTT defmt catalogue.
     #[arg(short, long, value_name = "INPUT_FILES")]

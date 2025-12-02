@@ -36,7 +36,12 @@ struct Segment<'a> {
     data: &'a [u8],
 }
 
-fn get_segments<'a>(file_i: usize, file: &ElfFile32<'a>, config: &Config, last_paddr: &mut u32) -> Result<Vec<Segment<'a>>, anyhow::Error> {
+fn get_segments<'a>(
+    file_i: usize,
+    file: &ElfFile32<'a>,
+    config: &Config,
+    last_paddr: &mut u32,
+) -> Result<Vec<Segment<'a>>, anyhow::Error> {
     // Segments must be globally ordered.
     // If the files are not passed in the correct order, an error is thrown.
     let mut segments = vec![];
@@ -71,11 +76,8 @@ fn get_segments<'a>(file_i: usize, file: &ElfFile32<'a>, config: &Config, last_p
 
         let data = segment.data().unwrap();
         *last_paddr = paddr + data.len() as u32;
-        
-        segments.push(Segment {
-            data,
-            paddr,
-        });
+
+        segments.push(Segment { data, paddr });
     }
 
     let base_addr = segments.iter().map(|segment| segment.paddr).min().unwrap();
@@ -96,8 +98,7 @@ fn get_segments<'a>(file_i: usize, file: &ElfFile32<'a>, config: &Config, last_p
     if actual_entry != expected_entry {
         return Err(anyhow::anyhow!(format!(
             "Image[{file_i}] entrypoint 0x{:0x} not at expected address 0x{:0x}",
-            actual_entry,
-            expected_entry
+            actual_entry, expected_entry
         )));
     }
 

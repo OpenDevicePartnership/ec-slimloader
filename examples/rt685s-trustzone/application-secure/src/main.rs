@@ -113,7 +113,12 @@ fn main() -> ! {
         let application_ivt_ptr = core::ptr::from_ref(&_application_start);
         let [nonsecure_sp, nonsecure_reset] = (application_ivt_ptr as *const [u32; 2]).read_volatile();
 
-        rprintln!("Running {:#010X}. NS SP: {:#010X}, RV: {:#010X}", application_ivt_ptr as u32, nonsecure_sp, nonsecure_reset);
+        rprintln!(
+            "Running {:#010X}. NS SP: {:#010X}, RV: {:#010X}",
+            application_ivt_ptr as u32,
+            nonsecure_sp,
+            nonsecure_reset
+        );
 
         if nonsecure_sp == u32::MAX || nonsecure_reset == u32::MAX {
             loop {
@@ -143,8 +148,14 @@ fn main() -> ! {
                 &raw const __veneer_base as u32..=&raw const __veneer_limit as u32 - 1,
                 SauRegionAttribute::NonSecureCallable,
             ),
-            (NONSECURE_CODE_START_RAM..=NONSECURE_CODE_END_RAM, SauRegionAttribute::NonSecure),
-            (NONSECURE_DATA_START_RAM..=NONSECURE_DATA_END_RAM, SauRegionAttribute::NonSecure),
+            (
+                NONSECURE_CODE_START_RAM..=NONSECURE_CODE_END_RAM,
+                SauRegionAttribute::NonSecure,
+            ),
+            (
+                NONSECURE_DATA_START_RAM..=NONSECURE_DATA_END_RAM,
+                SauRegionAttribute::NonSecure,
+            ),
             (
                 NONSECURE_START_PERIPHERALS..=NONSECURE_END_PERIPHERALS,
                 SauRegionAttribute::NonSecure,

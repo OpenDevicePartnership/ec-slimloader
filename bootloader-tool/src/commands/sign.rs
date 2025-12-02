@@ -67,14 +67,19 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
         SignCommands::Application(sign_arguments) => (false, sign_arguments),
     };
 
-    let files: Vec<Vec<u8>> = args.input_paths.iter().map(|input_path| {
-        log::info!("Reading ELF from {}", input_path.display());
-        std::fs::read(input_path)
-    }).collect::<Result<Vec<Vec<u8>>, std::io::Error>>()?;
+    let files: Vec<Vec<u8>> = args
+        .input_paths
+        .iter()
+        .map(|input_path| {
+            log::info!("Reading ELF from {}", input_path.display());
+            std::fs::read(input_path)
+        })
+        .collect::<Result<Vec<Vec<u8>>, std::io::Error>>()?;
 
-    let files: Vec<ElfFile32> = files.iter().map(|input_data| {
-        Ok(ElfFile32::parse(&input_data[..]).context("Could not parse ELF file")?)
-    }).collect::<Result<Vec<ElfFile32>, anyhow::Error>>()?;
+    let files: Vec<ElfFile32> = files
+        .iter()
+        .map(|input_data| Ok(ElfFile32::parse(&input_data[..]).context("Could not parse ELF file")?))
+        .collect::<Result<Vec<ElfFile32>, anyhow::Error>>()?;
 
     if is_bootloader {
         log::info!("Extracting prelude");
@@ -145,7 +150,7 @@ pub async fn process(config: &Config, command: SignCommands) -> anyhow::Result<S
         };
 
         mbi::sign(&signature_path, &output_prestage_path, &cert_proto.key_path).context("Could not sign image")?;
-    
+
         let output_path = args.output_path_with_default();
         log::info!("Merging signature into image");
         mbi::merge_with_signature(
