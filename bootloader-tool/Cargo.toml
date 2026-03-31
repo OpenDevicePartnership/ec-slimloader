@@ -7,8 +7,8 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 
-object = { version = "0.37.3", features = ["build"] }
-probe-rs = { version = "0.29.1", default-features = false, features = ["builtin-targets"] }
+object = { version = "0.38", features = ["build"] }
+probe-rs = { version = "0.31.0", default-features = false, features = ["builtin-targets"] }
 
 tokio = { version = "1.47.1", features = ["macros", "rt", "rt-multi-thread"] }
 
@@ -27,7 +27,7 @@ log = "0.4"
 hmac = "0.12"
 sha2 = "0.10"
 aes = "0.8"
-rsa = { version = "0.9.8", features = ["sha2"] }
+rsa = { version = "0.9.10", features = ["sha2"] }
 x509-parser = { version = "0.18.0", features = ["verify"] }
 
 tempfile = "3.20.0"
