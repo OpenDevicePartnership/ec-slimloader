@@ -155,9 +155,9 @@ async fn main(_spawner: Spawner) {
         };
 
         loop {
-            button1.wait_for_falling_edge().await;
+            button1.wait_for_falling_edge().await.unwrap();
             let start = Instant::now();
-            button1.wait_for_rising_edge().await;
+            button1.wait_for_rising_edge().await.unwrap();
             defmt_or_log::info!("USER1");
 
             if start.elapsed() > FUSE_DELAY {
@@ -207,7 +207,7 @@ async fn main(_spawner: Spawner) {
 
     // Task to reboot.
     let button2_fut = async {
-        button2.wait_for_falling_edge().await;
+        button2.wait_for_falling_edge().await.unwrap();
         defmt_or_log::info!("USER2");
 
         Timer::after_millis(100).await; // Await for defmt.
