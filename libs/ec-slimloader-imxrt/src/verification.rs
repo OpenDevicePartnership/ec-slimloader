@@ -28,7 +28,10 @@ impl Rkh {
         let mut hashcrypt = Hashcrypt::new_blocking(hashcrypt);
 
         let mut result = [0u8; 32];
-        hashcrypt.new_sha256().hash(rkhs, &mut result);
+
+        // The hash lenght is hardcoded to 32 bytes and sha256 is always supported on imxrt
+        // so we should never get an error here
+        hashcrypt.new_sha256().hash(rkhs, &mut result).unwrap();
         Rkth::from(result)
     }
 
