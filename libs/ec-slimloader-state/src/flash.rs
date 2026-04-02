@@ -87,10 +87,14 @@ impl<T: NorFlash> FlashJournal<T> {
     /// and are analysed, before reading the next block.
     /// A larger block size generally improves performance, and needs to be a non-zero multiple of 2 bytes.
     async fn compute_cache<const BLOCK_SIZE: usize>(inner: &mut T) -> Result<Cache, T::Error> {
-        const CHUNK_SIZE: usize = 2;
+        // Advance by WRITE_SIZE so each entry occupies its own programmable unit (required for
+        // flash with ECC; re-programming a page without erasing first corrupts ECC, i.e. MCXA...)
+        //Note that this does mean number of journal entires are reduced.
+        // Falls back to 2-byte chunk for flash with WRITE_SIZE <= 2 (e.g. exsiting IMXRT WRITE_SIZE=2).
+        let incremental_offset = T::WRITE_SIZE.max(2);
 
-        defmt_or_log::assert!(BLOCK_SIZE >= CHUNK_SIZE);
-        defmt_or_log::assert!(BLOCK_SIZE.is_multiple_of(CHUNK_SIZE));
+        assert!(BLOCK_SIZE >= incremental_offset);
+        assert!(BLOCK_SIZE % incremental_offset == 0);
 
         let mut buf = [0u8; BLOCK_SIZE];
         let block_count = inner.capacity().div_ceil(BLOCK_SIZE);
@@ -103,10 +107,9 @@ impl<T: NorFlash> FlashJournal<T> {
             let slice = &mut buf[0..block_end - block_start];
             inner.read(block_start as u32, slice).await?;
 
-            for (chunk_i, chunk) in slice.chunks_exact(CHUNK_SIZE).enumerate() {
-                // Note(unsafe): we are using chunks_exact and then cast the slice into the same size array.
-                let chunk: [u8; CHUNK_SIZE] = unsafe { chunk.try_into().unwrap_unchecked() };
-                let address = block_start + chunk_i * CHUNK_SIZE;
+            for (chunk_i, chunk) in slice.chunks_exact(incremental_offset).enumerate() {
+                let chunk: [u8; 2] = [chunk[0], chunk[1]];
+                let address = block_start + chunk_i * incremental_offset;
                 match State::try_new(chunk) {
                     Ok(state) => {
                         result = Cache {

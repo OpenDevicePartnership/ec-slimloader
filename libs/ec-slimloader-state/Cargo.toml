@@ -6,17 +6,17 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-crc = "3.2.1"
-num_enum = { version = "0.7.4", default-features = false }
+crc = { workspace = true }
+num_enum = { workspace = true, default-features = false }
 
 embedded-storage-async = { workspace = true }
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 log = { workspace = true, optional = true }
-arbitrary = { version = "1.4.2", features = ["derive"], optional = true }
+arbitrary = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
-embassy-futures = "0.1.1"
+embassy-futures = { workspace = true }
 
 [features]
 defmt = ["dep:defmt", "defmt-or-log/defmt"]

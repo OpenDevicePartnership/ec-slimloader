@@ -1,0 +1,14 @@
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[target.thumbv8m.main-none-eabihf]
+runner = "echo"
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+rustflags = [
+    "-C", "linker=flip-link",
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Tdefmt.x",
+    "-C", "link-arg=--nmagic",
+    "-C", "force-frame-pointers=yes",
+]
