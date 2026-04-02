@@ -25,7 +25,7 @@ embassy-sync = "0.7.2"
 embassy-futures = "0.1"
 embassy-time = "0.5"
 embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = ["mimxrt685s"] }
-embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false }
+embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", rev = "30d627365bc9c62cf391aa02b691a4ae1a95e6cc", default-features = false }
 log = "0.4"
 
 cortex-m = { version = "0.7.7" }
@@ -36,6 +36,6 @@ num_enum = { version = "0.7", default-features = false }
 device-driver = "1.0"
 
 [patch.crates-io]
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "7c7960f33da4c3f12db8a1f93b3722c37029d991" }
-embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "7c7960f33da4c3f12db8a1f93b3722c37029d991" }
-embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy", rev = "7c7960f33da4c3f12db8a1f93b3722c37029d991" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "30d627365bc9c62cf391aa02b691a4ae1a95e6cc" }
+embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "30d627365bc9c62cf391aa02b691a4ae1a95e6cc" }
+embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy", rev = "30d627365bc9c62cf391aa02b691a4ae1a95e6cc" }

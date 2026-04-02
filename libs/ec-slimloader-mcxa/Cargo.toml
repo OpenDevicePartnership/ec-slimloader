@@ -13,9 +13,8 @@ log = { workspace = true, optional = true }
 ec-slimloader = { path = "../ec-slimloader", default-features = false }
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 cortex-m = "0.7"
-embassy-hal-internal = { path = "../../../embassy-fork/embassy-hal-internal" }
-embassy-sync = { path = "../../../embassy-fork/embassy-sync", default-features = false }
-embassy-time = { path = "../../../embassy-fork/embassy-time" }
+embassy-sync = { workspace = true }
+embassy-time = { workspace = true }
 embassy-mcxa = { workspace = true, features = ["rt"] }
 embedded-storage-async = { workspace = true }
 
@@ -29,9 +28,4 @@ verification-logging = []
 mcxa2xx = ["embassy-mcxa/mcxa2xx"]
 mcxa5xx = ["embassy-mcxa/mcxa5xx"]
 
-[patch.crates-io]
-# Avoid duplicate `links = "embassy-time"` crates when building this crate standalone.
-embassy-time = { path = "../../../embassy-fork/embassy-time" }
-embassy-time-driver = { path = "../../../embassy-fork/embassy-time-driver" }
-embassy-time-queue-utils = { path = "../../../embassy-fork/embassy-time-queue-utils" }
 

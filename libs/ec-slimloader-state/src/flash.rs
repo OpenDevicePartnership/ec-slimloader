@@ -94,7 +94,7 @@ impl<T: NorFlash> FlashJournal<T> {
         let incremental_offset = T::WRITE_SIZE.max(2);
 
         assert!(BLOCK_SIZE >= incremental_offset);
-        assert!(BLOCK_SIZE % incremental_offset == 0);
+        assert!(BLOCK_SIZE.is_multiple_of(incremental_offset));
 
         let mut buf = [0u8; BLOCK_SIZE];
         let block_count = inner.capacity().div_ceil(BLOCK_SIZE);
