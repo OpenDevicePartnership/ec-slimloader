@@ -75,6 +75,8 @@ pub enum BootError {
     RootOfTrust,
     /// Operation succeeded but requires retry with different slot
     SlotRetryRequired,
+    /// Hashing error, such as an unsupported configuration or a failure in the hashing peripheral.
+    Hash,
 }
 
 /// Intent which denotes which [Slot] should be booted.
