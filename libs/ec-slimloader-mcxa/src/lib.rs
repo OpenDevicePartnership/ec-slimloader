@@ -25,9 +25,10 @@ use embassy_mcxa::{peripherals, Peri};
 use embedded_storage_async::nor_flash::NorFlash;
 use flash_internal::InternalFlash;
 
-pub use embassy_mcxa::hash::{BlockingHasher, DmaHasher, HashMode, HashOptions, HashSize, StreamingHasher};
-pub use embassy_mcxa::sgi::{Config as SgiConfig, SGIError, SetupError as SgiSetupError, Sgi, SgiInterrupt};
-pub use embassy_mcxa::{hash, sgi};
+pub use embassy_mcxa::sgi::hash::{BlockingHasher, DmaHasher, HashMode, HashOptions, HashSize, StreamingHasher};
+pub use embassy_mcxa::sgi::{Async, Blocking, InterruptHandler, SgiError, SetupError as SgiSetupError, Sgi};
+pub use embassy_mcxa::sgi;
+pub use embassy_mcxa::sgi::hash;
 
 #[cfg(any(feature = "defmt", feature = "log"))]
 macro_rules! mcxa_error {
@@ -261,6 +262,7 @@ impl Board for McxaBoard {
                         // The BIG assumption here is that the external flash is memory-mapped and can be read via normal pointers.
                         // This is true for the Internal flash part built into MCXA, but may not be true for all future use cases of Slot B,
                         // so may need to be revisited if we want to support more flexible loading scenarios in the future.
+                        // TODO: Ideally we would have a buffer of memory::INTERNAL_FLASH_PAGE_SIZE bytes and read directly into that via FLEX SPI flash ROM API.
                         core::slice::from_raw_parts((memory::SLOT_B_START + offset) as *const u8, chunk_len)
                     };
                     let dst = match page_buf.get_mut(..chunk_len) {

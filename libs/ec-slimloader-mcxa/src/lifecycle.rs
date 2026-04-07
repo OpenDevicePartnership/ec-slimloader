@@ -153,7 +153,7 @@ pub enum LpWakePolicy {
     Jump = 2,               // b10 (jump to CFPA LP wake address without authentication)
     Cmac = 3,               // b11 (CMAC auth for LP wake, full hybrid auth for normal boot)
 }
-
+/// Helper function to load the secure boot enforcement level from CMPA and interpret it according to the reference table for MCXA.
 pub fn secure_boot_level() -> SecureBootLevel {
     // CMPA.SECURE_BOOT_CFG: SEC_BOOT_EN is a 2-bit field in bits [1:0].
     match cmpa_secure_boot_cfg().sec_boot_en {
@@ -164,13 +164,14 @@ pub fn secure_boot_level() -> SecureBootLevel {
         _ => SecureBootLevel::AllAllowed, // treat invalid values as most permissive that way will be caught by policy validation.
     }
 }
-
+/// Helper function that returns true only if secure boot is strictest with hybrid ECDSA+MLDSA AND IFR region not left in an unprovisioned/erased state that could cause undefined behavior.
 pub fn secure_boot_enforced() -> bool {
     // If CMPA is erased/unprovisioned, SEC_BOOT_EN bits will read back as 0b11 (all ones)
     // and would incorrectly look like "enforced". Treat erased CMPA as "not enforced".
     !is_cmpa_erased() && cmpa_header_marker_is_valid() && matches!(secure_boot_level(), SecureBootLevel::EcdsaMldsaOnly)
 }
 
+/// Helper function that returns true if CNSA2.0 is enfocred via CMPA SEC_BOOT_CFG.ENF_CNSA field, and false if not enforced or if CMPA is erased/unprovisioned.
 pub fn cnsa_enforced() -> bool {
     let cnsa_level = match cmpa_secure_boot_cfg().enf_cnsa {
         0 => CnsaLevel::NotEnforced,
@@ -181,11 +182,13 @@ pub fn cnsa_enforced() -> bool {
     !is_cmpa_erased() && cmpa_header_marker_is_valid() && cnsa_level == CnsaLevel::CnsaTwo
 }
 
+/// Helper function that returns true if fast boot is enabled via CMPA SEC_BOOT_CFG.FAST_BOOT_EN field, and false if disabled or if CMPA is erased/unprovisioned.
 pub fn fast_boot_enabled() -> bool {
     // Fast boot is enabled when FAST_BOOT_EN field is 0b00, and disabled otherwise (full auth flow required)
     !is_cmpa_erased() && cmpa_header_marker_is_valid() && cmpa_secure_boot_cfg().fast_boot_en == 0
 }
 
+/// Helper function that returns true if low-power wake authentication is enforced via CMPA SEC_BOOT_CFG.LP_SEC_BOOT field, and false if not enforced or if CMPA is erased/unprovisioned.
 pub fn low_power_authentication_enforced() -> bool {
     let lp_wake_policy = match cmpa_secure_boot_cfg().lp_sec_boot {
         0 => LpWakePolicy::FullAuthentication,
@@ -325,6 +328,8 @@ impl CmpaUpdateConfigData {
     }
 }
 
+/// Load 48 words (384 bits) of ECDSA RoTKH from CMPA, returning None if: CMPA appears corrupt/partially programmed (invalid header marker but not erased/ partially valid CMPA).
+/// Current provisioning uses SHA-512, but retains the leftmost 48 bytes (384 bits).
 pub fn load_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::Rotkh.word_len()]> {
     let region = CmpaUpdateConfigData::Rotkh;
     if !cmpa_header_marker_is_valid() {
@@ -345,6 +350,8 @@ pub fn load_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::Rotkh.word_l
     Some(buf)
 }
 
+/// Load 48 words (384 bits) of ML-DSA RoTKH from CMPA, returning None if: CMPA appears corrupt/partially programmed (invalid header marker but not erased/ partially valid CMPA).
+/// Current provisioning uses SHA-512, but retains the leftmost 48 bytes (384 bits).
 pub fn load_pqc_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::PqcRotkh.word_len()]> {
     let region = CmpaUpdateConfigData::PqcRotkh;
     // 384 bits ML-DSA-87 root key hash, left padded to 48 bytes like the ECDSA ROTKH
@@ -403,6 +410,7 @@ fn cfpa_header_word_is_valid(header: u32) -> bool {
     inv_lifecycle == (!lifecycle)
 }
 
+/// Load CFPA header word and check validity, returning None if header is invalid (e.g. incorrect marker, which could indicate unprovisioned/partially provisioned state or corruption). This is used as a prerequisite check for other CFPA fields since the header validity is an indicator of whether the CFPA contents can be trusted.
 #[inline(always)]
 pub fn load_cfpa_header_word() -> Option<u32> {
     const CFPA_HEADER: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0010;
@@ -423,7 +431,7 @@ fn load_cfpa_word(address: u32) -> Option<u32> {
     Some(unsafe { core::ptr::read_volatile(address as *const u32) })
 }
 
-// Load lifecycle state functions
+/// Load lifecycle state function: reads the image key revocation word from CFPA.
 pub fn load_image_key_revocation_from_cfpa() -> Option<u32> {
     const CFPA_IMAGE_KEY_REVOKE: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0018;
     let word = load_cfpa_word(CFPA_IMAGE_KEY_REVOKE)?;
@@ -443,6 +451,8 @@ fn load_cfpa_rotk_revoke_word() -> Option<u32> {
     Some(word)
 }
 
+/// Load lifecycle state function: reads the root key revocation words from CFPA. Returns a [NbootRootKeyRevocation; 4] array representing the revocation state of each root key,
+/// or None if the CFPA header is invalid or the ROTK_REVOKE word is erased (indicating unprovisioned/partially provisioned state that should not be trusted).
 pub fn load_root_key_revocation_from_cfpa() -> Option<[NbootRootKeyRevocation; 4]> {
     let word = load_cfpa_rotk_revoke_word()?;
     Some(root_key_revocation_from_rotk_revoke_word(word))
@@ -485,6 +495,7 @@ fn root_key_revocation_from_rotk_revoke_word(word: u32) -> [NbootRootKeyRevocati
     revocation
 }
 
+/// The following three functions load DICE and ISP configuration bits from the CFPA ROTK_REVOKE word. These functions return None if the CFPA header or ROTK_REVOKE word is invalid/unprovisioned, and otherwise return the decoded bool as option.
 #[inline(always)]
 pub fn load_dice_upd_alias_key_from_cfpa() -> Option<bool> {
     let word = load_cfpa_rotk_revoke_word()?;
@@ -503,6 +514,7 @@ pub fn load_isp_active_img_from_cfpa() -> Option<u8> {
     Some(((word >> 30) & 0x3) as u8)
 }
 
+/// Load firmware version from CFPA EE0_FW_VERSION word. Returns None if CFPA header is invalid or the EE0_FW_VERSION word is erased (indicating unprovisioned/partially provisioned state that should not be trusted).
 pub fn load_firmware_version_from_cfpa() -> Option<u32> {
     const CFPA_EE0_FW_VERSION: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0020;
     // Use the EE0 firmware version slot so verification matches the image version field we
@@ -514,11 +526,17 @@ pub fn load_firmware_version_from_cfpa() -> Option<u32> {
     Some(word)
 }
 
+/// Load lifecycle state from CFPA header word: returns the decoded lifecycle state if the header is valid, or None if the header is invalid (e.g. incorrect marker, which could indicate unprovisioned/partially provisioned state or corruption). This is used as a prerequisite check for other CFPA fields since the header validity is an indicator of whether the CFPA contents can be trusted.
+/// Returns the decoded lifecylce to be used by the ROM API NBOOT functions, which uses different format that what is encoded in CFPA.
+/// The CFPA header encodes lifecycle in the lowest byte, with a separate inverted lifecycle byte as a validity check, and a 2 byte header marker in upper half of the word.
+/// The NBOOT ROM API expects a full 32-bit raw value where the lower half is the lifecycle raw value and the upper half is the !inverse.
 pub fn load_lifecycle_from_cfpa() -> Option<NbootLifecycleState> {
     let header = load_cfpa_header_word()?;
     NbootLifecycleDiscriminator::from_raw(header as u8).map(NbootLifecycleDiscriminator::state)
 }
 
+/// Load key usage NbootRootKeyUsage for all four key sets from CMPA.RoTK_USAGE word, returning None if CMPA header is invalid or the RoTK_USAGE word is erased (indicating unprovisioned/partially provisioned state that should not be trusted). The mapping from the 3-bit usage fields in CMPA to the NbootRootKeyUsage enum is based on the reference table provided by the user.
+/// Note that the usage applies acroess ECDSA and ML-DSA root keys, so the same usage value applies to both the ROTKH and PQC_ROTKH for each key set.
 pub fn load_rotk_usage_from_cmpa() -> Option<[NbootRootKeyUsage; 4]> {
     let word = cmpa_rotk_usage_word_checked()?;
     fn map(bits: u32) -> NbootRootKeyUsage {

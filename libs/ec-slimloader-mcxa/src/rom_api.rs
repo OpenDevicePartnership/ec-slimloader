@@ -226,6 +226,8 @@ enum RunBootRecoveryBootCfg0 {
     SpiNorChipSelect3 = 0x3 << 4,
 }
 
+/// Helper function to invoke the ROM API's run_bootloader function with the appropriate argument to enter ISP mode over UART. This can be used as a fallback if the main bootloader fails and we want to recover by flashing over UART using NXP's ISP tools.
+/// The function will not return since the bootloader will take over execution after this call, but we still include an infinite loop after the call to satisfy the Rust type system since the function is declared to return ! (never).
 pub fn run_bootloader_uart() -> ! {
     // Build arg: tag 0xEB, mode ISP(1), interface UART(1)
     let arg: u32 = RunBootTag::EnterBoot as u32 | RunBootMode::IspBoot as u32 | RunBootIspInterface::Uart as u32;
@@ -235,6 +237,7 @@ pub fn run_bootloader_uart() -> ! {
     }
 }
 
+/// Helper function to get a pointer to the flash driver API from the ROM API tree.
 pub fn flash_driver() -> FlashDriver {
     // Match NXP usage: g_bootloaderTree->flashDriver->...
     // The bootloader tree stores a direct pointer to the flash driver interface.
@@ -245,6 +248,7 @@ pub fn flash_driver_opt() -> Option<FlashDriver> {
     bootloader_tree().flash_api_opt()
 }
 
+/// Helper function to get a pointer to the nboot API from the ROM API tree.
 pub fn nboot() -> NbootDriver {
     // Match NXP usage: g_bootloaderTree->nbootDriver->...
     bootloader_tree().nboot_api()
@@ -254,6 +258,7 @@ pub fn nboot_opt() -> Option<NbootDriver> {
     bootloader_tree().nboot_api_opt()
 }
 
+/// Helper function to get a pointer to the KB driver API from the ROM API tree.
 pub fn kb() -> KBApiDriver {
     bootloader_tree().kb_api()
 }
@@ -262,6 +267,7 @@ pub fn kb_opt() -> Option<KBApiDriver> {
     bootloader_tree().kb_api_opt()
 }
 
+/// Helper function to get a pointer to the FlexSPI NOR flash driver API from the ROM API tree.
 pub fn flexspi_nor() -> FlexspiNorFlashDriver {
     bootloader_tree().flex_spi_api()
 }
@@ -270,6 +276,7 @@ pub fn flexspi_nor_opt() -> Option<FlexspiNorFlashDriver> {
     bootloader_tree().flex_spi_api_opt()
 }
 
+/// Helper function to get a pointer to the SPI flash driver API from the ROM API tree.
 pub fn spi_flash() -> SpiFlashDriver {
     bootloader_tree().spi_flash_api()
 }
@@ -279,6 +286,7 @@ pub fn spi_flash_opt() -> Option<SpiFlashDriver> {
 }
 
 #[inline(always)]
+/// Used to get the default FlashConfig struct to be inited by flash_init().
 pub fn flash_cfg_for_rom_api() -> FlashConfig {
     FlashConfig {
         pflash_block_base: 0,

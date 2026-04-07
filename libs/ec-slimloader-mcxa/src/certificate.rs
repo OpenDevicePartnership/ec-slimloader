@@ -63,7 +63,7 @@ pub enum CertError {
 
 // ===== AHAB structures (per MCXN556S RM tables) =====
 
-// Minimal parsed view to feed ROM authentication
+/// Minimal parsed view to feed ROM authentication
 pub struct AhabParsed {
     pub container: *const AhabContainerHeaderRaw,
     pub images: *const AhabImageEntryRaw,
@@ -77,7 +77,7 @@ pub struct AhabParsed {
     pub sig_len: usize,
 }
 
-// Deeper parser structures
+/// Deeper parser structures
 pub struct ParsedSrkRecord<'a> {
     pub hdr: &'a AhabSrkRecordRaw,
 }
@@ -106,7 +106,8 @@ pub struct ParsedSignatures<'a> {
 }
 
 fn sha512_rkth_48(peri: Peri<'_, peripherals::SGI0>, input: &[u8]) -> Option<[u8; 48]> {
-    let mut blocking_hasher = crate::BlockingHasher::new(peri);
+    let sgi = embassy_mcxa::sgi::Sgi::new_blocking(peri).ok()?;
+    let mut blocking_hasher = crate::BlockingHasher::new(sgi);
 
     blocking_hasher.hsm_sha512_rkth(input)
 }
@@ -687,6 +688,8 @@ fn checked_end(start: usize, len: usize) -> Result<usize, CertError> {
     start.checked_add(len).ok_or(CertError::Bounds)
 }
 
+/// Parse AHAB container from given base pointer and offsets, returning structured views of components. Used to derive the SRK array table to compute RoTKH hashes.
+/// If certificate is absent (SRK-only mode), cert_ptr will be null and cert_len will be 0. Signature block is still required in SRK-only mode to provide signature offset and SRK array offset.
 pub unsafe fn parse_ahab_container(
     base: *const u8,
     container_offset: u32,
@@ -839,9 +842,8 @@ pub unsafe fn parse_ahab_container(
     })
 }
 
-// Deeper parsers: SRK array, certificate internals, signatures
-
-// Parse SRK array: expects header followed by arrays of table offsets and data offsets.
+/// Deeper parsers: SRK array, certificate internals, signatures
+/// Parse SRK array: expects header followed by arrays of table offsets and data offsets.
 pub unsafe fn parse_srk_array<'a>(
     srk_array_ptr: *const u8,
     srk_array_len: usize,
@@ -951,6 +953,8 @@ pub unsafe fn parse_srk_array<'a>(
     })
 }
 
+/// Derive RKTH values for both ECDSA and ML-DSA from the AHAB container's SRK array. Returns the leftmost 48 bytes of the SHA-512 digest of the complete SRK table (header + records) for each algorithm.
+/// If any step fails, returns None for that RKTH.
 pub fn derive_image_rkth_pair<'d>(
     mut peri: Peri<'d, peripherals::SGI0>,
     image_base: *const u8,

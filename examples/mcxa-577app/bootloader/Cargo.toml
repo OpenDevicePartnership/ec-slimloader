@@ -23,8 +23,12 @@ defmt-rtt = { version = "1.0", optional = true }
 ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["internal-only", "mcxa5xx", "defmt"] }
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
 
-embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["rt", "mcxa5xx"] }
-embassy-executor = { path = "../../../../embassy-fork/embassy-executor", default-features = false, features = ["platform-cortex-m", "executor-thread"] }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["platform-cortex-m", "executor-thread"] }
+
+[patch.crates-io]
+embassy-time = { git = "https://github.com/embassy-rs/embassy" }
+embassy-time-driver = { git = "https://github.com/embassy-rs/embassy" }
+embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy" }
 
 [profile.release]
 debug = 2            # Full DWARF info for defmt/probe-rs decoding

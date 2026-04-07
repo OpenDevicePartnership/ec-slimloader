@@ -124,7 +124,7 @@ impl<C: ImxrtConfig + BootStatePolicy> Board for Imxrt<C> {
         &mut self.journal
     }
 
-    async fn check_and_boot(&mut self, slot: &Slot) -> BootError {
+    async fn check_and_boot<const JOURNAL_BUFFER_SIZE: usize>(&mut self, slot: &Slot) -> BootError {
         let Some(slot_partition) = self.slots.get_mut(u8::from(*slot) as usize) else {
             return BootError::SlotUnknown;
         };
@@ -200,6 +200,18 @@ impl<C: ImxrtConfig + BootStatePolicy> Board for Imxrt<C> {
     }
 
     fn abort(&mut self) -> ! {
+        loop {
+            cortex_m::asm::wfi();
+        }
+    }
+
+    fn arm_mcu_reset(&mut self) -> ! {
+        const AIRCR: *mut u32 = 0xE000ED0C as *mut u32;
+        const AIRCR_VECTKEY: u32 = 0x5FA << 16;
+        const AIRCR_SYSRESETREQ: u32 = 1 << 2;
+        unsafe {
+            core::ptr::write_volatile(AIRCR, AIRCR_VECTKEY | AIRCR_SYSRESETREQ);
+        }
         loop {
             cortex_m::asm::wfi();
         }

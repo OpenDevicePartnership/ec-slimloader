@@ -58,6 +58,11 @@ fn is_dev_mode() -> bool {
     // reason with secboot enforced, we won't allow dev-mode bypass.
 }
 
+/// Verify the authenticity of the image at the given base address using the NBOOT ROM API. This includes initializing the NBOOT context, loading lifecycle and root of trust information from CFPA/CMPA,
+/// deriving the image RKTH from the AHAB container, and calling nboot_img_authenticate_romapi. Returns Ok(()) if authentication is successful, or an appropriate BootError if any step fails or if authentication fails.
+/// Will ONLY authenticate if CMPA secure boot settings is configured correctly, correct key set (as established by the ROTKH values) is used for signing, and the image is properly signed as an HYBRID (ECDSA + ML-DSA) image.
+/// In dev mode, if the RKTH derived from the image does not match the ROTKH in CMPA, it will be copied to the ROTKH to allow authentication to proceed (this allows flexibility in dev mode since keys may not be provisioned yet),
+/// but in production mode, a mismatch will cause authentication to fail (to prevent unauthorized images from being authenticated).
 pub fn verify_authenticity<'d>(
     mut peri: Peri<'d, peripherals::SGI0>,
     image_base: *const u8,
