@@ -20,7 +20,7 @@ manual_let_else = "deny"
 defmt = "0.3.7"
 defmt-or-log = { version = "0.2.2", default-features = false }
 embedded-storage-async = "0.4.1"
-embassy-sync = "0.7.2"
+embassy-sync = "0.8.0"
 log = "0.4"
 
 cortex-m = { version = "0.7.7" }
