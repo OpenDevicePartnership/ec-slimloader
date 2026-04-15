@@ -19,7 +19,7 @@ warnings = "deny"
 embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false }
 
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", default-features = false }
-embassy-sync = "0.7.2"
+embassy-sync = "0.8.0"
 embassy-executor = "0.9.1"
 
 defmt = "1.0.1"
