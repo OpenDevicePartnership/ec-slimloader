@@ -1,0 +1,23 @@
+[package]
+name = "mcxa-security-provisioning"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+defmt = { workspace = true, optional = true }
+defmt-or-log = { workspace = true }
+log = { workspace = true, optional = true }
+cortex-m = "0.7"
+embassy-mcxa = { path = "../../embassy-fork/embassy-mcxa", default-features = false, features = ["rt"] }
+
+# Re-uses the MCXA lifecycle/IFR types defined in ec-slimloader-mcxa
+ec-slimloader-mcxa = { path = "../libs/ec-slimloader-mcxa", default-features = false }
+
+[features]
+default = ["log", "mcxa5xx"]
+defmt = ["dep:defmt", "defmt-or-log/defmt", "ec-slimloader-mcxa/defmt"]
+log = ["dep:log", "defmt-or-log/log", "ec-slimloader-mcxa/log"]
+mcxa2xx = ["embassy-mcxa/mcxa2xx", "ec-slimloader-mcxa/mcxa2xx"]
+mcxa5xx = ["embassy-mcxa/mcxa5xx", "ec-slimloader-mcxa/mcxa5xx"]
