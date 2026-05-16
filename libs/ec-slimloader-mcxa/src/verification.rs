@@ -4,7 +4,7 @@ use embassy_mcxa::{peripherals, Peri};
 use crate::lifecycle::{
     cnsa_enforced, fast_boot_enabled, load_firmware_version_from_cfpa, load_image_key_revocation_from_cfpa,
     load_lifecycle_from_cfpa, load_pqc_rotkh_from_cmpa, load_root_key_revocation_from_cfpa, load_rotk_usage_from_cmpa,
-    load_rotkh_from_cmpa, low_power_authentication_enforced, secure_boot_enforced,
+    load_rotkh_from_cmpa, low_power_authentication_enforced, secure_boot_state, SecureBootState,
 };
 use crate::rom_api::{
     nboot, nboot_bool_is_true, NbootBool, NbootBoolValue, NbootCtx, NbootImgAuthParms, NbootLifecycleState,
@@ -47,15 +47,9 @@ macro_rules! verify_error {
     };
 }
 
-fn is_dev_mode() -> bool {
-    //TODO
-    !secure_boot_enforced()
-        && (load_lifecycle_from_cfpa()
-            .map(|lc| lc == NbootLifecycleState::Develop)
-            .unwrap_or(false))
-    // //If SB is disabled, lifecycle MUST be in DEV state. TODO
-    // Note that lifecycle read failure is treated as non-DEV to be safe, but this also means that if CFPA read fails for some
-    // reason with secboot enforced, we won't allow dev-mode bypass.
+fn is_dev_mode(secure_boot_state: SecureBootState) -> bool {
+    matches!(secure_boot_state, SecureBootState::Disabled)
+        && matches!(load_lifecycle_from_cfpa(), Some(NbootLifecycleState::Develop))
 }
 
 /// Verify the authenticity of the image at the given base address using the NBOOT ROM API. This includes initializing the NBOOT context, loading lifecycle and root of trust information from CFPA/CMPA,
@@ -80,25 +74,28 @@ pub fn verify_authenticity<'d>(
     let mut parms = NbootImgAuthParms {
         soc_RoTNVM: NbootRotAuthParms {
             soc_rootKeyRevocation: [
-                NbootRootKeyRevocation::Enabled as u32,
-                NbootRootKeyRevocation::Enabled as u32,
-                NbootRootKeyRevocation::Enabled as u32,
-                NbootRootKeyRevocation::Enabled as u32,
+                NbootRootKeyRevocation::Revoked as u32,
+                NbootRootKeyRevocation::Revoked as u32,
+                NbootRootKeyRevocation::Revoked as u32,
+                NbootRootKeyRevocation::Revoked as u32,
+                //Start as revoked by default for safety; will be updated with real values from CFPA if read is successful. 
+                // This way if CFPA read fails for some reason, we won't accidentally treat revoked keys as valid.
             ],
-            soc_imageKeyRevocation: 0,
+            soc_imageKeyRevocation: 0, //Image key revoocation use case: None?
             soc_rkh: [0; 12],
             soc_rkh_1: [0; 12],      // PQC hash for hybrid keys
-            soc_numberOfRootKeys: 4, //TODO: Must equal 4 per NXP example code.
+            soc_numberOfRootKeys: 4, // TODO: Must equal 4 per NXP example code.
             soc_rootKeyUsage: [
-                NbootRootKeyUsage::All as u32,
-                NbootRootKeyUsage::All as u32,
-                NbootRootKeyUsage::All as u32,
-                NbootRootKeyUsage::All as u32,
+                NbootRootKeyUsage::Unused as u32,
+                NbootRootKeyUsage::Unused as u32,
+                NbootRootKeyUsage::Unused as u32,
+                NbootRootKeyUsage::Unused as u32,
+                // Start as unused by default for safety; will be updated with real values from CMPA if read is successful.
             ],
             soc_rootKeyTypeAndLength: NbootRootKeyType::EcdsaP384Mldsa87 as u32, //FIXED TO THIS because we are CNSA 2.0 compliant.
-            soc_lifecycle: NbootLifecycleState::Develop.nboot_soc_lifecycle(), // default to DEV, gets updated with real one further below.
+            soc_lifecycle: NbootLifecycleState::InField.nboot_soc_lifecycle(), // default to INFIELD (strict start), gets updated with real one further below.
         },
-        soc_trustedFirmwareVersion: 0,
+        soc_trustedFirmwareVersion: 0xFFFF_FFFF, // default to max version to be safe (any real version should be lower), gets updated with real one from CFPA further below
     };
 
     if let Some(cmpa_rotkh) = load_rotkh_from_cmpa() {
@@ -139,11 +136,28 @@ pub fn verify_authenticity<'d>(
         parms.soc_RoTNVM.soc_lifecycle = cfpa_lifecycle.nboot_soc_lifecycle();
     }
 
-    if !is_dev_mode() {
-        // SecBoot enforcement check is a bit redundant since if SB is not enforced, we should be in dev mode; but keep for consistency of policy checks.
-        if !secure_boot_enforced() || !cnsa_enforced() || fast_boot_enabled() || !low_power_authentication_enforced() {
-            verify_error!("Secure Boot policy violation: secure boot enforced={}, CNSA enforced={}, fast boot enabled={}, low power auth enforced={}", 
-                secure_boot_enforced(), cnsa_enforced(), fast_boot_enabled(), low_power_authentication_enforced());
+    let secure_boot_state = secure_boot_state();
+    if matches!(secure_boot_state, SecureBootState::Unknown) {
+        verify_error!("Secure boot state could not be validated");
+        n_boot_api.nboot_context_deinit(&mut ctx);
+        return Err(ec_slimloader::BootError::Integrity);
+    }
+
+    let dev_mode = is_dev_mode(secure_boot_state);
+
+    if !dev_mode {
+        if !matches!(secure_boot_state, SecureBootState::HybridEnforced)
+            || !cnsa_enforced()
+            || fast_boot_enabled()
+            || !low_power_authentication_enforced()
+        {
+            verify_error!(
+                "Secure Boot policy violation: secure boot state={:?}, CNSA enforced={}, fast boot enabled={}, low power auth enforced={}",
+                secure_boot_state,
+                cnsa_enforced(),
+                fast_boot_enabled(),
+                low_power_authentication_enforced()
+            );
             n_boot_api.nboot_context_deinit(&mut ctx);
             return Err(ec_slimloader::BootError::Integrity);
         }
@@ -163,8 +177,8 @@ pub fn verify_authenticity<'d>(
         let image_rkth_words = image_rkth.as_le_words();
 
         verify_info!("Derived image RKTH: {:x}", image_rkth_words);
-        if image_rkth_words != parms.soc_RoTNVM.soc_rkh {
-            if is_dev_mode() {
+        if image_rkth_words != parms.soc_RoTNVM.soc_rkh { // non-const time is okay, these are public key hashes.
+            if dev_mode {
                 verify_warn!("Dev mode: copying from image RKTH");
                 parms.soc_RoTNVM.soc_rkh.copy_from_slice(&image_rkth_words);
             } else {
@@ -187,8 +201,8 @@ pub fn verify_authenticity<'d>(
         let pqc_rkth_words = pqc_rkth.as_le_words();
 
         verify_info!("Derived image PQC RKTH: {:x}", pqc_rkth_words);
-        if pqc_rkth_words != parms.soc_RoTNVM.soc_rkh_1 {
-            if is_dev_mode() {
+        if pqc_rkth_words != parms.soc_RoTNVM.soc_rkh_1 { //non-const time comparison is okay, these are public key hashes
+            if dev_mode {
                 verify_warn!("Dev mode: copying from image PQC RKTH");
                 parms.soc_RoTNVM.soc_rkh_1.copy_from_slice(&pqc_rkth_words);
             } else {

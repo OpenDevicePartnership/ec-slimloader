@@ -137,6 +137,14 @@ pub enum SecureBootLevel {
     EcdsaMldsaOnly = 3, // b11
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SecureBootState {
+    HybridEnforced,
+    Classical,
+    Disabled,
+    Unknown,
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CnsaLevel {
@@ -164,11 +172,24 @@ pub fn secure_boot_level() -> SecureBootLevel {
         _ => SecureBootLevel::AllAllowed, // treat invalid values as most permissive that way will be caught by policy validation.
     }
 }
+
+pub fn secure_boot_state() -> SecureBootState {
+    if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
+        return SecureBootState::Unknown;
+    }
+
+    match secure_boot_level() {
+        SecureBootLevel::EcdsaMldsaOnly => SecureBootState::HybridEnforced,
+        SecureBootLevel::SignedOnly => SecureBootState::Classical,
+        SecureBootLevel::AllAllowed | SecureBootLevel::CrcOrSigned => {
+            SecureBootState::Disabled
+        }
+    }
+}
+
 /// Helper function that returns true only if secure boot is strictest with hybrid ECDSA+MLDSA AND IFR region not left in an unprovisioned/erased state that could cause undefined behavior.
-pub fn secure_boot_enforced() -> bool {
-    // If CMPA is erased/unprovisioned, SEC_BOOT_EN bits will read back as 0b11 (all ones)
-    // and would incorrectly look like "enforced". Treat erased CMPA as "not enforced".
-    !is_cmpa_erased() && cmpa_header_marker_is_valid() && matches!(secure_boot_level(), SecureBootLevel::EcdsaMldsaOnly)
+pub fn hybrid_secure_boot_enforced() -> bool {
+    matches!(secure_boot_state(), SecureBootState::HybridEnforced)
 }
 
 /// Helper function that returns true if CNSA2.0 is enfocred via CMPA SEC_BOOT_CFG.ENF_CNSA field, and false if not enforced or if CMPA is erased/unprovisioned.
@@ -337,8 +358,8 @@ pub fn load_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::Rotkh.word_l
         // Still allow reading the words so higher-level logic can use the image RKTH as the
         // source of truth while warning on mismatch.
         // Note: an erased CMPA (all 0xFF) will decode SEC_BOOT_EN as 0b11, so treat "erased"
-        // as unprovisioned even if `secure_boot_enforced()` appears true.
-        if secure_boot_enforced() && !is_cmpa_erased() {
+        // as unprovisioned even if `hybrid_secure_boot_enforced()` appears true.
+        if hybrid_secure_boot_enforced() && !is_cmpa_erased() {
             return None;
         }
     }
@@ -356,7 +377,7 @@ pub fn load_pqc_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::PqcRotkh
     let region = CmpaUpdateConfigData::PqcRotkh;
     // 384 bits ML-DSA-87 root key hash, left padded to 48 bytes like the ECDSA ROTKH
     if !cmpa_header_marker_is_valid() {
-        if secure_boot_enforced() && !is_cmpa_erased() {
+        if hybrid_secure_boot_enforced() && !is_cmpa_erased() {
             return None;
         }
     }
@@ -453,6 +474,7 @@ fn load_cfpa_rotk_revoke_word() -> Option<u32> {
 
 /// Load lifecycle state function: reads the root key revocation words from CFPA. Returns a [NbootRootKeyRevocation; 4] array representing the revocation state of each root key,
 /// or None if the CFPA header is invalid or the ROTK_REVOKE word is erased (indicating unprovisioned/partially provisioned state that should not be trusted).
+/// This is already decoded into the ROM-facing `NbootRootKeyRevocation` values (`Enabled`/`Revoked`), not the raw 2-bit `RoTKx_EN` CFPA field encodings.
 pub fn load_root_key_revocation_from_cfpa() -> Option<[NbootRootKeyRevocation; 4]> {
     let word = load_cfpa_rotk_revoke_word()?;
     Some(root_key_revocation_from_rotk_revoke_word(word))
@@ -481,7 +503,8 @@ fn rotk_en_fields_from_rotk_revoke_word(word: u32) -> [u8; 4] {
 
 #[inline(always)]
 fn root_key_revocation_from_rotk_revoke_word(word: u32) -> [NbootRootKeyRevocation; 4] {
-    // NBOOT `soc_rootKeyRevocation[]` uses a per-key revoke/enable constant. The CFPA ROTK_REVOKE word encodes the revocation state for each root key in 2 bits, where
+    // NBOOT `soc_rootKeyRevocation[]` uses a per-key revoke/enable constant (`0xAA`/`0xBB`), not the raw CFPA two-bit field values.
+    // The CFPA ROTK_REVOKE word encodes the revocation state for each root key in 2 bits, where
     //   0b00/0b01 => enabled (not revoked)
     //   0b10/0b11 => revoked
     let mut revocation = [NbootRootKeyRevocation::Enabled; 4];

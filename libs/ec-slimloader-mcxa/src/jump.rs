@@ -14,13 +14,6 @@ macro_rules! jump_error {
 }
 
 pub unsafe fn jump_to_image(entry: u32) -> ! {
-    // entry points to vector table base
-    let initial_sp = *(entry as *const u32);
-    let reset = *((entry + 4) as *const u32);
-    // info!(
-    //     "jump: entry=0x{:08X}, initial_sp=0x{:08X}, reset=0x{:08X}",
-    //     entry, initial_sp, reset
-    // );
 
     // Guards: validate image header fields (Table 204 Nx4x security reference manual)
 
@@ -73,11 +66,6 @@ pub unsafe fn jump_to_image(entry: u32) -> ! {
     #[cfg(target_arch = "arm")]
     asm!("isb", options(nostack, preserves_flags));
 
-    // Set MSP to application's initial stack pointer
-    #[cfg(target_arch = "arm")]
-    asm!("msr MSP, {0}", in(reg) initial_sp, options(nostack, preserves_flags));
-    // info!("jump: MSP set to 0x{:08X}", initial_sp);
-
     // Set VTOR to application's vector table
     const SCB_VTOR: *mut u32 = 0xE000ED08 as *mut u32;
     core::ptr::write_volatile(SCB_VTOR, entry);
@@ -87,9 +75,6 @@ pub unsafe fn jump_to_image(entry: u32) -> ! {
     dsb();
     isb();
 
-    // Branch to application's reset handler
-    let reset_fn: extern "C" fn() = core::mem::transmute(reset as usize);
-    // info!("jump: branching to reset handler 0x{:08X}", reset);
-    reset_fn();
-    loop {} // should not return
+    // Load MSP/reset from the vector table and transfer control using the standard Cortex-M helper.
+    cortex_m::asm::bootload(entry as *const u32)
 }

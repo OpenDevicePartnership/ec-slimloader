@@ -698,7 +698,17 @@ pub unsafe fn parse_ahab_container(
     if container_offset >= image_len {
         return Err(CertError::Bounds);
     }
-    let start = base.add(container_offset as usize);
+    let start_offset = container_offset as usize;
+    let header_end = checked_end(start_offset, size_of::<AhabContainerHeaderRaw>())?;
+    if header_end > image_len as usize {
+        return Err(CertError::Bounds);
+    }
+    let start = base.add(start_offset);
+
+    if !is_aligned_4(start) {
+        return Err(CertError::Align);
+    }
+
     let ch = start as *const AhabContainerHeaderRaw;
 
     if (*ch).tag() != 0x87 {
@@ -710,18 +720,14 @@ pub unsafe fn parse_ahab_container(
     }
     let total = (*ch).length() as usize;
 
-    let container_end = checked_end(container_offset as usize, total)?;
+    let container_end = checked_end(start_offset, total)?;
     if total == 0 || container_end > image_len as usize {
         return Err(CertError::Bounds);
     }
 
-    if !is_aligned_4(start) {
-        return Err(CertError::Align);
-    }
-
     // Image array begins after header; calculate length from sigblk_offset
     let image_array_start = start.add(size_of::<AhabContainerHeaderRaw>());
-    let _image_entry_size = size_of::<AhabImageEntryRaw>();
+    let image_entry_size = size_of::<AhabImageEntryRaw>();
     let sigblk_offset = (*ch).signature_block_offset() as usize;
     if sigblk_offset < size_of::<AhabContainerHeaderRaw>() {
         return Err(CertError::Bounds);
@@ -729,8 +735,17 @@ pub unsafe fn parse_ahab_container(
     if checked_end(sigblk_offset, size_of::<AhabSignatureBlockRaw>())? > total {
         return Err(CertError::Bounds);
     }
-    let _image_array_size = sigblk_offset - size_of::<AhabContainerHeaderRaw>();
     let images_len = (*ch).image_count() as usize;
+    if images_len == 0 || images_len > 3 {
+        return Err(CertError::Bounds); // We want at least one executbale image, AHAB supports up to 3 images. 
+    }
+    let image_array_end = checked_end(
+        size_of::<AhabContainerHeaderRaw>(),
+        images_len.checked_mul(image_entry_size).ok_or(CertError::Bounds)?,
+    )?;
+    if image_array_end > sigblk_offset {
+        return Err(CertError::Bounds);
+    }
 
     // Store image array pointer and count
     let images_ptr = image_array_start as *const AhabImageEntryRaw;
@@ -849,11 +864,16 @@ pub unsafe fn parse_srk_array<'a>(
     srk_array_len: usize,
 ) -> Result<ParsedSrkArray<'a>, CertError> {
     let base = srk_array_ptr;
-    let hdr = &*(base as *const AhabSrkArrayHeaderRaw);
 
     if srk_array_len < size_of::<AhabSrkArrayHeaderRaw>() + 16 {
         return Err(CertError::Bounds);
     }
+    if !is_aligned_4(base) {
+        return Err(CertError::Align);
+    }
+
+    let hdr = &*(base as *const AhabSrkArrayHeaderRaw);
+
     if hdr.tag() != 0x5A || hdr.version() != 0x00 {
         return Err(CertError::Tag);
     }
@@ -865,13 +885,22 @@ pub unsafe fn parse_srk_array<'a>(
 
     // Sequential layout: ECDSA table starts immediately after header
     let ecdsa_tbl_ptr = base.add(size_of::<AhabSrkArrayHeaderRaw>());
+    if !is_aligned_4(ecdsa_tbl_ptr) {
+        return Err(CertError::Align);
+    }
     let ecdsa_tbl_hdr = &*(ecdsa_tbl_ptr as *const AhabSrkTableHeaderRaw);
 
     if ecdsa_tbl_hdr.tag() != 0xD7 || ecdsa_tbl_hdr.version() != 0x43 {
         return Err(CertError::Tag);
     }
     let ecdsa_rec_count = ecdsa_tbl_hdr.record_count();
+    if ecdsa_rec_count > 4 {
+        return Err(CertError::Bounds);
+    }
     let ecdsa_rec_base = ecdsa_tbl_ptr.add(size_of::<AhabSrkTableHeaderRaw>()) as *const AhabSrkRecordRaw;
+    if !is_aligned_4(ecdsa_rec_base as *const u8) {
+        return Err(CertError::Align);
+    }
 
     // Check if ECDSA table fits within bounds
     let ecdsa_tbl_offset = size_of::<AhabSrkArrayHeaderRaw>();
@@ -896,6 +925,9 @@ pub unsafe fn parse_srk_array<'a>(
     if checked_end(ecdsa_data_offset, size_of::<AhabSrkDataHeaderRaw>())? > srk_array_len {
         return Err(CertError::Bounds);
     }
+    if !is_aligned_4(ecdsa_data_ptr) {
+        return Err(CertError::Align);
+    }
     let ecdsa_data_hdr = &*(ecdsa_data_ptr as *const AhabSrkDataHeaderRaw);
     let ecdsa_data_total_size = ecdsa_data_hdr.length() as usize;
     if ecdsa_data_total_size < size_of::<AhabSrkDataHeaderRaw>() {
@@ -910,6 +942,9 @@ pub unsafe fn parse_srk_array<'a>(
     if checked_end(mldsa_tbl_offset, size_of::<AhabSrkTableHeaderRaw>())? > srk_array_len {
         return Err(CertError::Bounds);
     }
+    if !is_aligned_4(mldsa_tbl_ptr) {
+        return Err(CertError::Align);
+    }
     let mldsa_tbl_hdr = &*(mldsa_tbl_ptr as *const AhabSrkTableHeaderRaw);
 
     if mldsa_tbl_hdr.tag() != 0xD7 || mldsa_tbl_hdr.version() != 0x43 {
@@ -917,7 +952,13 @@ pub unsafe fn parse_srk_array<'a>(
     }
 
     let mldsa_rec_count = mldsa_tbl_hdr.record_count();
+    if mldsa_rec_count > 4 {
+        return Err(CertError::Bounds);
+    }
     let mldsa_rec_base = mldsa_tbl_ptr.add(size_of::<AhabSrkTableHeaderRaw>()) as *const AhabSrkRecordRaw;
+    if !is_aligned_4(mldsa_rec_base as *const u8) {
+        return Err(CertError::Align);
+    }
 
     // Check if ML-DSA table fits within bounds
     let mldsa_tbl_total_size = checked_end(

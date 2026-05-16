@@ -70,12 +70,14 @@ impl ReadNorFlash for InternalFlash {
 
     async fn read(&mut self, offset: u32, buf: &mut [u8]) -> Result<(), Self::Error> {
         self.ensure_init()?;
-        if offset + buf.len() as u32 > JOURNAL_SIZE {
+        let read_len = u32::try_from(buf.len()).map_err(|_| NorFlashErrorKind::OutOfBounds)?;
+        let end = offset.checked_add(read_len).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        if end > JOURNAL_SIZE {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
         let flash_driver_api = flash_driver();
-        let abs = JOURNAL_START + offset;
-        let status = flash_driver_api.flash_read(&mut self.cfg, abs, buf.as_mut_ptr(), buf.len() as u32);
+        let abs = JOURNAL_START.checked_add(offset).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        let status = flash_driver_api.flash_read(&mut self.cfg, abs, buf.as_mut_ptr(), read_len);
         if status == FlashStatus::Success {
             Ok(())
         } else {
@@ -94,7 +96,9 @@ impl NorFlash for InternalFlash {
 
     async fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), Self::Error> {
         self.ensure_init()?;
-        if offset + data.len() as u32 > JOURNAL_SIZE {
+        let write_len = u32::try_from(data.len()).map_err(|_| NorFlashErrorKind::OutOfBounds)?;
+        let end = offset.checked_add(write_len).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        if end > JOURNAL_SIZE {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
         if offset % INTERNAL_FLASH_PAGE_SIZE != 0 {
@@ -104,7 +108,7 @@ impl NorFlash for InternalFlash {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
         let flash_driver_api = flash_driver();
-        let abs_start = JOURNAL_START + offset;
+        let abs_start = JOURNAL_START.checked_add(offset).ok_or(NorFlashErrorKind::OutOfBounds)?;
 
         // Page was erased prior to this write — fill rest with 0xFF and program.
         let mut page_buf = [0xFFu8; INTERNAL_FLASH_PAGE_SIZE as usize];
@@ -135,13 +139,29 @@ impl NorFlash for InternalFlash {
 
     async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
         self.ensure_init()?;
+        if from > to || to > JOURNAL_SIZE {
+            return Err(NorFlashErrorKind::OutOfBounds);
+        }
+
         // Round to sector boundaries rather than rejecting unaligned inputs.
         let from_aligned = (from / INTERNAL_FLASH_SECTOR_SIZE) * INTERNAL_FLASH_SECTOR_SIZE;
-        let to_aligned =
-            ((to + INTERNAL_FLASH_SECTOR_SIZE - 1) / INTERNAL_FLASH_SECTOR_SIZE) * INTERNAL_FLASH_SECTOR_SIZE;
-        let len = to_aligned - from_aligned;
+        let to_rounded = to
+            .checked_add(INTERNAL_FLASH_SECTOR_SIZE - 1)
+            .ok_or(NorFlashErrorKind::OutOfBounds)?;
+        let to_aligned = (to_rounded / INTERNAL_FLASH_SECTOR_SIZE) * INTERNAL_FLASH_SECTOR_SIZE;
+        if to_aligned > JOURNAL_SIZE {
+            return Err(NorFlashErrorKind::OutOfBounds);
+        }
+
+        let len = to_aligned.checked_sub(from_aligned).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        if len == 0 {
+            return Ok(());
+        }
+
         let flash_driver_api = flash_driver();
-        let abs = JOURNAL_START + from_aligned;
+        let abs = JOURNAL_START
+            .checked_add(from_aligned)
+            .ok_or(NorFlashErrorKind::OutOfBounds)?;
         let status = flash_driver_api.flash_erase_sector(&mut self.cfg, abs, len, FLASH_API_ERASE_KEY);
         if status == FlashStatus::Success {
             Ok(())

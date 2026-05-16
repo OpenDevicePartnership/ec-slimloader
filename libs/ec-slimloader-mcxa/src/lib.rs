@@ -247,7 +247,10 @@ impl Board for McxaBoard {
                     return crate::error::map_flash_status_to_boot_error(erase_status);
                 }
 
-                let aligned_len = image_header_ext.aligned_copy_length();
+                let aligned_len = match image_header_ext.aligned_copy_length(memory::SLOT_B_SIZE) {
+                    Ok(len) => len,
+                    Err(_) => return ec_slimloader::BootError::Markers,
+                };
                 let mut offset = 0u32;
                 while offset < aligned_len {
                     let remaining_image_len = image_len_ext.saturating_sub(offset) as usize;

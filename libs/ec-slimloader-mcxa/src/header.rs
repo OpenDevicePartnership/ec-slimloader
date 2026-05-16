@@ -32,13 +32,21 @@ pub struct ImageHeader<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum HeaderError {
     LengthZero,
+    LengthTooSmall,
     LengthTooLarge,
     CertOffset,
+    Alignment,
     Type,
 }
 
 impl<'a> ImageHeader<'a> {
     pub unsafe fn from_ptr(ptr: *const u8, slot_size: u32) -> Result<Self, HeaderError> {
+        if ptr as usize % 4 != 0 {
+            return Err(HeaderError::Alignment);
+        }
+        if (slot_size as usize) < (core::mem::size_of::<VectorAndHeaderRaw>()) {
+            return Err(HeaderError::LengthTooSmall);
+        }
         let raw = &*(ptr as *const VectorAndHeaderRaw);
         if raw.image_length == 0 {
             return Err(HeaderError::LengthZero);
@@ -79,9 +87,25 @@ impl<'a> ImageHeader<'a> {
         // assume manifest immediately after certificate block
         self.cert_block_offset() + 0 // caller will add certificate size once parsed
     }
-    pub fn aligned_copy_length(&self) -> u32 {
+    pub fn aligned_copy_length(&self, slot_size: u32) -> Result<u32, HeaderError> {
         let len = self.image_length();
-        ((len + INTERNAL_FLASH_PAGE_SIZE - 1) / INTERNAL_FLASH_PAGE_SIZE) * INTERNAL_FLASH_PAGE_SIZE
+        let remainder = len % INTERNAL_FLASH_PAGE_SIZE;
+        if remainder == 0 {
+            if len <= slot_size {
+                return Ok(len);
+            } else {
+                return Err(HeaderError::LengthTooLarge);
+            }
+        }
+
+        let aligned_len = len
+            .checked_add(INTERNAL_FLASH_PAGE_SIZE - remainder)
+            .ok_or(HeaderError::LengthTooLarge)?;
+        if aligned_len > slot_size {
+            return Err(HeaderError::LengthTooLarge);
+        }
+
+        Ok(aligned_len)
     }
 }
 
