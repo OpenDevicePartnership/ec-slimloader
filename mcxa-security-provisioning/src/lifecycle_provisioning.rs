@@ -13,7 +13,7 @@ pub use ec_slimloader_mcxa::error::FlashStatus;
 pub use ec_slimloader_mcxa::lifecycle::{
     CmpaUpdateConfigData, SecureBootLevel, LpWakePolicy, CnsaLevel, IFRConfigAreaBase, IFRPage,  
     cmpa_header_marker_is_valid, load_cfpa_header_word, load_lifecycle_from_cfpa, is_cmpa_erased, 
-    secure_boot_enforced, low_power_authentication_enforced, cnsa_enforced, fast_boot_enabled, 
+    hybrid_secure_boot_enforced, low_power_authentication_enforced, cnsa_enforced, fast_boot_enabled, 
     load_rotkh_from_cmpa, load_pqc_rotkh_from_cmpa, 
 };
 
@@ -91,16 +91,32 @@ impl IFRWriteGeometry {
     }
 }
 
+// Future complete CFPA write/update counter list. For now just read-modifysome-write the page.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CfpaWriteField {
     DevcfgUpdType,
     Header,
     PageVersion,
+    ImageKeyRevoke,
+    DbgRevokeVu,
+    Ee0FirmwareVersion,
+    Ee1FirmwareVersion,
+    Ee2FirmwareVersion,
+    Ee3FirmwareVersion,
+    FmcSblFirmwareVersion,
+    RecoverySb3Version,
+    UpdateSb3Version,
+    LpFirmwareVersion,
+    RotkRevoke,
     ErrAuthFailCount,
     ErrItrcCount,
-    Ee0FirmwareVersion,
 }
 
+// Offsets here are relative to IFRConfigAreaBase::Cfpa (the start of the CFPA page), not
+// relative to the lifecycle header word at 0x10. Do not start counting at the header; each
+// field appears shifted down by 0x10, but the memory-mapped reads/writes in this file need
+// full page relative offsets.
 //TODO: account for all the Monotonic counter words in CFPA so that they are tracked and +1'd, otherwise ROM will silently reject the update. The page version is the only one we currently 
 // track since it's the only one we read-modify-write; the rest are currently unused and left at 0.
 impl CfpaWriteField {
@@ -110,11 +126,63 @@ impl CfpaWriteField {
             Self::DevcfgUpdType => 0x0000,
             Self::Header => 0x0010,
             Self::PageVersion => 0x0014,
+            Self::ImageKeyRevoke => 0x0018,
+            Self::DbgRevokeVu => 0x001C,
+            Self::Ee0FirmwareVersion => 0x0020,
+            Self::Ee1FirmwareVersion => 0x0024,
+            Self::Ee2FirmwareVersion => 0x0028,
+            Self::Ee3FirmwareVersion => 0x002C,
+            Self::FmcSblFirmwareVersion => 0x0030,
+            Self::RecoverySb3Version => 0x0034,
+            Self::UpdateSb3Version => 0x0038,
+            Self::LpFirmwareVersion => 0x003C,
+            Self::RotkRevoke => 0x0040,
             Self::ErrAuthFailCount => 0x0050,
             Self::ErrItrcCount => 0x0054,
-            Self::Ee0FirmwareVersion => 0x0020,
         }
     }
+}
+
+fn build_cfpa_page_for_cmpa_update() -> Result<[u8; IFRPage::Cfpa.byte_len()], CmpaWriteError> {
+    if !is_cfpa_erased() {
+        match load_lifecycle_from_cfpa() {
+            Some(NbootLifecycleState::Develop) => {}
+            Some(_) | None => return Err(CmpaWriteError::LCStateInvalid),
+        }
+    }
+
+    let mut cfpa_page = match read_cfpa_page_for_update() {
+        Ok(page) => page,
+        Err(CfpaWriteError::InvalidFlashGeometry) => return Err(CmpaWriteError::InvalidFlashGeometry),
+        Err(CfpaWriteError::ConfigError) => return Err(CmpaWriteError::ConfigError),
+        Err(CfpaWriteError::CounterOverflow) => return Err(CmpaWriteError::CounterOverflow),
+        Err(CfpaWriteError::SecurePolicyViolation) => return Err(CmpaWriteError::ConfigError),
+        Err(CfpaWriteError::LifecycleRegression) => return Err(CmpaWriteError::LCStateInvalid),
+        Err(CfpaWriteError::FlashError(status)) => return Err(CmpaWriteError::FlashError(status)),
+        Err(CfpaWriteError::FlashVerify { status, failed_address, failed_data }) => {
+            return Err(CmpaWriteError::FlashVerify {
+                status,
+                failed_address,
+                failed_data,
+            })
+        }
+    };
+
+    unsafe {
+        let upd_type_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::DevcfgUpdType.byte_offset()) as *mut u32;
+        ptr::write_unaligned(upd_type_ptr, ScratchUpdateType::Cmpa as u32);
+
+        let header_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::Header.byte_offset()) as *mut u32;
+        ptr::write_unaligned(header_ptr, NbootLifecycleState::Develop as u32);
+        // We are updating CMPA and CFPA comes along, CMPA can only be updated in Develop LC.
+
+        let page_version_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::PageVersion.byte_offset()) as *mut u32;
+        let live_page_version = ptr::read_unaligned(page_version_ptr);
+        let next_page_version = live_page_version.checked_add(1).ok_or(CmpaWriteError::CounterOverflow)?;
+        ptr::write_unaligned(page_version_ptr, next_page_version);
+    }
+
+    Ok(cfpa_page)
 }
 
 #[inline(always)]
@@ -276,6 +344,7 @@ pub enum CmpaWriteError {
     LCStateInvalid,
     InvalidFlashGeometry,
     ConfigError,
+    CounterOverflow,
     FlashError(FlashStatus),
     FlashVerify {
         status: FlashStatus,
@@ -403,31 +472,6 @@ fn write_cfpa_page_to_scratch(page: &[u8; IFRPage::Cfpa.byte_len()]) -> Result<(
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CfpaBumpConfigData {
-    AuthFailCount,
-    FirmwareVersion,
-}
-
-impl CfpaBumpConfigData {
-    #[inline(always)]
-    const fn byte_offset(self) -> usize {
-        match self {
-            Self::AuthFailCount => CfpaWriteField::ErrAuthFailCount.byte_offset(),
-            Self::FirmwareVersion => CfpaWriteField::Ee0FirmwareVersion.byte_offset(),
-        }
-    }
-
-    #[inline(always)]
-    fn next_value(self, current: u32) -> Result<u32, CfpaWriteError> {
-        match self {
-            Self::AuthFailCount | Self::FirmwareVersion => {
-                current.checked_add(1).ok_or(CfpaWriteError::CounterOverflow)
-            }
-        }
-    }
-}
-
 pub fn arm_mcu_reset() -> ! {
     // ARM Cortex-M AIRCR register for system reset
     const AIRCR: *mut u32 = 0xE000ED0C as *mut u32;
@@ -440,16 +484,98 @@ pub fn arm_mcu_reset() -> ! {
     loop {}
 }
 
-fn bump_cfpa_value_in_scratch(config: CfpaBumpConfigData) -> Result<(), CfpaWriteError> {
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RotkState {
+    // The ROM accepts 0b00 and 0b01 as enabled. Use 0b00 as the canonical encoding.
+    Enabled = 0b00,
+    // The ROM accepts 0b10 and 0b11 as revoked. Use 0b10 as the canonical encoding.
+    Revoked = 0b10,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiceAliasGeneration {
+    NotGenerated = 0,
+    Generated = 1,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RotkRevokeConfig {
+    pub rotk0: Option<RotkState>,
+    pub rotk1: Option<RotkState>,
+    pub rotk2: Option<RotkState>,
+    pub rotk3: Option<RotkState>,
+    pub upd_alias_key: Option<DiceAliasGeneration>,
+    pub upd_alias_cert: Option<DiceAliasGeneration>,
+}
+
+impl RotkRevokeConfig {
+    fn apply_to_word(self, current_word: u32) -> u32 {
+        let mut next = current_word;
+
+        if let Some(value) = self.rotk0 {
+            next = (next & !(0b11 << 0)) | ((value as u32) << 0);
+        }
+        if let Some(value) = self.rotk1 {
+            next = (next & !(0b11 << 2)) | ((value as u32) << 2);
+        }
+        if let Some(value) = self.rotk2 {
+            next = (next & !(0b11 << 4)) | ((value as u32) << 4);
+        }
+        if let Some(value) = self.rotk3 {
+            next = (next & !(0b11 << 6)) | ((value as u32) << 6);
+        }
+        if let Some(value) = self.upd_alias_key {
+            next = (next & !(1 << 28)) | ((value as u32) << 28);
+        }
+        if let Some(value) = self.upd_alias_cert {
+            next = (next & !(1 << 29)) | ((value as u32) << 29);
+        }
+
+        next
+    }
+}
+
+fn bump_cfpa_monotonic_ctr_in_scratch(field: CfpaWriteField) -> Result<(), CfpaWriteError> {
     let mut page = read_cfpa_page_for_update()?;
 
     unsafe {
         let upd_type_ptr = page.as_mut_ptr().add(CfpaWriteField::DevcfgUpdType.byte_offset()) as *mut u32;
         ptr::write_unaligned(upd_type_ptr, ScratchUpdateType::Cfpa as u32);
 
-        let ptr = page.as_mut_ptr().add(config.byte_offset()) as *mut u32;
+        let ptr = page.as_mut_ptr().add(field.byte_offset()) as *mut u32;
         let val = ptr::read_unaligned(ptr);
-        let next = config.next_value(val)?;
+        let next = match field {
+            CfpaWriteField::PageVersion
+            | CfpaWriteField::Ee0FirmwareVersion
+            | CfpaWriteField::Ee1FirmwareVersion
+            | CfpaWriteField::Ee2FirmwareVersion
+            | CfpaWriteField::Ee3FirmwareVersion
+            | CfpaWriteField::FmcSblFirmwareVersion
+            | CfpaWriteField::RecoverySb3Version
+            | CfpaWriteField::UpdateSb3Version
+            | CfpaWriteField::LpFirmwareVersion
+            | CfpaWriteField::ErrAuthFailCount
+            | CfpaWriteField::ErrItrcCount => val.checked_add(1).ok_or(CfpaWriteError::CounterOverflow)?,
+            _ => return Err(CfpaWriteError::ConfigError),
+        };
+        ptr::write_unaligned(ptr, next);
+    }
+
+    write_cfpa_page_to_scratch(&page)
+}
+
+fn update_rotk_revoke_in_scratch(config: RotkRevokeConfig) -> Result<(), CfpaWriteError> {
+    let mut page = read_cfpa_page_for_update()?;
+
+    unsafe {
+        let upd_type_ptr = page.as_mut_ptr().add(CfpaWriteField::DevcfgUpdType.byte_offset()) as *mut u32;
+        ptr::write_unaligned(upd_type_ptr, ScratchUpdateType::Cfpa as u32);
+
+        let ptr = page.as_mut_ptr().add(CfpaWriteField::RotkRevoke.byte_offset()) as *mut u32;
+        let current = ptr::read_unaligned(ptr);
+        let next = config.apply_to_word(current);
         ptr::write_unaligned(ptr, next);
     }
 
@@ -471,12 +597,17 @@ fn stage_cfpa_lifecycle_advance_to_scratch(next_lc_state: NbootLifecycleState) -
 }
 
 pub fn cfpa_bump_auth_fail_count_and_reset() -> Result<Infallible, CfpaWriteError> {
-    bump_cfpa_value_in_scratch(CfpaBumpConfigData::AuthFailCount)?;
+    bump_cfpa_monotonic_ctr_in_scratch(CfpaWriteField::ErrAuthFailCount)?;
     arm_mcu_reset()
 }
 
 pub fn cfpa_bump_firmware_version_and_reset() -> Result<Infallible, CfpaWriteError> {
-    bump_cfpa_value_in_scratch(CfpaBumpConfigData::FirmwareVersion)?;
+    bump_cfpa_monotonic_ctr_in_scratch(CfpaWriteField::Ee0FirmwareVersion)?;
+    arm_mcu_reset()
+}
+
+pub fn update_rotk_revoke_in_scratch_and_reset(config: RotkRevokeConfig) -> Result<Infallible, CfpaWriteError> {
+    update_rotk_revoke_in_scratch(config)?;
     arm_mcu_reset()
 }
 
@@ -533,7 +664,7 @@ where
     if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
         return Err(CfpaWriteError::SecurePolicyViolation);
     }
-    if !secure_boot_enforced() || !cnsa_enforced() || fast_boot_enabled() || !low_power_authentication_enforced() {
+    if !hybrid_secure_boot_enforced() || !cnsa_enforced() || fast_boot_enabled() || !low_power_authentication_enforced() {
         return Err(CfpaWriteError::SecurePolicyViolation);
     }
     if let Some(current) = load_lifecycle_from_cfpa() {
@@ -641,6 +772,8 @@ pub fn write_cmpa_page_to_scratch(cmpa_page: &[u8; IFRPage::CmpaAll.byte_len()])
         return Err(CmpaWriteError::InvalidFlashGeometry);
     }
 
+    let cfpa_page = build_cfpa_page_for_cmpa_update()?;
+
     let drv = flash_driver();
     let mut cfg = flash_cfg_for_rom_api();
 
@@ -648,41 +781,6 @@ pub fn write_cmpa_page_to_scratch(cmpa_page: &[u8; IFRPage::CmpaAll.byte_len()])
     if status != FlashStatus::Success {
         error!("cmpa: flash_init failed");
         return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let mut cfpa_page = [0u8; IFRPage::Cfpa.byte_len()];
-    // Read the live CFPA page version and increment it. The ROM silently rejects scratch
-    // updates where PageVersion <= the live CFPA version.
-    let live_page_version = unsafe {
-        core::ptr::read_volatile(
-            (IFRConfigAreaBase::Cfpa as u32 + CfpaWriteField::PageVersion.byte_offset() as u32) as *const u32
-        )
-    };
-    // It's a 32 bit integer, ROM will not alllow it to wrap around. Skipping that check here since it's practically impossible to hit, althouhh technically possible if the device CFPA / CMPA is written 4B + times (good luck!).
-    unsafe {
-        let ver_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::PageVersion.byte_offset()) as *mut u32;
-        ptr::write_unaligned(ver_ptr, live_page_version.wrapping_add(1));
-    }
-    // Preserve monotonic counters — ROM rejects scratch if these go backwards.
-    for field in [CfpaWriteField::ErrAuthFailCount, CfpaWriteField::ErrItrcCount] {
-        let val = unsafe {
-            core::ptr::read_volatile(
-                (IFRConfigAreaBase::Cfpa as u32 + field.byte_offset() as u32) as *const u32
-            )
-        };
-        unsafe {
-            let ptr = cfpa_page.as_mut_ptr().add(field.byte_offset()) as *mut u32;
-            core::ptr::write_unaligned(ptr, val);
-        }
-    }
-    unsafe {
-        let header_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::Header.byte_offset()) as *mut u32;
-        ptr::write_unaligned(header_ptr, NbootLifecycleState::Develop as u32);
-    }
-
-    unsafe {
-        let upd_type_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::DevcfgUpdType.byte_offset()) as *mut u32;
-        ptr::write_unaligned(upd_type_ptr, ScratchUpdateType::Cmpa as u32);
     }
 
     // Erase the full 8 KB IFR scratch sector, then verify it is blank.
@@ -813,6 +911,8 @@ pub fn write_cmpa_core_page_to_scratch(cmpa_page: &[u8; IFRPage::Cmpa.byte_len()
         return Err(CmpaWriteError::InvalidFlashGeometry);
     }
 
+    let cfpa_page = build_cfpa_page_for_cmpa_update()?;
+
     let drv = flash_driver();
     let mut cfg = flash_cfg_for_rom_api();
 
@@ -820,37 +920,6 @@ pub fn write_cmpa_core_page_to_scratch(cmpa_page: &[u8; IFRPage::Cmpa.byte_len()
     if status != FlashStatus::Success {
         error!("cmpa: flash_init failed");
         return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let mut cfpa_page = [0u8; IFRPage::Cfpa.byte_len()];
-    let live_page_version = unsafe {
-        core::ptr::read_volatile(
-            (IFRConfigAreaBase::Cfpa as u32 + CfpaWriteField::PageVersion.byte_offset() as u32) as *const u32
-        )
-    };
-    unsafe {
-        let ver_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::PageVersion.byte_offset()) as *mut u32;
-        ptr::write_unaligned(ver_ptr, live_page_version.wrapping_add(1));
-    }
-    // Preserve monotonic counters — ROM rejects scratch if these go backwards.
-    for field in [CfpaWriteField::ErrAuthFailCount, CfpaWriteField::ErrItrcCount] {
-        let val = unsafe {
-            core::ptr::read_volatile(
-                (IFRConfigAreaBase::Cfpa as u32 + field.byte_offset() as u32) as *const u32
-            )
-        };
-        unsafe {
-            let ptr = cfpa_page.as_mut_ptr().add(field.byte_offset()) as *mut u32;
-            core::ptr::write_unaligned(ptr, val);
-        }
-    }
-    unsafe {
-        let header_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::Header.byte_offset()) as *mut u32;
-        ptr::write_unaligned(header_ptr, NbootLifecycleState::Develop as u32);
-    }
-    unsafe {
-        let upd_type_ptr = cfpa_page.as_mut_ptr().add(CfpaWriteField::DevcfgUpdType.byte_offset()) as *mut u32;
-        ptr::write_unaligned(upd_type_ptr, ScratchUpdateType::Cmpa as u32);
     }
 
     let status = drv.flash_erase_sector(
