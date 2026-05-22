@@ -20,7 +20,7 @@ defmt-or-log = { workspace = true }
 log = { workspace = true, optional = true }
 
 cortex-m = { workspace = true }
-embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = [
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", tag = "v0.1.0", default-features = false, features = [
     "unstable-pac",
 ] }
 
