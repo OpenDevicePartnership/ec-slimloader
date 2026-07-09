@@ -43,9 +43,6 @@ pub trait Board {
     ///
     /// Either shut down the device or go into an infinite loop.
     fn abort(&mut self) -> !;
-
-    /// Perform ARM Cortex-M system reset via AIRCR register.
-    fn arm_mcu_reset(&mut self) -> !;
 }
 
 #[derive(Debug)]
@@ -158,7 +155,7 @@ pub async fn start<B: Board, const JOURNAL_BUFFER_SIZE: usize>(config: B::Config
     // Handle SlotRetryRequired differently - operation succeeded, just restart
     if matches!(error, BootError::SlotRetryRequired) {
         info!("Slot copy completed successfully, restarting bootloader for retry");
-        board.arm_mcu_reset() // Proper system reset!
+        cortex_m::peripheral::SCB::sys_reset() // Proper system reset!
     }
 
     // Normal error handling for all other errors (only reached if NOT SlotRetryRequired)

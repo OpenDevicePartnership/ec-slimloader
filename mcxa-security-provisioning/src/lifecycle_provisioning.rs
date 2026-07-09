@@ -472,18 +472,6 @@ fn write_cfpa_page_to_scratch(page: &[u8; IFRPage::Cfpa.byte_len()]) -> Result<(
     Ok(())
 }
 
-pub fn arm_mcu_reset() -> ! {
-    // ARM Cortex-M AIRCR register for system reset
-    const AIRCR: *mut u32 = 0xE000ED0C as *mut u32;
-    const AIRCR_VECTKEY: u32 = 0x5FA << 16; // Required key for write
-    const AIRCR_SYSRESETREQ: u32 = 1 << 2; // System reset request bit
-    unsafe {
-        ptr::write_volatile(AIRCR, AIRCR_VECTKEY | AIRCR_SYSRESETREQ);
-    }
-    // Should never reach here, but just in case reset doesn't work immediately
-    loop {}
-}
-
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RotkState {
@@ -598,17 +586,17 @@ fn stage_cfpa_lifecycle_advance_to_scratch(next_lc_state: NbootLifecycleState) -
 
 pub fn cfpa_bump_auth_fail_count_and_reset() -> Result<Infallible, CfpaWriteError> {
     bump_cfpa_monotonic_ctr_in_scratch(CfpaWriteField::ErrAuthFailCount)?;
-    arm_mcu_reset()
+    cortex_m::peripheral::SCB::sys_reset()
 }
 
 pub fn cfpa_bump_firmware_version_and_reset() -> Result<Infallible, CfpaWriteError> {
     bump_cfpa_monotonic_ctr_in_scratch(CfpaWriteField::Ee0FirmwareVersion)?;
-    arm_mcu_reset()
+    cortex_m::peripheral::SCB::sys_reset()
 }
 
 pub fn update_rotk_revoke_in_scratch_and_reset(config: RotkRevokeConfig) -> Result<Infallible, CfpaWriteError> {
     update_rotk_revoke_in_scratch(config)?;
-    arm_mcu_reset()
+    cortex_m::peripheral::SCB::sys_reset()
 }
 
 
@@ -682,7 +670,7 @@ pub fn cfpa_stage_lifecycle_advance_and_reset<Next>(
     token: LifecycleAdvanceToken<Next>,
 ) -> Result<Infallible, CfpaWriteError> {
     stage_cfpa_lifecycle_advance_to_scratch(token.next)?;
-    arm_mcu_reset()
+    cortex_m::peripheral::SCB::sys_reset()
 }
 
 /// Typed write-side representation of CMPA.RoTK_USAGE.
@@ -1035,7 +1023,7 @@ pub fn write_cmpa_default_config_to_scratch_and_reset(config: CmpaDefaultConfig)
     cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()].copy_from_slice(&config.pqc_rotkh);
 
     write_cmpa_page_to_scratch(&cmpa_page)?;
-    arm_mcu_reset()
+    cortex_m::peripheral::SCB::sys_reset()
 }
 
 /// Individually addressable CMPA word-fields for generic patching.
@@ -1167,5 +1155,5 @@ pub fn write_cmpa_fields_to_scratch_and_reset(
         cmpa_page[field.byte_range()].copy_from_slice(&value.to_le_bytes());
     }
     write_cmpa_page_to_scratch(&cmpa_page)?;
-    arm_mcu_reset()
+    cortex_m::peripheral::SCB::sys_reset()
 }

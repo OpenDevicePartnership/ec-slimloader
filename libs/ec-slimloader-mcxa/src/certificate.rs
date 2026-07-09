@@ -106,8 +106,7 @@ pub struct ParsedSignatures<'a> {
 }
 
 fn sha512_rkth_48(peri: Peri<'_, peripherals::SGI0>, input: &[u8]) -> Option<[u8; 48]> {
-    let sgi = embassy_mcxa::sgi::Sgi::new_blocking(peri).ok()?;
-    let mut blocking_hasher = crate::BlockingHasher::new(sgi);
+    let mut blocking_hasher = embassy_mcxa::sgi::Sgi::new_blocking(peri).ok()?.hasher();
 
     blocking_hasher.hsm_sha512_rkth(input)
 }

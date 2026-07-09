@@ -73,65 +73,20 @@ impl RomApi {
         unsafe { FlashDriver::from_raw(&*self.raw.flash_api) }
     }
 
-    pub fn flash_api_opt(&self) -> Option<FlashDriver> {
-        let ptr = self.raw.flash_api;
-        if ptr.is_null() {
-            None
-        } else {
-            unsafe { Some(FlashDriver::from_raw(&*ptr)) }
-        }
-    }
-
     pub fn kb_api(&self) -> KBApiDriver {
         unsafe { KBApiDriver::from_raw(&*self.raw.kb_api) }
-    }
-
-    pub fn kb_api_opt(&self) -> Option<KBApiDriver> {
-        let ptr = self.raw.kb_api;
-        if ptr.is_null() {
-            None
-        } else {
-            unsafe { Some(KBApiDriver::from_raw(&*ptr)) }
-        }
     }
 
     pub fn nboot_api(&self) -> NbootDriver {
         unsafe { NbootDriver::from_raw(&*self.raw.nboot_api) }
     }
 
-    pub fn nboot_api_opt(&self) -> Option<NbootDriver> {
-        let ptr = self.raw.nboot_api;
-        if ptr.is_null() {
-            None
-        } else {
-            unsafe { Some(NbootDriver::from_raw(&*ptr)) }
-        }
-    }
-
     pub fn flex_spi_api(&self) -> FlexspiNorFlashDriver {
         unsafe { FlexspiNorFlashDriver::from_raw(&*self.raw.flex_spi_api) }
     }
 
-    pub fn flex_spi_api_opt(&self) -> Option<FlexspiNorFlashDriver> {
-        let ptr = self.raw.flex_spi_api;
-        if ptr.is_null() {
-            None
-        } else {
-            unsafe { Some(FlexspiNorFlashDriver::from_raw(&*ptr)) }
-        }
-    }
-
     pub fn spi_flash_api(&self) -> SpiFlashDriver {
         unsafe { SpiFlashDriver::from_raw(&*self.raw.spi_flash_api) }
-    }
-
-    pub fn spi_flash_api_opt(&self) -> Option<SpiFlashDriver> {
-        let ptr = self.raw.spi_flash_api;
-        if ptr.is_null() {
-            None
-        } else {
-            unsafe { Some(SpiFlashDriver::from_raw(&*ptr)) }
-        }
     }
 
     pub fn version(&self) -> StandardVersion {
@@ -244,18 +199,10 @@ pub fn flash_driver() -> FlashDriver {
     bootloader_tree().flash_api()
 }
 
-pub fn flash_driver_opt() -> Option<FlashDriver> {
-    bootloader_tree().flash_api_opt()
-}
-
 /// Helper function to get a pointer to the nboot API from the ROM API tree.
 pub fn nboot() -> NbootDriver {
     // Match NXP usage: g_bootloaderTree->nbootDriver->...
     bootloader_tree().nboot_api()
-}
-
-pub fn nboot_opt() -> Option<NbootDriver> {
-    bootloader_tree().nboot_api_opt()
 }
 
 /// Helper function to get a pointer to the KB driver API from the ROM API tree.
@@ -263,26 +210,14 @@ pub fn kb() -> KBApiDriver {
     bootloader_tree().kb_api()
 }
 
-pub fn kb_opt() -> Option<KBApiDriver> {
-    bootloader_tree().kb_api_opt()
-}
-
 /// Helper function to get a pointer to the FlexSPI NOR flash driver API from the ROM API tree.
 pub fn flexspi_nor() -> FlexspiNorFlashDriver {
     bootloader_tree().flex_spi_api()
 }
 
-pub fn flexspi_nor_opt() -> Option<FlexspiNorFlashDriver> {
-    bootloader_tree().flex_spi_api_opt()
-}
-
 /// Helper function to get a pointer to the SPI flash driver API from the ROM API tree.
 pub fn spi_flash() -> SpiFlashDriver {
     bootloader_tree().spi_flash_api()
-}
-
-pub fn spi_flash_opt() -> Option<SpiFlashDriver> {
-    bootloader_tree().spi_flash_api_opt()
 }
 
 #[inline(always)]

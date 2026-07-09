@@ -183,7 +183,6 @@ pub fn verify_authenticity<'d>(
                 parms.soc_RoTNVM.soc_rkh.copy_from_slice(&image_rkth_words);
             } else {
                 verify_warn!("Production: image RKTH differs; not copying, will call ecdsa_verify anyway");
-                //TODO: just return Err() here?
                 n_boot_api.nboot_context_deinit(&mut ctx);
                 return Err(ec_slimloader::BootError::RootOfTrust);
             }

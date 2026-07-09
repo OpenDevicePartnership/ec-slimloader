@@ -7,7 +7,7 @@ use hal::bind_interrupts;
 use hal::dma::DmaChannel;
 use hal::gpio::{DriveStrength, Level, Output, SlewRate};
 use hal::peripherals::SGI0;
-use hal::sgi::hash::{DmaHasher, HashSize};
+use hal::sgi::hash::HashSize;
 use hal::sgi::{InterruptHandler, Sgi};
 use {defmt_rtt as _, embassy_mcxa as hal, panic_probe as _};
 
@@ -29,8 +29,8 @@ async fn main(_spawner: Spawner) {
         *byte = index as u8;
     }
 
-    let sgi = Sgi::new(p.SGI0.reborrow(), Irqs).unwrap();
-    match DmaHasher::start_and_finalize(sgi, &mut dma_ch0, HashSize::Sha384, &input_data, &mut hash_result)
+    let mut sgi = Sgi::new(p.SGI0.reborrow(), Irqs).unwrap();
+    match sgi.sha2_start_and_finalize(&mut dma_ch0, HashSize::Sha384, &input_data, &mut hash_result)
     .await
     {
         Ok(()) => defmt::info!("DMA hash: {=[u8]:x}", &hash_result),

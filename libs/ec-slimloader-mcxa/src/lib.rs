@@ -25,7 +25,7 @@ use embassy_mcxa::{peripherals, Peri};
 use embedded_storage_async::nor_flash::NorFlash;
 use flash_internal::InternalFlash;
 
-pub use embassy_mcxa::sgi::hash::{BlockingHasher, DmaHasher, HashMode, HashOptions, HashSize, StreamingHasher};
+pub use embassy_mcxa::sgi::hash::{BlockingHasher, HashMode, HashOptions, HashSize, StreamingHasher};
 pub use embassy_mcxa::sgi::{Async, Blocking, InterruptHandler, SgiError, SetupError as SgiSetupError, Sgi};
 pub use embassy_mcxa::sgi;
 pub use embassy_mcxa::sgi::hash;
@@ -301,20 +301,6 @@ impl Board for McxaBoard {
     }
 
     fn abort(&mut self) -> ! {
-        loop {
-            cortex_m::asm::wfi();
-        }
-    }
-
-    fn arm_mcu_reset(&mut self) -> ! {
-        const AIRCR: *mut u32 = 0xE000ED0C as *mut u32;
-        const AIRCR_VECTKEY: u32 = 0x5FA << 16;
-        const AIRCR_SYSRESETREQ: u32 = 1 << 2;
-
-        unsafe {
-            core::ptr::write_volatile(AIRCR, AIRCR_VECTKEY | AIRCR_SYSRESETREQ);
-        }
-
         loop {
             cortex_m::asm::wfi();
         }
