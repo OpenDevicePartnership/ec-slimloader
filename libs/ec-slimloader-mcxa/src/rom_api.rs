@@ -251,29 +251,3 @@ pub fn flash_cfg_for_rom_api() -> FlashConfig {
         use_ahb_read: true,
     }
 }
-
-// Compile-time ABI guards for MCXA ROM-facing structs.
-// The ROM expects `spi_eeprom_config(uint32_t *config)` to point at exactly 2x u32 words
-// (8 bytes total). ABI size checks for this and other ROM-facing structs are collected
-// below in a single private guard block.
-
-struct AbiGuards;
-
-impl AbiGuards {
-    const CHECK: () = {
-        let _ = [0u8; core::mem::size_of::<SpiMemConfigOption>()];
-        let _ = [0u8; core::mem::size_of::<StandardVersion>()];
-        let _ = [0u8; core::mem::size_of::<FlashFfrConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlashReadSingleWordConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlashSetWriteModeConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlashSetReadModeConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlashModeConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlashConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlashRunContext>()];
-        let _ = [0u8; core::mem::size_of::<FlexspiLutSeq>()];
-        let _ = [0u8; core::mem::size_of::<FlexspiDllTime>()];
-        let _ = [0u8; core::mem::size_of::<FlexspiMemConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlexspiNorConfig>()];
-        let _ = [0u8; core::mem::size_of::<FlexspiXfer>()];
-    };
-}

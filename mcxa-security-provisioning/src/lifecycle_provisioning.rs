@@ -11,16 +11,18 @@ use ec_slimloader_mcxa::memory::{INTERNAL_FLASH_START, INTERNAL_FLASH_SIZE};
 pub use ec_slimloader_mcxa::error::FlashStatus;
 
 pub use ec_slimloader_mcxa::lifecycle::{
-    CmpaUpdateConfigData, SecureBootLevel, LpWakePolicy, CnsaLevel, IFRConfigAreaBase, IFRPage,  
+    CmpaUpdateConfigData, SecureBootLevel, LpWakePolicy, CnsaLevel, XipImageProtect, IFRConfigAreaBase, IFRPage,  
     cmpa_header_marker_is_valid, load_cfpa_header_word, load_lifecycle_from_cfpa, is_cmpa_erased, 
     hybrid_secure_boot_enforced, low_power_authentication_enforced, cnsa_enforced, fast_boot_enabled, 
     load_rotkh_from_cmpa, load_pqc_rotkh_from_cmpa, 
 };
 
-fn is_cfpa_erased() -> bool {
+pub fn is_cfpa_erased() -> bool {
     let base = IFRConfigAreaBase::Cfpa as u32;
     let word_count = IFRPage::Cfpa.byte_len() / core::mem::size_of::<u32>();
-    for i in 0..word_count {
+    // Start after the header word (index 4 = offset 0x10); check PageVersion and things after.
+    const FIRST_WORD_AFTER_HEADER: usize = (CfpaWriteField::Header.byte_offset() / core::mem::size_of::<u32>()) + 1; //5
+    for i in FIRST_WORD_AFTER_HEADER..word_count {
         let addr = base + (i as u32 * 4);
         let val = unsafe { core::ptr::read_volatile(addr as *const u32) };
         if val != 0xFFFF_FFFF {
@@ -994,14 +996,19 @@ pub fn write_cmpa_default_config_to_scratch_and_reset(config: CmpaDefaultConfig)
     // [1:0]   SEC_BOOT_EN  = 0b11 (EcdsaMldsaOnly: hybrid ECDSA+MLDSA only)
     // [4:3]   LP_SEC_BOOT  = 0b00 (FullAuthentication: full auth on LP wake)
     // [9:8]   ENF_CNSA     = 0b10 (CnsaTwo: CNSA 2.0 enforced)
-    // [13:12] FAST_BOOT_EN = 0b11 (disabled: 0b00=enabled, any non-zero=disabled)
+    // [13:12] FAST_BOOT_EN = 0b11 (fast boot disabled: 0b00=enabled, any non-zero=disabled)
+    // [15:14] ACTIVE_IMG_PROT = b01 GLBAC2 lock on active image (i.e. SBL)
+    // [27:16] FIPS STEN; currently not used, set as 0.
+    // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
     // Configurable: [7:6] DICE_CSR_KEY_TYPE, [11:10] ENF_TZM_PRESET
     let secure_boot_cfg: u32 = (SecureBootLevel::EcdsaMldsaOnly as u32)            // [1:0]  = 0b11
         | ((LpWakePolicy::FullAuthentication as u32) << 3)  // [4:3]  = 0b00
         | ((config.dice_csr_key_type as u32) << 6)          // [7:6]  configurable
         | ((CnsaLevel::CnsaTwo as u32) << 8)                // [9:8]  = 0b10
         | ((config.enf_tzm_preset as u32) << 10)            // [11:10] configurable
-        | (0x3 << 12); // [13:12]= 0b11 fast boot disabled
+        | (0x3 << 12)                                       // [13:12]= 0b11 fast boot disabled
+        | ((XipImageProtect::WriteProtectSticky as u32) << 14) // [15:14]= 0b01 write protect with sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
+        | (0x1 << 30); // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
 
     let mut cmpa_page = read_cmpa_page_for_update()?;
 
@@ -1021,6 +1028,12 @@ pub fn write_cmpa_default_config_to_scratch_and_reset(config: CmpaDefaultConfig)
     }
     cmpa_page[CmpaUpdateConfigData::Rotkh.byte_range()].copy_from_slice(&config.rotkh);
     cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()].copy_from_slice(&config.pqc_rotkh);
+
+    const CC_SOCU_PIN: u32 = 0x1FFFE000; // default value for CC_SOCU_PIN in CMPA, for breakdown, refer to NXP secure provisioning guide.
+    const CC_SOCU_DFLT: u32 = 0xBFFF4000; // default value for CC_SOCU_DFLT in CMPA, for breakdown, refer to NXP secure provisioning guide.
+
+    cmpa_page[CmpaUpdateConfigData::CcSocuPin.byte_range()].copy_from_slice(&CC_SOCU_PIN.to_le_bytes());
+    cmpa_page[CmpaUpdateConfigData::CcSocuDflt.byte_range()].copy_from_slice(&CC_SOCU_DFLT.to_le_bytes());
 
     write_cmpa_page_to_scratch(&cmpa_page)?;
     cortex_m::peripheral::SCB::sys_reset()

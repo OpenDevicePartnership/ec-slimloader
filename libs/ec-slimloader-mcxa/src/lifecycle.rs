@@ -14,10 +14,10 @@ use crate::rom_api::{NbootLifecycleDiscriminator, NbootLifecycleState, NbootRoot
 //   CMPA  0x0100_0200 - 0x0100_03FF
 //   CMPA customer-defined 0x0100_0400 - 0x0100_17FF
 //
-// SCRATCH (write staging):
-//   CFPA  0x0100_2000 - 0x0100_21FF
-//   CMPA  0x0100_2200 - 0x0100_23FF
-//   CMPA customer-defined 0x0100_2400 - 0x0100_37FF
+// SCRATCH (write staging): MUST use secure alias.
+//   CFPA  0x1100_2000 - 0x1100_21FF
+//   CMPA  0x1100_2200 - 0x1100_23FF
+//   CMPA customer-defined 0x1100_2400 - 0x1100_37FF
 
 // CFG bases (use for reading)
 #[repr(u32)]
@@ -161,6 +161,22 @@ pub enum LpWakePolicy {
     Jump = 2,               // b10 (jump to CFPA LP wake address without authentication)
     Cmac = 3,               // b11 (CMAC auth for LP wake, full hybrid auth for normal boot)
 }
+
+/// Active image protection mode (CMPA.SECURE_BOOT_CFG bits [15:14]).
+/// Controls MBC (Memory Block Controller) protection applied to the active (XIP) image region.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum XipImageProtect {
+    /// Active image protection via CFPA flash ACL settings.
+    FlashAclSettingCfpa = 0,
+    /// Write protect active image area with sticky lock (GLBAC2)
+    WriteProtectSticky = 1,
+    /// Write protect active image area without sticky lock
+    WriteProtect = 2,
+    /// XOM (eXecute-Only Memory) protect active image area with sticky lock
+    XomSticky = 3,
+}
+
 /// Helper function to load the secure boot enforcement level from CMPA and interpret it according to the reference table for MCXA.
 pub fn secure_boot_level() -> SecureBootLevel {
     // CMPA.SECURE_BOOT_CFG: SEC_BOOT_EN is a 2-bit field in bits [1:0].
@@ -174,7 +190,12 @@ pub fn secure_boot_level() -> SecureBootLevel {
 }
 
 pub fn secure_boot_state() -> SecureBootState {
-    if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
+    // Fully erased CMPA = brand new device with no security configured
+    if is_cmpa_erased() {
+        return SecureBootState::Disabled;
+    }
+    // Invalid header but not fully erased = partially provisioned or corrupt
+    if !cmpa_header_marker_is_valid() {
         return SecureBootState::Unknown;
     }
 
@@ -292,6 +313,8 @@ fn cmpa_secure_boot_cfg() -> CmpaSecureBootCfgDecode {
 pub enum CmpaUpdateConfigData {
     BootCfg0,
     BootCfg1,
+    CcSocuPin,
+    CcSocuDflt,
     SecureBootCfg,
     RotkUsage,
     SblStartAddr,
@@ -305,6 +328,8 @@ impl CmpaUpdateConfigData {
         match self {
             Self::BootCfg0 => IFRConfigAreaBase::Cmpa as u32,
             Self::BootCfg1 => IFRConfigAreaBase::Cmpa as u32 + 0x04,
+            Self::CcSocuPin => IFRConfigAreaBase::Cmpa as u32 + 0x40,
+            Self::CcSocuDflt => IFRConfigAreaBase::Cmpa as u32 + 0x44,
             Self::SecureBootCfg => IFRConfigAreaBase::Cmpa as u32 + 0x50,
             Self::RotkUsage => IFRConfigAreaBase::Cmpa as u32 + 0x54,
             Self::SblStartAddr => IFRConfigAreaBase::Cmpa as u32 + 0x58,
@@ -317,7 +342,7 @@ impl CmpaUpdateConfigData {
     pub const fn byte_len(self) -> usize {
         const RKTH_WORDS: usize = 12;
         match self {
-            Self::BootCfg0 | Self::BootCfg1 | Self::SecureBootCfg | Self::RotkUsage | Self::SblStartAddr => {
+            Self::BootCfg0 | Self::BootCfg1 | Self::CcSocuPin | Self::CcSocuDflt | Self::SecureBootCfg | Self::RotkUsage | Self::SblStartAddr => {
                 mem::size_of::<u32>()
             }
             Self::Rotkh | Self::PqcRotkh => RKTH_WORDS * mem::size_of::<u32>(),
@@ -334,6 +359,8 @@ impl CmpaUpdateConfigData {
         match self {
             Self::BootCfg0 => 0x00,
             Self::BootCfg1 => 0x04,
+            Self::CcSocuPin => 0x40,
+            Self::CcSocuDflt => 0x44,
             Self::SecureBootCfg => 0x50,
             Self::RotkUsage => 0x54,
             Self::SblStartAddr => 0x58,
@@ -556,6 +583,12 @@ pub fn load_firmware_version_from_cfpa() -> Option<u32> {
 pub fn load_lifecycle_from_cfpa() -> Option<NbootLifecycleState> {
     let header = load_cfpa_header_word()?;
     NbootLifecycleDiscriminator::from_raw(header as u8).map(NbootLifecycleDiscriminator::state)
+}
+
+/// Helper function that returns true if the lifecycle is advanced past develop2 (i.e. the device is "fused" and no IFR changes are permitted). Returns None if the CFPA header is invalid (e.g. unprovisioned/partially provisioned state).
+pub fn is_sam_fused() -> Option<bool> {
+    let current_lifecycle = load_lifecycle_from_cfpa()?;
+    Some(current_lifecycle != NbootLifecycleState::Develop && current_lifecycle != NbootLifecycleState::Develop2)
 }
 
 /// Load key usage NbootRootKeyUsage for all four key sets from CMPA.RoTK_USAGE word, returning None if CMPA header is invalid or the RoTK_USAGE word is erased (indicating unprovisioned/partially provisioned state that should not be trusted). The mapping from the 3-bit usage fields in CMPA to the NbootRootKeyUsage enum is based on the reference table provided by the user.
