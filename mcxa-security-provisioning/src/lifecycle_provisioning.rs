@@ -257,6 +257,14 @@ impl CmpaBootCfg0Write {
             // [1] IFLASH_DUAL_EN = 0 (always single-channel)
             | (1 << 0) // [0] IFLASH_BOOTEN = 1 (always enable internal flash boot)
     }
+    pub fn default() -> Self {
+        Self {
+            boot_speed: BootSpeed::Fro192Md,
+            rec_boot_en: None,
+            rec_lspi: None,
+            rec_flexspi: None,
+        }
+    }
 }
 
 /// CMPA.BOOT_CFG1 [15:14]/[13:12]/[11:10]/[9:8] ISP entry policy (2-bit fields).
@@ -313,6 +321,19 @@ impl CmpaBootCfg1Write {
             | ((self.isp_can_en.unwrap_or(false) as u32) << 2) // [2]
             | ((self.isp_spi_en.unwrap_or(false) as u32) << 1) // [1]
             | (self.isp_uart_en.unwrap_or(true)  as u32) // [0] default enabled
+    }
+
+    pub fn default() -> Self {
+        Self {
+            isp_ft_entry: IspEntryPolicy::Allowed,
+            isp_dm_entry: IspEntryPolicy::Allowed,
+            isp_pin_entry: IspEntryPolicy::Allowed,
+            isp_usb_en: None,
+            isp_i2c_en: None,
+            isp_can_en: None,
+            isp_spi_en: None,
+            isp_uart_en: None,
+        }
     }
 }
 
@@ -892,8 +913,8 @@ pub fn read_cmpa_core_page_for_update() -> Result<[u8; IFRPage::Cmpa.byte_len()]
     Ok(cmpa_page)
 }
 
-// Stages only the 512-byte core CMPA page into SCRATCH.
-// Matches read_cmpa_core_page_for_update; use when EXT_CMPA_32B_SIZE is 0.
+/// Stages only the 512-byte core CMPA page into SCRATCH.
+/// Matches read_cmpa_core_page_for_update; use when EXT_CMPA_32B_SIZE is 0.
 pub fn write_cmpa_core_page_to_scratch(cmpa_page: &[u8; IFRPage::Cmpa.byte_len()]) -> Result<(), CmpaWriteError> {
     if (IFRPage::Cfpa.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize()) != 0
         || (IFRPage::Cmpa.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize()) != 0
@@ -991,6 +1012,8 @@ pub fn write_cmpa_core_page_to_scratch(cmpa_page: &[u8; IFRPage::Cmpa.byte_len()
     Ok(())
 }
 
+///  Allows a "default" secure Boot configuration to be written to CMPA and staged for the next reset. This is intended for first-time provisioning of a DEV unit, and should only be called in the Develop lifecycle state. 
+/// Not intended for production or factory use.
 pub fn write_cmpa_default_config_to_scratch_and_reset(config: CmpaDefaultConfig) -> Result<Infallible, CmpaWriteError> {
     // Fixed policy fields — locked, not caller-configurable:
     // [1:0]   SEC_BOOT_EN  = 0b11 (EcdsaMldsaOnly: hybrid ECDSA+MLDSA only)
@@ -1167,6 +1190,110 @@ pub fn write_cmpa_fields_to_scratch_and_reset(
     for (field, value) in fields {
         cmpa_page[field.byte_range()].copy_from_slice(&value.to_le_bytes());
     }
+    write_cmpa_page_to_scratch(&cmpa_page)?;
+    cortex_m::peripheral::SCB::sys_reset()
+}
+
+/// First boot IFR (CMPA / CFPA) provisioning for DEV and/or factory floor, non-security critical.
+/// Keeps secure boot, DICE and TZM disabled, and sets a safe default for other fields.
+pub fn set_ifr_initial_config_and_reset() -> Result<Infallible, CmpaWriteError> {
+    // Have SecBoot disabled initially, TZM set to not configured. Eventually provisioning flow will set these to the desired values. The following is a safe default for first-time provisioning.
+    let secure_boot_cfg: u32 = (SecureBootLevel::AllAllowed as u32)
+        | ((LpWakePolicy::FullAuthentication as u32) << 3)  
+        | ((DiceCsrKeyType::EccP384AndMlDsa87 as u32) << 6) // DICE is turned off at this stage, this option is not relevant.
+        | ((CnsaLevel::CnsaTwo as u32) << 8)                
+        | ((TzmPreset::Ignored as u32) << 10)            // Ignore TZM for first stage.
+        | (0x3 << 12)                                       // [13:12]= 0b11 fast boot disabled
+        | ((XipImageProtect::WriteProtectSticky as u32) << 14) // [15:14]= 0b01 write protect with sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
+        | (0x1 << 30); // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
+
+    let mut cmpa_page = read_cmpa_page_for_update()?;
+
+    // Preserve the header marker in [31:16]; apply config bits to [15:0].
+    let existing_boot_cfg0 =
+        unsafe { ptr::read_unaligned(cmpa_page[CmpaUpdateConfigData::BootCfg0.byte_range()].as_ptr() as *const u32) };
+    let boot_cfg0_word = (existing_boot_cfg0 & 0xFFFF_0000) | CmpaBootCfg0Write::default().to_config_bits();
+
+    // All the following copies are safe since the byte_ranges are defined via enums and impls to match the lengths of the respective fields.
+    cmpa_page[CmpaUpdateConfigData::BootCfg0.byte_range()].copy_from_slice(&boot_cfg0_word.to_le_bytes());
+    cmpa_page[CmpaUpdateConfigData::BootCfg1.byte_range()]
+        .copy_from_slice(&CmpaBootCfg1Write::default().to_config_bits().to_le_bytes());
+
+    let rotk_usage = CmpaRotkUsage {
+        rotk: [NbootRootKeyUsage::All; 4], //Leave as is OR quantify later (combinations possiible).
+        skip_dice: true, // Skip DICE for first stage, since DICE is not yet provisioned.
+        dice_inc_nxp_cfg: false,
+        dice_inc_cust_cfg: false,
+        dice_inc_nxp_field_cfg: false,
+    };
+    cmpa_page[CmpaUpdateConfigData::RotkUsage.byte_range()].copy_from_slice(&rotk_usage.to_u32().to_le_bytes());
+    cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].copy_from_slice(&secure_boot_cfg.to_le_bytes());
+    let sbl_start_addr: u32 = 0; // Or secure alias?
+    cmpa_page[CmpaUpdateConfigData::SblStartAddr.byte_range()].copy_from_slice(&sbl_start_addr.to_le_bytes());
+
+    const CC_SOCU_PIN: u32 = 0x1FFFE000; // default value for CC_SOCU_PIN in CMPA, for breakdown, refer to NXP secure provisioning guide.
+    const CC_SOCU_DFLT: u32 = 0xBFFF4000; // default value for CC_SOCU_DFLT in CMPA, for breakdown, refer to NXP secure provisioning guide.
+
+    cmpa_page[CmpaUpdateConfigData::CcSocuPin.byte_range()].copy_from_slice(&CC_SOCU_PIN.to_le_bytes());
+    cmpa_page[CmpaUpdateConfigData::CcSocuDflt.byte_range()].copy_from_slice(&CC_SOCU_DFLT.to_le_bytes());
+
+    write_cmpa_page_to_scratch(&cmpa_page)?;
+    cortex_m::peripheral::SCB::sys_reset()
+}
+
+/// Takes ECDSA Root-of-Trust public key hashes (rotkh) and PQC (ML-DSA-87) Root-of-Trust public key hashes (pqc_rotkh), 
+/// Writes them to the CMPA page in SCRATCH, and resets the device to apply the changes. This is intended for first-time provisioning of a DEV / factory unit, 
+/// can only be called in the Develop lifecycle state.
+pub fn write_rotk_hashes_to_scratch_and_reset(rotkh: &[u32; 12], pqc_rotkh: &[u32; 12]) -> Result<Infallible, CmpaWriteError> {
+    if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
+        return Err(CmpaWriteError::ConfigError);
+    }
+    if load_lifecycle_from_cfpa() != Some(NbootLifecycleState::Develop) {
+        return Err(CmpaWriteError::LCStateInvalid);
+    }
+    let mut cmpa_page = read_cmpa_page_for_update()?;
+    let rotkh_bytes: &[u8] = unsafe { core::slice::from_raw_parts(rotkh.as_ptr() as *const u8, 48) }; // Little endian representation of the 12 u32 words (4 bytes each) = 48 bytes
+    let pqc_rotkh_bytes: &[u8] = unsafe { core::slice::from_raw_parts(pqc_rotkh.as_ptr() as *const u8, 48) }; 
+
+    //TODO: Verify SBL image hash against provided rotkh and pqc_rotkh before writing to CMPA. If they don't match, return an error.
+    cmpa_page[CmpaUpdateConfigData::Rotkh.byte_range()].copy_from_slice(rotkh_bytes);
+    cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()].copy_from_slice(pqc_rotkh_bytes);
+    write_cmpa_page_to_scratch(&cmpa_page)?;
+    cortex_m::peripheral::SCB::sys_reset()
+}
+
+/// Enables secure boot policies in CMPA and resets the device to apply the changes.
+/// Must ensure that a signed SBL and signed application(s) are present along with the correct ROTK hashes (BOTH ECDSA and MLDSA)
+/// before calling this function, otherwise the device will not boot after reset.
+pub fn enable_secure_boot_policies_and_reset() -> Result<Infallible, CmpaWriteError> {
+    if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
+        return Err(CmpaWriteError::ConfigError);
+    }
+    if load_lifecycle_from_cfpa() != Some(NbootLifecycleState::Develop) {
+        return Err(CmpaWriteError::LCStateInvalid);
+    }
+
+    let mut cmpa_page = read_cmpa_page_for_update()?;
+
+    // Verify ROTKH hashes are provisioned (not all zeros)
+    let rotkh = &cmpa_page[CmpaUpdateConfigData::Rotkh.byte_range()];
+    let pqc_rotkh = &cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()];
+    if rotkh.iter().all(|&b| b == 0) || pqc_rotkh.iter().all(|&b| b == 0) {
+        return Err(CmpaWriteError::ConfigError);
+    }
+
+    let mut secure_boot_cfg =
+        unsafe { ptr::read_unaligned(cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].as_ptr() as *const u32) };
+    
+    secure_boot_cfg |= (SecureBootLevel::EcdsaMldsaOnly as u32)            // [1:0]  = 0b11
+        | ((LpWakePolicy::FullAuthentication as u32) << 3)  // [4:3]  = 0b00
+        | ((CnsaLevel::CnsaTwo as u32) << 8)                // [9:8]  = 0b10
+        | ((TzmPreset::Enforce as u32) << 10)               // [11:10] enforce TZM preset
+        | (0x3 << 12)                                       // [13:12]= 0b11 fast boot disabled
+        | ((XipImageProtect::WriteProtectSticky as u32) << 14) // [15:14]= 0b01 write protect with sticky lock
+        | (0x1 << 30); // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
+
+    cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].copy_from_slice(&secure_boot_cfg.to_le_bytes());
     write_cmpa_page_to_scratch(&cmpa_page)?;
     cortex_m::peripheral::SCB::sys_reset()
 }

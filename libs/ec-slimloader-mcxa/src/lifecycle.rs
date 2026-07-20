@@ -138,6 +138,7 @@ pub enum SecureBootLevel {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SecureBootState {
     HybridEnforced,
     Classical,
