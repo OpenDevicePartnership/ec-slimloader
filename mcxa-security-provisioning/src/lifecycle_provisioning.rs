@@ -1204,7 +1204,7 @@ pub fn set_ifr_initial_config_and_reset() -> Result<Infallible, CmpaWriteError> 
         | ((CnsaLevel::CnsaTwo as u32) << 8)                
         | ((TzmPreset::Ignored as u32) << 10)            // Ignore TZM for first stage.
         | (0x3 << 12)                                       // [13:12]= 0b11 fast boot disabled
-        | ((XipImageProtect::WriteProtectSticky as u32) << 14) // [15:14]= 0b01 write protect with sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
+        | ((XipImageProtect::FlashAclSettingCfpa as u32) << 14) // Set this to Flash ACL settings for now; Since CFPA is zeroed out, Flash sectors are all set to RW unlocked (0). Set to write-protect with sticky when SecBoot is enabled.
         | (0x1 << 30); // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
 
     let mut cmpa_page = read_cmpa_page_for_update()?;
@@ -1241,46 +1241,24 @@ pub fn set_ifr_initial_config_and_reset() -> Result<Infallible, CmpaWriteError> 
     cortex_m::peripheral::SCB::sys_reset()
 }
 
-/// Takes ECDSA Root-of-Trust public key hashes (rotkh) and PQC (ML-DSA-87) Root-of-Trust public key hashes (pqc_rotkh), 
-/// Writes them to the CMPA page in SCRATCH, and resets the device to apply the changes. This is intended for first-time provisioning of a DEV / factory unit, 
-/// can only be called in the Develop lifecycle state.
-pub fn write_rotk_hashes_to_scratch_and_reset(rotkh: &[u32; 12], pqc_rotkh: &[u32; 12]) -> Result<Infallible, CmpaWriteError> {
+
+/// Enables secure boot policies in CMPA, configures the Root of trust hashes and resets the device to apply the changes.
+/// Must ensure that a signed SBL and signed application(s) are present along with the correct ROTK hashes (BOTH ECDSA and MLDSA)
+/// before calling this function, otherwise the device will not boot after reset.
+pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(rotkh: &[u32; 12], pqc_rotkh: &[u32; 12]) -> Result<Infallible, CmpaWriteError> {
     if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
         return Err(CmpaWriteError::ConfigError);
     }
     if load_lifecycle_from_cfpa() != Some(NbootLifecycleState::Develop) {
         return Err(CmpaWriteError::LCStateInvalid);
     }
+
     let mut cmpa_page = read_cmpa_page_for_update()?;
     let rotkh_bytes: &[u8] = unsafe { core::slice::from_raw_parts(rotkh.as_ptr() as *const u8, 48) }; // Little endian representation of the 12 u32 words (4 bytes each) = 48 bytes
     let pqc_rotkh_bytes: &[u8] = unsafe { core::slice::from_raw_parts(pqc_rotkh.as_ptr() as *const u8, 48) }; 
 
-    //TODO: Verify SBL image hash against provided rotkh and pqc_rotkh before writing to CMPA. If they don't match, return an error.
     cmpa_page[CmpaUpdateConfigData::Rotkh.byte_range()].copy_from_slice(rotkh_bytes);
     cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()].copy_from_slice(pqc_rotkh_bytes);
-    write_cmpa_page_to_scratch(&cmpa_page)?;
-    cortex_m::peripheral::SCB::sys_reset()
-}
-
-/// Enables secure boot policies in CMPA and resets the device to apply the changes.
-/// Must ensure that a signed SBL and signed application(s) are present along with the correct ROTK hashes (BOTH ECDSA and MLDSA)
-/// before calling this function, otherwise the device will not boot after reset.
-pub fn enable_secure_boot_policies_and_reset() -> Result<Infallible, CmpaWriteError> {
-    if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
-        return Err(CmpaWriteError::ConfigError);
-    }
-    if load_lifecycle_from_cfpa() != Some(NbootLifecycleState::Develop) {
-        return Err(CmpaWriteError::LCStateInvalid);
-    }
-
-    let mut cmpa_page = read_cmpa_page_for_update()?;
-
-    // Verify ROTKH hashes are provisioned (not all zeros)
-    let rotkh = &cmpa_page[CmpaUpdateConfigData::Rotkh.byte_range()];
-    let pqc_rotkh = &cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()];
-    if rotkh.iter().all(|&b| b == 0) || pqc_rotkh.iter().all(|&b| b == 0) {
-        return Err(CmpaWriteError::ConfigError);
-    }
 
     let mut secure_boot_cfg =
         unsafe { ptr::read_unaligned(cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].as_ptr() as *const u32) };
