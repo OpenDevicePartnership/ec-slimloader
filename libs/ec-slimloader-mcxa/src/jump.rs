@@ -1,10 +1,14 @@
-use core::arch::asm;
-use cortex_m::asm::{dsb, isb};
-
 #[cfg(any(feature = "defmt", feature = "log"))]
 macro_rules! jump_error {
     ($($arg:tt)*) => {
         defmt_or_log::error!($($arg)*);
+    };
+}
+
+#[cfg(any(feature = "defmt", feature = "log"))]
+macro_rules! jump_info {
+    ($($arg:tt)*) => {
+        defmt_or_log::info!($($arg)*);
     };
 }
 
@@ -13,12 +17,18 @@ macro_rules! jump_error {
     ($($arg:tt)*) => {};
 }
 
-pub unsafe fn jump_to_image(entry: u32) -> ! {
+#[cfg(not(any(feature = "defmt", feature = "log")))]
+macro_rules! jump_info {
+    ($($arg:tt)*) => {};
+}
+
+pub unsafe fn jump_to_image(entry: *const u32) -> ! {
 
     // Guards: validate image header fields (Table 204 Nx4x security reference manual)
 
-    let image_len = *((entry + 0x20) as *const u32);
-    let cert_off = *((entry + 0x28) as *const u32);
+    let entry_bytes = entry as *const u8;
+    let image_len = *(entry_bytes.add(0x20) as *const u32);
+    let cert_off = *(entry_bytes.add(0x28) as *const u32);
 
     // Basic sanity: image length should be at least a vector table (>= 0x40),
     // cert header offset must be 4-byte aligned and within image length.
@@ -33,48 +43,48 @@ pub unsafe fn jump_to_image(entry: u32) -> ! {
             core::hint::spin_loop()
         }
     }
-    // (similar to imxrt): disable interrupts & timer
-    // Disable all maskable interrupts
-    // info!("jump: disabling interrupts");
-    #[cfg(target_arch = "arm")]
-    asm!("cpsid i", options(nostack, preserves_flags));
 
-    // Disable SysTick (if previously configured by loader)
-    const SYST_CSR: *mut u32 = 0xE000E010 as *mut u32; // SysTick Control and Status Register
-    core::ptr::write_volatile(SYST_CSR, 0);
-    // info!("jump: SysTick disabled");
+    jump_info!(
+        "jump: handoff entry=0x{:08X} image_len=0x{:X} cert_off=0x{:X}",
+        entry as u32,
+        image_len,
+        cert_off
+    );
 
-    // Disable NVIC interrupts & clear any pending bits (MCXN556s up to IRQ 155 → 5 * 32 blocks)
-    const NVIC_ICER_BASE: *mut u32 = 0xE000E180 as *mut u32; // Interrupt Clear/Enable Registers
-    const NVIC_ICPR_BASE: *mut u32 = 0xE000E280 as *mut u32; // Interrupt Clear/Pending Registers
-    for i in 0..5 {
-        core::ptr::write_volatile(NVIC_ICER_BASE.add(i), 0xFFFF_FFFF);
-        core::ptr::write_volatile(NVIC_ICPR_BASE.add(i), 0xFFFF_FFFF);
+    // The following code is replicated from IMXRT bootloader.
+    // Disable interrupts globally while we reset the NVIC.
+    cortex_m::interrupt::disable();
+
+    let nvic = &*cortex_m::peripheral::NVIC::PTR;
+
+    // Disable all configurable interrupts.
+    for clear_enable in &nvic.icer {
+        clear_enable.write(u32::MAX);
     }
-    // info!("jump: NVIC interrupts disabled & pending cleared");
 
-    // Clear selected system handler pending bits (SecureFault, PendSV) in SHCSR
-    const SCB_SHCSR: *mut u32 = 0xE000ED24 as *mut u32; // System Handler Control and State Register
-                                                        // Write-1-to-clear for pending bits is not supported; instead, clear enable bits to avoid servicing.
-                                                        // Ensure SVC/Debug/PendSV/SysTick not enabled by loader.
-    core::ptr::write_volatile(SCB_SHCSR, 0);
-    // info!("jump: SHCSR cleared");
+    // Clear all interrupt-pending bits.
+    for clear_pending in &nvic.icpr {
+        clear_pending.write(u32::MAX);
+    }
 
-    // Ensure privileged thread mode & use MSP (clear CONTROL.nPRIV & CONTROL.SPSEL)
-    #[cfg(target_arch = "arm")]
-    asm!("msr CONTROL, {0}", in(reg) 0u32, options(nostack, preserves_flags));
-    #[cfg(target_arch = "arm")]
-    asm!("isb", options(nostack, preserves_flags));
+    // Reset all interrupt priorities.
+    for priority in &nvic.ipr {
+        priority.write(0);
+    }
 
-    // Set VTOR to application's vector table
-    const SCB_VTOR: *mut u32 = 0xE000ED08 as *mut u32;
-    core::ptr::write_volatile(SCB_VTOR, entry);
-    // info!("jump: VTOR set to 0x{:08X}", entry);
+    // Re-enable interrupts globally to match boot-up environment.
+    cortex_m::interrupt::enable();
 
-    // Data / instruction sync barriers before branch
-    dsb();
-    isb();
+    let mut p = cortex_m::Peripherals::steal();
+    p.SCB.invalidate_icache();
+    p.SCB.vtor.write(entry as u32);
+
+    // Ensure that all previous steps have been executed.
+    cortex_m::asm::dmb();
+    cortex_m::asm::dsb();
+    cortex_m::asm::isb();
 
     // Load MSP/reset from the vector table and transfer control using the standard Cortex-M helper.
+    jump_info!("jump: bootload to 0x{:08X}", entry as u32);
     cortex_m::asm::bootload(entry as *const u32)
 }

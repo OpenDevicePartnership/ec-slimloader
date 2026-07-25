@@ -163,13 +163,15 @@ pub fn verify_authenticity<'d>(
         }
     }
 
-    let image_header = unsafe { &*(image_base as *const crate::header::VectorAndHeaderRaw) };
+    const MAX_FLASH_SLOT_SIZE: u32 = 2 * 1024 * 1024; // 2MB, TODO: make this configurable or derive from flash size
+    let image_header = unsafe { crate::header::ImageHeader::from_ptr(image_base, MAX_FLASH_SLOT_SIZE) }
+        .map_err(|_| ec_slimloader::BootError::Integrity)?;
     // Parse AHAB container once and derive both RKTH values
     let (image_rkth, pqc_rkth) = derive_image_rkth_pair(
         peri.reborrow(),
         image_base,
-        image_header.extended_header_offset,
-        image_header.image_length,
+        image_header.extended_header_offset(),
+        image_header.image_length(),
     );
 
     // Process ECDSA RKTH (traditional)

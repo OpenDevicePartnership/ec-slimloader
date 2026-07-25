@@ -171,7 +171,7 @@ impl Board for McxaBoard {
 
         match verification::verify_authenticity(self.sgi.reborrow(), base) {
             Ok(()) => unsafe {
-                jump::jump_to_image(base_addr);
+                jump::jump_to_image(base_addr as *const u32);
             },
             Err(error) => error,
         }
@@ -200,7 +200,7 @@ impl Board for McxaBoard {
 
                 match verification::verify_authenticity(self.sgi.reborrow(), base) {
                     Ok(()) => unsafe {
-                        jump::jump_to_image(memory::SLOT_A_START);
+                        jump::jump_to_image(memory::SLOT_A_START as *const u32);
                     },
                     Err(error) => error,
                 }

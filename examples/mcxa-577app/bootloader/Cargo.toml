@@ -7,6 +7,8 @@ edition = "2021"
 default = ["defmt"]
 defmt = ["dep:defmt", "dep:defmt-or-log", "dep:defmt-rtt", "defmt-or-log/defmt"]
 log = ["dep:defmt-or-log", "defmt-or-log/log"]
+certificate-logging = ["ec-slimloader-mcxa/certificate-logging"]
+verification-logging = ["ec-slimloader-mcxa/verification-logging"]
 
 [[bin]]
 name = "mcxa-577app-bootloader"

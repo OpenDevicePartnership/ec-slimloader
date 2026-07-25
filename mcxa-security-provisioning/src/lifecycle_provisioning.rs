@@ -1,12 +1,14 @@
 use core::{convert::Infallible, mem, ptr};
 use defmt_or_log::error;
-
+use embassy_mcxa::{peripherals, Peri};
 pub use ec_slimloader_mcxa::rom_api::{
     Bricked, CanAdvanceTo, Develop, Develop2, FailureAnalysis, InField, InFieldLocked, flash_cfg_for_rom_api, flash_driver, FlashConfig,
     NbootLifecycleState, NbootRootKeyUsage, OemFieldReturn, FLASH_API_ERASE_KEY,
 };
 
 use ec_slimloader_mcxa::memory::{INTERNAL_FLASH_START, INTERNAL_FLASH_SIZE};
+use ec_slimloader_mcxa::certificate::derive_image_rkth_pair;
+use ec_slimloader_mcxa::header::ImageHeader;
 
 pub use ec_slimloader_mcxa::error::FlashStatus;
 
@@ -368,6 +370,10 @@ pub enum CmpaWriteError {
     InvalidFlashGeometry,
     ConfigError,
     CounterOverflow,
+    RotkhMismatch,
+    HashError,
+    InvalidInput,
+    InvalidImageSlot,
     FlashError(FlashStatus),
     FlashVerify {
         status: FlashStatus,
@@ -1228,11 +1234,11 @@ pub fn set_ifr_initial_config_and_reset() -> Result<Infallible, CmpaWriteError> 
     };
     cmpa_page[CmpaUpdateConfigData::RotkUsage.byte_range()].copy_from_slice(&rotk_usage.to_u32().to_le_bytes());
     cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].copy_from_slice(&secure_boot_cfg.to_le_bytes());
-    let sbl_start_addr: u32 = 0; // Or secure alias?
+    let sbl_start_addr: u32 = 0x1000_0000; // 0x0 Or secure alias?
     cmpa_page[CmpaUpdateConfigData::SblStartAddr.byte_range()].copy_from_slice(&sbl_start_addr.to_le_bytes());
 
-    const CC_SOCU_PIN: u32 = 0x1FFFE000; // default value for CC_SOCU_PIN in CMPA, for breakdown, refer to NXP secure provisioning guide.
-    const CC_SOCU_DFLT: u32 = 0xBFFF4000; // default value for CC_SOCU_DFLT in CMPA, for breakdown, refer to NXP secure provisioning guide.
+    const CC_SOCU_PIN: u32 = 0x1FFFE000; // default value being used for CC_SOCU_PIN in CMPA, for breakdown, refer to NXP secure provisioning guide.
+    const CC_SOCU_DFLT: u32 = 0xBFFF4000; // default value being used for CC_SOCU_DFLT in CMPA, for breakdown, refer to NXP secure provisioning guide.
 
     cmpa_page[CmpaUpdateConfigData::CcSocuPin.byte_range()].copy_from_slice(&CC_SOCU_PIN.to_le_bytes());
     cmpa_page[CmpaUpdateConfigData::CcSocuDflt.byte_range()].copy_from_slice(&CC_SOCU_DFLT.to_le_bytes());
@@ -1242,24 +1248,56 @@ pub fn set_ifr_initial_config_and_reset() -> Result<Infallible, CmpaWriteError> 
 }
 
 
-/// Enables secure boot policies in CMPA, configures the Root of trust hashes and resets the device to apply the changes.
-/// Must ensure that a signed SBL and signed application(s) are present along with the correct ROTK hashes (BOTH ECDSA and MLDSA)
-/// before calling this function, otherwise the device will not boot after reset.
-pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(rotkh: &[u32; 12], pqc_rotkh: &[u32; 12]) -> Result<Infallible, CmpaWriteError> {
+/// Enables secure boot policies in CMPA, configures the provided Root of trust hashes and resets the device to apply the changes.
+/// Must ensure that a signed SBL and signed application(s) are present along with the correct ROTK hashes (BOTH ECDSA and MLDSA) as the provided ROTKH values will be matched at least against the SBL, and more images
+/// if configured by input 'starting_addresses' to do so. The first address must be the Secure Boot Loader (SBL) image, which is expected to be the first image in internal flash at 0x0. The caller must ensure that the SBL and application(s) 
+// are signed and present in flash and that the correct ROTKH set is provided as inputs before calling this function, otherwise hashes and secure boot will not be provisioned.
+pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(mut peri: Peri<'_, peripherals::SGI0>, starting_addresses: &[u32], rotkh: &[u32; 12], pqc_rotkh: &[u32; 12]) -> Result<Infallible, CmpaWriteError> {
     if is_cmpa_erased() || !cmpa_header_marker_is_valid() {
         return Err(CmpaWriteError::ConfigError);
     }
     if load_lifecycle_from_cfpa() != Some(NbootLifecycleState::Develop) {
         return Err(CmpaWriteError::LCStateInvalid);
     }
+    if starting_addresses.is_empty() {
+        return Err(CmpaWriteError::InvalidInput);
+    }
+    if starting_addresses[0] != 0x0000_0000{
+        return Err(CmpaWriteError::InvalidInput); //The first image must be the Secure Boot Loader (SBL) image, which is expected to be the first image in internal flash at 0x0.
+    }
+
 
     let mut cmpa_page = read_cmpa_page_for_update()?;
-    let rotkh_bytes: &[u8] = unsafe { core::slice::from_raw_parts(rotkh.as_ptr() as *const u8, 48) }; // Little endian representation of the 12 u32 words (4 bytes each) = 48 bytes
-    let pqc_rotkh_bytes: &[u8] = unsafe { core::slice::from_raw_parts(pqc_rotkh.as_ptr() as *const u8, 48) }; 
 
+    let rotkh_bytes = unsafe { core::slice::from_raw_parts(rotkh.as_ptr() as *const u8, 48) }; // Little endian representation of the 12 u32 words (4 bytes each) = 48 bytes
+    let pqc_rotkh_bytes = unsafe { core::slice::from_raw_parts(pqc_rotkh.as_ptr() as *const u8, 48) };
+
+    const MAX_PROVISIONED_IMAGE_SIZE: u32 = 2 * 1024 * 1024; // Max 2MB flash.
+
+    for &starting_address in starting_addresses {
+        let image_base = starting_address as *const u8;
+        let image_header =  unsafe { ImageHeader::from_ptr(image_base, MAX_PROVISIONED_IMAGE_SIZE) }
+            .map_err(|_| CmpaWriteError::InvalidImageSlot)?;
+        let (image_ecdsa_rkth, image_pqc_rkth) =
+            derive_image_rkth_pair(peri.reborrow(), image_base, image_header.extended_header_offset(), image_header.image_length());
+        if let Some(image_ecdsa_rkth) = image_ecdsa_rkth {
+            if image_ecdsa_rkth.as_bytes() != rotkh_bytes {
+                return Err(CmpaWriteError::RotkhMismatch);
+            }
+        } else {
+            return Err(CmpaWriteError::HashError);
+        }
+        if let Some(image_pqc_rkth) = image_pqc_rkth {
+            if image_pqc_rkth.as_bytes() != pqc_rotkh_bytes {
+                return Err(CmpaWriteError::RotkhMismatch);
+            }
+        } else {
+            return Err(CmpaWriteError::HashError);
+        }
+    }
     cmpa_page[CmpaUpdateConfigData::Rotkh.byte_range()].copy_from_slice(rotkh_bytes);
     cmpa_page[CmpaUpdateConfigData::PqcRotkh.byte_range()].copy_from_slice(pqc_rotkh_bytes);
-
+    
     let mut secure_boot_cfg =
         unsafe { ptr::read_unaligned(cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].as_ptr() as *const u32) };
     
@@ -1274,4 +1312,15 @@ pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(rotkh: &[u32; 1
     cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].copy_from_slice(&secure_boot_cfg.to_le_bytes());
     write_cmpa_page_to_scratch(&cmpa_page)?;
     cortex_m::peripheral::SCB::sys_reset()
+}
+
+/// Combined lifecycle verification and advance in a single call.
+/// Verifies the transition is valid, stages the new lifecycle state to scratch, and resets.
+/// The `From` and `Next` type parameters enforce compile-time validation of allowed transitions.
+pub fn advance_lifecycle_and_reset<From, Next>(next: NbootLifecycleState) -> Result<Infallible, CfpaWriteError>
+where
+    From: CanAdvanceTo<Next>,
+{
+    let token = verify_lifecycle_transition::<From, Next>(next)?;
+    cfpa_stage_lifecycle_advance_and_reset(token)
 }
