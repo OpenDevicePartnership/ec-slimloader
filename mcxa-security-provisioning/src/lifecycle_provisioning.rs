@@ -13,26 +13,12 @@ use ec_slimloader_mcxa::header::ImageHeader;
 pub use ec_slimloader_mcxa::error::FlashStatus;
 
 pub use ec_slimloader_mcxa::lifecycle::{
-    CmpaUpdateConfigData, SecureBootLevel, LpWakePolicy, CnsaLevel, XipImageProtect, IFRConfigAreaBase, IFRPage,  
-    cmpa_header_marker_is_valid, load_cfpa_header_word, load_lifecycle_from_cfpa, is_cmpa_erased, 
-    hybrid_secure_boot_enforced, low_power_authentication_enforced, cnsa_enforced, fast_boot_enabled, 
-    load_rotkh_from_cmpa, load_pqc_rotkh_from_cmpa, 
+    CmpaUpdateConfigData, SecureBootLevel, LpWakePolicy, CnsaLevel, XipImageProtect, IFRConfigAreaBase, IFRPage,
+    cmpa_header_marker_is_valid, load_cfpa_header_word, load_lifecycle_from_cfpa, is_cmpa_erased, is_cfpa_erased,
+    hybrid_secure_boot_enforced, low_power_authentication_enforced, cnsa_enforced, fast_boot_enabled,
+    load_rotkh_from_cmpa, load_pqc_rotkh_from_cmpa,
 };
 
-pub fn is_cfpa_erased() -> bool {
-    let base = IFRConfigAreaBase::Cfpa as u32;
-    let word_count = IFRPage::Cfpa.byte_len() / core::mem::size_of::<u32>();
-    // Start after the header word (index 4 = offset 0x10); check PageVersion and things after.
-    const FIRST_WORD_AFTER_HEADER: usize = (CfpaWriteField::Header.byte_offset() / core::mem::size_of::<u32>()) + 1; //5
-    for i in FIRST_WORD_AFTER_HEADER..word_count {
-        let addr = base + (i as u32 * 4);
-        let val = unsafe { core::ptr::read_volatile(addr as *const u32) };
-        if val != 0xFFFF_FFFF {
-            return false;
-        }
-    }
-    true
-}
 /// Token produced by `verify_lifecycle_transition()'. Carries the verified target
 /// `NbootLifecycleState` at runtime. The type parameter `Next` is compile-time
 /// proof that the transition was constructed via a valid `CanAdvanceTo` impl.

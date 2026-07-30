@@ -6,7 +6,7 @@ use defmt_or_log::info;
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
 use embassy_executor::Spawner;
-use panic_halt as _;
+use panic_probe as _;
 
 const JOURNAL_BUFFER_SIZE: usize = 4096;
 

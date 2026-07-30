@@ -17,6 +17,7 @@ panic-probe = { version = "1.0", features = ["print-defmt"] }
 panic = "abort"
 
 [profile.release]
+debug = 2          # Full DWARF info for probe-rs RTT location decoding
 lto = false          # Disable LTO to prevent stripping debug patterns
 opt-level = 2        # Standard optimization
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["defmt"]
+default = ["defmt", "certificate-logging", "verification-logging"]
 defmt = ["dep:defmt", "dep:defmt-or-log", "dep:defmt-rtt", "defmt-or-log/defmt"]
 log = ["dep:defmt-or-log", "defmt-or-log/log"]
 certificate-logging = ["ec-slimloader-mcxa/certificate-logging"]
@@ -17,10 +17,10 @@ path = "src/main.rs"
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], default-features = false }
 cortex-m-rt = "0.7"
-panic-halt = "0.2"
 defmt = { version = "1.0", optional = true }
 defmt-or-log = { version = "0.2.3", optional = true }
 defmt-rtt = { version = "1.0", optional = true }
+panic-probe = { version = "1.0", features = ["print-defmt"] }
 
 ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["internal-only", "mcxa5xx", "defmt"] }
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }

@@ -10,7 +10,7 @@ defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 log = { workspace = true, optional = true }
 cortex-m = "0.7"
-embassy-mcxa = { path = "../../embassy-fork/embassy-mcxa", default-features = false, features = ["rt"] }
+embassy-mcxa = { workspace = true, features = ["rt"] }
 
 # Re-uses the MCXA lifecycle/IFR types defined in ec-slimloader-mcxa
 ec-slimloader-mcxa = { path = "../libs/ec-slimloader-mcxa", default-features = false }

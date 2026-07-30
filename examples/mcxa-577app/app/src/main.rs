@@ -33,7 +33,7 @@ async fn main(_spawner: Spawner) {
     match sgi.sha2_start_and_finalize(&mut dma_ch0, HashSize::Sha384, &input_data, &mut hash_result)
     .await
     {
-        Ok(()) => defmt::info!("DMA hash: {=[u8]:x}", &hash_result),
+        Ok(()) => defmt::info!("DMA hash: {=[u8]:x}", &hash_result[..]),
         Err(e) => defmt::error!("DMA hash failed: {:?}", defmt::Debug2Format(&e)),
     }
 

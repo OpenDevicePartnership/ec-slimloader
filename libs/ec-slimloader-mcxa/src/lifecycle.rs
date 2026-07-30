@@ -99,6 +99,30 @@ pub fn is_cmpa_erased() -> bool {
     true
 }
 
+pub fn is_cfpa_erased() -> bool {
+    let base = IFRConfigAreaBase::Cfpa as u32;
+    let word_count = IFRPage::Cfpa.byte_len() / core::mem::size_of::<u32>();
+    // Skip UPD_TYPE/UPD_PARAM (offsets 0x00-0x0C) and the header word itself (offset 0x10).
+    // Check from PAGE_VERSION (offset 0x14, word index 5) onwards.
+    // Also skip ROM-maintained error counters — written autonomously by the ROM after auth
+    // failures and/or Intrusion detects ; must not be treated as "provisioned config".
+    // ERR_AUTH_FAIL_COUNT at absolute offset 0x50, ERR_ITRC_COUNT at absolute offset 0x54.
+    const FIRST_WORD_AFTER_HEADER: usize = (0x0010_usize / core::mem::size_of::<u32>()) + 1; // 5
+    const ERR_AUTH_FAIL_COUNT_IDX: usize = 0x50 / core::mem::size_of::<u32>(); // 20
+    const ERR_ITRC_COUNT_IDX: usize = 0x54 / core::mem::size_of::<u32>(); // 21
+    for i in FIRST_WORD_AFTER_HEADER..word_count {
+        if i == ERR_AUTH_FAIL_COUNT_IDX || i == ERR_ITRC_COUNT_IDX {
+            continue;
+        }
+        let addr = base + (i as u32 * 4);
+        let val = unsafe { core::ptr::read_volatile(addr as *const u32) };
+        if val != ERASED_WORD {
+            return false;
+        }
+    }
+    true
+}
+
 #[inline(always)]
 fn load_cmpa_header_marker() -> u16 {
     let word = load_cmpa_boot_cfg0();
@@ -481,12 +505,16 @@ fn load_cfpa_word(address: u32) -> Option<u32> {
 }
 
 /// Load lifecycle state function: reads the image key revocation word from CFPA.
+/// If both CFPA and CMPA are un-provisioned, returns Some(0) — no revocation (permissive for auth).
 pub fn load_image_key_revocation_from_cfpa() -> Option<u32> {
     const CFPA_IMAGE_KEY_REVOKE: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0018;
+    if is_cfpa_erased() && is_cmpa_erased() {
+        return Some(0);
+    }
     let word = load_cfpa_word(CFPA_IMAGE_KEY_REVOKE)?;
     if word == ERASED_WORD {
-        return None;
-    } // Erased state means don't trust.
+        return None; // Could mean corrupt/ partially provisioned CFPA, should not be trusted for auth decisions.
+    }
     Some(word)
 }
 
@@ -502,8 +530,12 @@ fn load_cfpa_rotk_revoke_word() -> Option<u32> {
 
 /// Load lifecycle state function: reads the root key revocation words from CFPA. Returns a [NbootRootKeyRevocation; 4] array representing the revocation state of each root key,
 /// or None if the CFPA header is invalid or the ROTK_REVOKE word is erased (indicating unprovisioned/partially provisioned state that should not be trusted).
+/// If both CFPA and CMPA are un-provisioned, returns Some([Enabled; 4]) — all keys enabled (permissive for auth).
 /// This is already decoded into the ROM-facing `NbootRootKeyRevocation` values (`Enabled`/`Revoked`), not the raw 2-bit `RoTKx_EN` CFPA field encodings.
 pub fn load_root_key_revocation_from_cfpa() -> Option<[NbootRootKeyRevocation; 4]> {
+    if is_cfpa_erased() && is_cmpa_erased() {
+        return Some([NbootRootKeyRevocation::Enabled; 4]);
+    }
     let word = load_cfpa_rotk_revoke_word()?;
     Some(root_key_revocation_from_rotk_revoke_word(word))
 }
@@ -566,8 +598,12 @@ pub fn load_isp_active_img_from_cfpa() -> Option<u8> {
 }
 
 /// Load firmware version from CFPA EE0_FW_VERSION word. Returns None if CFPA header is invalid or the EE0_FW_VERSION word is erased (indicating unprovisioned/partially provisioned state that should not be trusted).
+/// If both CFPA and CMPA are un-provisioned, returns Some(0) — version 0 allows any image version through.
 pub fn load_firmware_version_from_cfpa() -> Option<u32> {
     const CFPA_EE0_FW_VERSION: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0020;
+    if is_cfpa_erased() && is_cmpa_erased() {
+        return Some(0);
+    }
     // Use the EE0 firmware version slot so verification matches the image version field we
     // expect to advance for the active execution environment.
     let word = load_cfpa_word(CFPA_EE0_FW_VERSION)?;
@@ -580,7 +616,7 @@ pub fn load_firmware_version_from_cfpa() -> Option<u32> {
 /// Load lifecycle state from CFPA header word: returns the decoded lifecycle state if the header is valid, or None if the header is invalid (e.g. incorrect marker, which could indicate unprovisioned/partially provisioned state or corruption). This is used as a prerequisite check for other CFPA fields since the header validity is an indicator of whether the CFPA contents can be trusted.
 /// Returns the decoded lifecylce to be used by the ROM API NBOOT functions, which uses different format that what is encoded in CFPA.
 /// The CFPA header encodes lifecycle in the lowest byte, with a separate inverted lifecycle byte as a validity check, and a 2 byte header marker in upper half of the word.
-/// The NBOOT ROM API expects a full 32-bit raw value where the lower half is the lifecycle raw value and the upper half is the !inverse.
+/// The NBOOT ROM API expects a full 32-bit raw value where the lower half is the lifecycle raw value and the upper half is the !inverse. Even in a brand new unit, LC should be Develop.
 pub fn load_lifecycle_from_cfpa() -> Option<NbootLifecycleState> {
     let header = load_cfpa_header_word()?;
     NbootLifecycleDiscriminator::from_raw(header as u8).map(NbootLifecycleDiscriminator::state)
@@ -630,6 +666,10 @@ pub fn load_rotk_usage_from_cmpa() -> Option<[NbootRootKeyUsage; 4]> {
 #[inline(always)]
 fn cmpa_rotk_usage_word_checked() -> Option<u32> {
     const CMPA_ROTK_USAGE: u32 = IFRConfigAreaBase::Cmpa as u32 + 0x0054; // 0x0100_0254
+    // If un-provisioned, the CMPA maybe left in an erased state (all 0xFF). If both CFPA and CMPA are erased, treat as "all keys allowed" (permissive for FIRST boot after off chip flashing).
+    if is_cfpa_erased() && is_cmpa_erased() {
+        return Some(0x0000_0000); // All four RoTKx_Usage = 0 => NbootRootKeyUsage::All
+    }
     if !cmpa_header_marker_is_valid() {
         return None;
     }
