@@ -325,6 +325,131 @@ impl CmpaBootCfg1Write {
     }
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QSpiPort {
+    PortA1   = 0b00, // 4 bit
+    PortB1   = 0b01, // 4 bit
+    PortA1B1 = 0b10, // 8 bit
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QSpiResetEnable {
+    Disabled = 0b0,
+    Enabled  = 0b1,
+}
+
+/// Q/O-SPI flash interface frequency (FLEXSPI_FREQ, 3-bit field).
+/// Used when FLEXSPI_AUTO_PROBE_EN is set.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QSpiFrequency {
+    Freq75MHz  = 0b000, // 75 MHz
+    Freq60MHz  = 0b001, // 60 MHz
+    Freq50MHz  = 0b010, // 50 MHz
+    Freq100MHz = 0b011, // 100 MHz
+    // 0b100–0b111: Reserved
+}
+
+/// Delay after POR before accessing Quad/Octal-SPI flash (FLEXSPI_PWR_HOLD_TIME, [28:25], 4-bit).
+/// Added on top of the delay defined by FLEXSPI_HOLD_TIME.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QSpiPwrHoldTime {
+    NoDelay    = 0b0000, // No additional delay
+    Delay100us = 0b0001, // 100 microseconds
+    Delay500us = 0b0010, // 500 microseconds
+    Delay1ms   = 0b0011, // 1 millisecond
+    Delay10ms  = 0b0100, // 10 milliseconds
+    Delay20ms  = 0b0101, // 20 milliseconds
+    Delay40ms  = 0b0110, // 40 milliseconds
+    Delay60ms  = 0b0111, // 60 milliseconds
+    Delay80ms  = 0b1000, // 80 milliseconds
+    Delay100ms = 0b1001, // 100 milliseconds
+    Delay120ms = 0b1010, // 120 milliseconds
+    Delay140ms = 0b1011, // 140 milliseconds
+    Delay160ms = 0b1100, // 160 milliseconds
+    Delay180ms = 0b1101, // 180 milliseconds
+    Delay200ms = 0b1110, // 200 milliseconds
+    Delay220ms = 0b1111, // 220 milliseconds
+}
+
+/// Delay after reset before accessing Quad/Octal-SPI flash (FLEXSPI_HOLD_TIME, [24:23], 2-bit).
+/// For POR, FLEXSPI_PWR_HOLD_TIME is added on top of this.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QSpiHoldTime {
+    Delay500us = 0b00, // 500 microseconds
+    Delay1ms   = 0b01, // 1 millisecond
+    Delay3ms   = 0b10, // 3 milliseconds
+    Delay10ms  = 0b11, // 10 milliseconds
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QSpiAutoProbe {
+    Disabled = 0b0,
+    Enabled  = 0b1,
+}
+
+/// Typed write-side representation of CMPA.LSPI_QFLASH_CFG0.
+///
+/// Bit layout:
+/// [31:30] QSPI_PORT          (2-bit: PortA1=0b00, PortB1=0b01, PortA1B1=0b10)
+/// [29]    Reserved
+/// [28:25] QSPI_PWR_HOLD_TIME (4-bit raw value)
+/// [24:23] QSPI_HOLD_TIME     (2-bit raw value)
+/// [22:18] QSPI_RESET_GPIO_PIN  (5-bit GPIO pin number)
+/// [17:15] QSPI_RESET_GPIO_PORT (3-bit GPIO port number)
+/// [14]    QSPI_RESET_ENABLE
+/// [13:11] QSPI_FREQUENCY     (3-bit: see QSpiFrequency)
+/// [10:7]  QSPI_DUMMY_CYCLES  (4-bit raw value)
+/// [6:1]   Reserved
+/// [0]     QSPI_AUTO_PROBE_EN
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CmpaLspiCfg0Write {
+    pub qspi_port: QSpiPort,
+    pub qspi_pwr_hold_time: QSpiPwrHoldTime, // [28:25] 4-bit
+    pub qspi_hold_time: QSpiHoldTime,        // [24:23] 2-bit
+    pub qspi_reset_gpio_pin: u8,             // [22:18] 5-bit
+    pub qspi_reset_gpio_port: u8,            // [17:15] 3-bit
+    pub qspi_reset_enable: QSpiResetEnable,
+    pub qspi_frequency: QSpiFrequency,
+    pub qspi_dummy_cycles: u8,               // [10:7]  4-bit
+    pub qspi_auto_probe: QSpiAutoProbe,
+}
+
+impl CmpaLspiCfg0Write {
+    pub fn to_config_bits(self) -> u32 {
+        ((self.qspi_port as u32)                       << 30) // [31:30] QSPI_PORT
+        // [29] Reserved
+        | ((self.qspi_pwr_hold_time as u32)            << 25) // [28:25] QSPI_PWR_HOLD_TIME
+        | ((self.qspi_hold_time as u32)                << 23) // [24:23] QSPI_HOLD_TIME
+        | (((self.qspi_reset_gpio_pin as u32) & 0x1F)  << 18) // [22:18] QSPI_RESET_GPIO_PIN
+        | (((self.qspi_reset_gpio_port as u32) & 0x7)  << 15) // [17:15] QSPI_RESET_GPIO_PORT
+        | ((self.qspi_reset_enable as u32)             << 14) // [14]    QSPI_RESET_ENABLE
+        | ((self.qspi_frequency as u32)                << 11) // [13:11] QSPI_FREQUENCY
+        | (((self.qspi_dummy_cycles as u32) & 0xF)     <<  7) // [10:7]  QSPI_DUMMY_CYCLES
+        // [6:1] Reserved
+        | (self.qspi_auto_probe as u32)                       // [0]     QSPI_AUTO_PROBE_EN
+    }
+
+    pub fn default() -> Self {
+        Self {
+            qspi_port: QSpiPort::PortB1,
+            qspi_pwr_hold_time: QSpiPwrHoldTime::NoDelay,
+            qspi_hold_time: QSpiHoldTime::Delay500us,
+            qspi_reset_gpio_pin: 0, //TODO, check schematics for correct GPIO pin number for QSPI reset.
+            qspi_reset_gpio_port: 0,  //TODO
+            qspi_reset_enable: QSpiResetEnable::Disabled, //TODO
+            qspi_frequency: QSpiFrequency::Freq100MHz,
+            qspi_dummy_cycles: 0,
+            qspi_auto_probe: QSpiAutoProbe::Enabled,
+        }
+    }
+}
+
 /// CMPA.SECURE_BOOT_CFG [11:10] ENF_TZM_PRESET
 /// Controls whether the ROM enforces the TrustZone-M preset from the image manifest.
 #[repr(u8)]
@@ -1220,6 +1345,7 @@ pub fn set_ifr_initial_config_and_reset() -> Result<Infallible, CmpaWriteError> 
     };
     cmpa_page[CmpaUpdateConfigData::RotkUsage.byte_range()].copy_from_slice(&rotk_usage.to_u32().to_le_bytes());
     cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].copy_from_slice(&secure_boot_cfg.to_le_bytes());
+    cmpa_page[CmpaUpdateConfigData::LSpiCfg0.byte_range()].copy_from_slice(&CmpaLspiCfg0Write::default().to_config_bits().to_le_bytes());
     let sbl_start_addr: u32 = 0x1000_0000; // 0x0 Or secure alias?
     cmpa_page[CmpaUpdateConfigData::SblStartAddr.byte_range()].copy_from_slice(&sbl_start_addr.to_le_bytes());
 

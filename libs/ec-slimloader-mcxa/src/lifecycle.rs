@@ -338,6 +338,7 @@ fn cmpa_secure_boot_cfg() -> CmpaSecureBootCfgDecode {
 pub enum CmpaUpdateConfigData {
     BootCfg0,
     BootCfg1,
+    LSpiCfg0,
     CcSocuPin,
     CcSocuDflt,
     SecureBootCfg,
@@ -353,6 +354,7 @@ impl CmpaUpdateConfigData {
         match self {
             Self::BootCfg0 => IFRConfigAreaBase::Cmpa as u32,
             Self::BootCfg1 => IFRConfigAreaBase::Cmpa as u32 + 0x04,
+            Self::LSpiCfg0 => IFRConfigAreaBase::Cmpa as u32 + 0x10,
             Self::CcSocuPin => IFRConfigAreaBase::Cmpa as u32 + 0x40,
             Self::CcSocuDflt => IFRConfigAreaBase::Cmpa as u32 + 0x44,
             Self::SecureBootCfg => IFRConfigAreaBase::Cmpa as u32 + 0x50,
@@ -367,7 +369,7 @@ impl CmpaUpdateConfigData {
     pub const fn byte_len(self) -> usize {
         const RKTH_WORDS: usize = 12;
         match self {
-            Self::BootCfg0 | Self::BootCfg1 | Self::CcSocuPin | Self::CcSocuDflt | Self::SecureBootCfg | Self::RotkUsage | Self::SblStartAddr => {
+            Self::BootCfg0 | Self::BootCfg1 | Self::CcSocuPin | Self::CcSocuDflt | Self::SecureBootCfg | Self::RotkUsage | Self::SblStartAddr | Self::LSpiCfg0 => {
                 mem::size_of::<u32>()
             }
             Self::Rotkh | Self::PqcRotkh => RKTH_WORDS * mem::size_of::<u32>(),
@@ -384,6 +386,7 @@ impl CmpaUpdateConfigData {
         match self {
             Self::BootCfg0 => 0x00,
             Self::BootCfg1 => 0x04,
+            Self::LSpiCfg0 => 0x10,
             Self::CcSocuPin => 0x40,
             Self::CcSocuDflt => 0x44,
             Self::SecureBootCfg => 0x50,
