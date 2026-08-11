@@ -1,16 +1,16 @@
 [package]
 name = "mcxa-security-provisioning"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = "0.2.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 
 [dependencies]
-defmt = { workspace = true, optional = true }
-defmt-or-log = { workspace = true }
-log = { workspace = true, optional = true }
+defmt = { version = "0.3", optional = true }
+defmt-or-log = { version = "0.2.3" }
+log = { version = "0.4", optional = true }
 cortex-m = "0.7"
-embassy-mcxa = { workspace = true, features = ["rt"] }
+embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["rt"] }
 
 # Re-uses the MCXA lifecycle/IFR types defined in ec-slimloader-mcxa
 ec-slimloader-mcxa = { path = "../libs/ec-slimloader-mcxa", default-features = false }
