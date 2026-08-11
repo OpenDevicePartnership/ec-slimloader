@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
+use defmt_rtt as _;
 use embassy_executor::Spawner;
+use embassy_mcxa as hal;
 use embassy_time::Timer;
 use hal::bind_interrupts;
 use hal::dma::DmaChannel;
@@ -9,7 +11,7 @@ use hal::gpio::{DriveStrength, Level, Output, SlewRate};
 use hal::peripherals::SGI0;
 use hal::sgi::hash::HashSize;
 use hal::sgi::{InterruptHandler, Sgi};
-use {defmt_rtt as _, embassy_mcxa as hal, panic_probe as _};
+use panic_probe as _;
 
 bind_interrupts!(struct Irqs {
     SGI => InterruptHandler<SGI0>;
@@ -30,8 +32,9 @@ async fn main(_spawner: Spawner) {
     }
 
     let mut sgi = Sgi::new(p.SGI0.reborrow(), Irqs).unwrap();
-    match sgi.sha2_start_and_finalize(&mut dma_ch0, HashSize::Sha384, &input_data, &mut hash_result)
-    .await
+    match sgi
+        .sha2_start_and_finalize(&mut dma_ch0, HashSize::Sha384, &input_data, &mut hash_result)
+        .await
     {
         Ok(()) => defmt::info!("DMA hash: {=[u8]:x}", &hash_result[..]),
         Err(e) => defmt::error!("DMA hash failed: {:?}", defmt::Debug2Format(&e)),

@@ -54,5 +54,5 @@ pub fn slot_a_sector_start(i: u32) -> u32 {
     SLOT_A_START + i * INTERNAL_FLASH_SECTOR_SIZE
 }
 pub fn is_page_aligned(addr: u32) -> bool {
-    addr % INTERNAL_FLASH_PAGE_SIZE == 0
+    addr.is_multiple_of(INTERNAL_FLASH_PAGE_SIZE)
 }

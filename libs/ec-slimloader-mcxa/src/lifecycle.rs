@@ -227,9 +227,7 @@ pub fn secure_boot_state() -> SecureBootState {
     match secure_boot_level() {
         SecureBootLevel::EcdsaMldsaOnly => SecureBootState::HybridEnforced,
         SecureBootLevel::SignedOnly => SecureBootState::Classical,
-        SecureBootLevel::AllAllowed | SecureBootLevel::CrcOrSigned => {
-            SecureBootState::Disabled
-        }
+        SecureBootLevel::AllAllowed | SecureBootLevel::CrcOrSigned => SecureBootState::Disabled,
     }
 }
 
@@ -313,7 +311,7 @@ fn cmpa_secure_boot_cfg() -> CmpaSecureBootCfgDecode {
 
     CmpaSecureBootCfgDecode {
         raw,
-        sec_boot_en: ((raw >> 0) & 0x3) as u8,
+        sec_boot_en: (raw & 0x3) as u8,
         // bit 2 is a hole
         lp_sec_boot: ((raw >> 3) & 0x3) as u8,
         // bit 5 is a hole
@@ -369,9 +367,14 @@ impl CmpaUpdateConfigData {
     pub const fn byte_len(self) -> usize {
         const RKTH_WORDS: usize = 12;
         match self {
-            Self::BootCfg0 | Self::BootCfg1 | Self::CcSocuPin | Self::CcSocuDflt | Self::SecureBootCfg | Self::RotkUsage | Self::SblStartAddr | Self::LSpiCfg0 => {
-                mem::size_of::<u32>()
-            }
+            Self::BootCfg0
+            | Self::BootCfg1
+            | Self::CcSocuPin
+            | Self::CcSocuDflt
+            | Self::SecureBootCfg
+            | Self::RotkUsage
+            | Self::SblStartAddr
+            | Self::LSpiCfg0 => mem::size_of::<u32>(),
             Self::Rotkh | Self::PqcRotkh => RKTH_WORDS * mem::size_of::<u32>(),
         }
     }
@@ -408,20 +411,13 @@ impl CmpaUpdateConfigData {
 /// Current provisioning uses SHA-512, but retains the leftmost 48 bytes (384 bits).
 pub fn load_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::Rotkh.word_len()]> {
     let region = CmpaUpdateConfigData::Rotkh;
-    if !cmpa_header_marker_is_valid() {
-        // If secure boot is not enforced, CMPA may be left unprovisioned (invalid header).
-        // Still allow reading the words so higher-level logic can use the image RKTH as the
-        // source of truth while warning on mismatch.
-        // Note: an erased CMPA (all 0xFF) will decode SEC_BOOT_EN as 0b11, so treat "erased"
-        // as unprovisioned even if `hybrid_secure_boot_enforced()` appears true.
-        if hybrid_secure_boot_enforced() && !is_cmpa_erased() {
-            return None;
-        }
+    if !cmpa_header_marker_is_valid() && !is_cmpa_erased() {
+        return None; // CMPA corrupt or partially provisioned — don't trust ROTKH
     }
     let mut buf = [0u32; CmpaUpdateConfigData::Rotkh.word_len()];
-    for i in 0..region.word_len() {
+    for (i, slot) in buf.iter_mut().enumerate() {
         let addr = region.start() + (i as u32 * 4);
-        buf[i] = unsafe { core::ptr::read_volatile(addr as *const u32) };
+        *slot = unsafe { core::ptr::read_volatile(addr as *const u32) };
     }
     Some(buf)
 }
@@ -431,15 +427,13 @@ pub fn load_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::Rotkh.word_l
 pub fn load_pqc_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::PqcRotkh.word_len()]> {
     let region = CmpaUpdateConfigData::PqcRotkh;
     // 384 bits ML-DSA-87 root key hash, left padded to 48 bytes like the ECDSA ROTKH
-    if !cmpa_header_marker_is_valid() {
-        if hybrid_secure_boot_enforced() && !is_cmpa_erased() {
-            return None;
-        }
+    if !cmpa_header_marker_is_valid() && !is_cmpa_erased() {
+        return None; // CMPA corrupt or partially provisioned — don't trust ROTKH
     }
     let mut buf = [0u32; CmpaUpdateConfigData::PqcRotkh.word_len()];
-    for i in 0..region.word_len() {
+    for (i, slot) in buf.iter_mut().enumerate() {
         let addr = region.start() + (i as u32 * 4);
-        buf[i] = unsafe { core::ptr::read_volatile(addr as *const u32) };
+        *slot = unsafe { core::ptr::read_volatile(addr as *const u32) };
     }
     Some(buf)
 }
@@ -557,7 +551,7 @@ pub fn load_root_key_revocation_from_cfpa() -> Option<[NbootRootKeyRevocation; 4
 #[inline(always)]
 fn rotk_en_fields_from_rotk_revoke_word(word: u32) -> [u8; 4] {
     [
-        ((word >> 0) & 0x3) as u8,
+        (word & 0x3) as u8,
         ((word >> 2) & 0x3) as u8,
         ((word >> 4) & 0x3) as u8,
         ((word >> 6) & 0x3) as u8,
@@ -647,7 +641,7 @@ pub fn load_rotk_usage_from_cmpa() -> Option<[NbootRootKeyUsage; 4]> {
             _ => NbootRootKeyUsage::Unused,
         }
     }
-    let rotk0_usage = map((word >> 0) & 0x7);
+    let rotk0_usage = map(word & 0x7);
     let rotk1_usage = map((word >> 3) & 0x7);
     let rotk2_usage = map((word >> 6) & 0x7);
     let rotk3_usage = map((word >> 9) & 0x7);
@@ -669,6 +663,7 @@ pub fn load_rotk_usage_from_cmpa() -> Option<[NbootRootKeyUsage; 4]> {
 #[inline(always)]
 fn cmpa_rotk_usage_word_checked() -> Option<u32> {
     const CMPA_ROTK_USAGE: u32 = IFRConfigAreaBase::Cmpa as u32 + 0x0054; // 0x0100_0254
+
     // If un-provisioned, the CMPA maybe left in an erased state (all 0xFF). If both CFPA and CMPA are erased, treat as "all keys allowed" (permissive for FIRST boot after off chip flashing).
     if is_cfpa_erased() && is_cmpa_erased() {
         return Some(0x0000_0000); // All four RoTKx_Usage = 0 => NbootRootKeyUsage::All
@@ -710,9 +705,4 @@ pub fn load_dice_inc_nxp_field_cfg_from_cmpa() -> bool {
     cmpa_rotk_usage_word_checked()
         .map(|word| ((word >> 15) & 1) != 0)
         .unwrap_or(false)
-}
-
-/// Decode a raw lifecycle value into the typed NBOOT lifecycle state.
-pub fn decode_lifecycle(raw_value: u32) -> NbootLifecycleState {
-    NbootLifecycleState::from_any_raw(raw_value).unwrap_or(NbootLifecycleState::Develop)
 }

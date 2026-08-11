@@ -2,6 +2,7 @@
 name = "mcxa-577app"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }

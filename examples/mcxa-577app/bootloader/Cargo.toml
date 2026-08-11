@@ -2,6 +2,7 @@
 name = "mcxa-577app-bootloader"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 [features]
 default = ["defmt", "certificate-logging", "verification-logging"]
@@ -24,6 +25,7 @@ panic-probe = { version = "1.0", features = ["print-defmt"] }
 
 ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["internal-only", "mcxa5xx", "defmt"] }
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
+mcxa-security-provisioning = { path = "../../../mcxa-security-provisioning", default-features = false, features = ["defmt"] }
 
 embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["rt", "mcxa5xx"] }
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["platform-cortex-m", "executor-thread"] }

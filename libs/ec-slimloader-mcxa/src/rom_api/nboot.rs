@@ -1,3 +1,5 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+// Safety: null, misaligned, invalid inputs or out of bounds references will cause ROM API to return an error code, which is handled by the caller.
 use super::{NbootBool, NbootStatusProtected};
 use crate::error::*;
 
@@ -32,7 +34,6 @@ pub const fn nboot_bool_is_true(value: NbootBool) -> bool {
 #[repr(C)]
 pub struct NbootCtx {
     // Opaque context buffer. Size must match NBOOT_CONTEXT_SIZE from the ROM header.
-    // TODO: mismatch between RM and SDK.
     pub opaque: [u8; 0xA94],
 }
 
@@ -263,13 +264,16 @@ impl NbootLifecycleState {
     #[inline(always)]
     pub const fn from_any_raw(raw: u32) -> Option<Self> {
         if let Some(state) = Self::from_raw(raw) {
-            Some(state)
-        } else {
-            match NbootLifecycleDiscriminator::from_raw(raw as u8) {
-                Some(discriminator) => Some(discriminator.state()),
-                None => None,
+            return Some(state);
+        }
+        // Short-form input: bare discriminator byte only. A long-form value that
+        // failed the full-word match above is corrupt; do not guess from its low byte.
+        if raw <= 0xFF {
+            if let Some(d) = NbootLifecycleDiscriminator::from_raw(raw as u8) {
+                return Some(d.state());
             }
         }
+        None
     }
 
     /// Returns a monotonic rank for forward-only progression checks.
@@ -475,6 +479,7 @@ impl NbootDriver {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn nboot_mem_crypt_range_checker(
         &self,
         ctx: *mut NbootCtx,

@@ -79,6 +79,7 @@ const KSTATUS_KB_BUFFER_SIZE_NOT_ENOUGH: u32 = KSTATUS_ROM_API_BUFFER_SIZE_NOT_E
 const KSTATUS_KB_INVALID_BUFFER: u32 = KSTATUS_ROM_API_INVALID_BUFFER;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FlashStatus {
     Success,
     InvalidArgument,

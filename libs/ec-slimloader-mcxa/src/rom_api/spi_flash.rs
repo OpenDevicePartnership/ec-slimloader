@@ -1,6 +1,9 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+// Safety: null, misaligned, invalid inputs or out of bounds references will cause ROM API to return an error code, which is handled by the caller.
+use core::ffi::c_void;
+
 use super::Status;
 use crate::error::SpiFlashStatus;
-use core::ffi::c_void;
 
 // LPSPI external flash (SPI NOR/EEPROM) ROM API
 

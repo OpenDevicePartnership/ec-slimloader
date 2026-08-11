@@ -1,6 +1,8 @@
-use crate::certificate::derive_image_rkth_pair;
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use embassy_mcxa::{peripherals, Peri};
 
+use crate::certificate::derive_image_rkth_pair;
 use crate::lifecycle::{
     cnsa_enforced, fast_boot_enabled, load_firmware_version_from_cfpa, load_image_key_revocation_from_cfpa,
     load_lifecycle_from_cfpa, load_pqc_rotkh_from_cmpa, load_root_key_revocation_from_cfpa, load_rotk_usage_from_cmpa,
@@ -78,10 +80,10 @@ pub fn verify_authenticity<'d>(
                 NbootRootKeyRevocation::Revoked as u32,
                 NbootRootKeyRevocation::Revoked as u32,
                 NbootRootKeyRevocation::Revoked as u32,
-                //Start as revoked by default for safety; will be updated with real values from CFPA if read is successful. 
+                //Start as revoked by default for safety; will be updated with real values from CFPA if read is successful.
                 // This way if CFPA read fails for some reason, we won't accidentally treat revoked keys as valid.
             ],
-            soc_imageKeyRevocation: 0, //Image key revoocation use case: None?
+            soc_imageKeyRevocation: 0xFFFF_FFFF, //Image key revoocation use case: None? Still set highest revocation value by default for safety; will be updated with real value from CFPA if read is successful.
             soc_rkh: [0; 12],
             soc_rkh_1: [0; 12],      // PQC hash for hybrid keys
             soc_numberOfRootKeys: 4, // TODO: Must equal 4 per NXP example code.
@@ -145,22 +147,21 @@ pub fn verify_authenticity<'d>(
 
     let dev_mode = is_dev_mode(secure_boot_state);
 
-    if !dev_mode {
-        if !matches!(secure_boot_state, SecureBootState::HybridEnforced)
+    if !dev_mode
+        && (!matches!(secure_boot_state, SecureBootState::HybridEnforced)
             || !cnsa_enforced()
             || fast_boot_enabled()
-            || !low_power_authentication_enforced()
-        {
-            verify_error!(
-                "Secure Boot policy violation: secure boot state={:?}, CNSA enforced={}, fast boot enabled={}, low power auth enforced={}",
-                secure_boot_state,
-                cnsa_enforced(),
-                fast_boot_enabled(),
-                low_power_authentication_enforced()
-            );
-            n_boot_api.nboot_context_deinit(&mut ctx);
-            return Err(ec_slimloader::BootError::Integrity);
-        }
+            || !low_power_authentication_enforced())
+    {
+        verify_error!(
+            "Secure Boot policy violation: secure boot state={:?}, CNSA enforced={}, fast boot enabled={}, low power auth enforced={}",
+            secure_boot_state,
+            cnsa_enforced(),
+            fast_boot_enabled(),
+            low_power_authentication_enforced()
+        );
+        n_boot_api.nboot_context_deinit(&mut ctx);
+        return Err(ec_slimloader::BootError::Integrity);
     }
 
     const MAX_FLASH_SLOT_SIZE: u32 = 2 * 1024 * 1024; // 2MB, TODO: make this configurable or derive from flash size
@@ -179,7 +180,8 @@ pub fn verify_authenticity<'d>(
         let image_rkth_words = image_rkth.as_le_words();
 
         verify_info!("Derived image RKTH: {:x}", image_rkth_words);
-        if image_rkth_words != parms.soc_RoTNVM.soc_rkh { // non-const time is okay, these are public key hashes.
+        if image_rkth_words != parms.soc_RoTNVM.soc_rkh {
+            // non-const time is okay, these are public key hashes.
             if dev_mode {
                 verify_warn!("Dev mode: copying from image RKTH");
                 parms.soc_RoTNVM.soc_rkh.copy_from_slice(&image_rkth_words);
@@ -202,7 +204,8 @@ pub fn verify_authenticity<'d>(
         let pqc_rkth_words = pqc_rkth.as_le_words();
 
         verify_info!("Derived image PQC RKTH: {:x}", pqc_rkth_words);
-        if pqc_rkth_words != parms.soc_RoTNVM.soc_rkh_1 { //non-const time comparison is okay, these are public key hashes
+        if pqc_rkth_words != parms.soc_RoTNVM.soc_rkh_1 {
+            //non-const time comparison is okay, these are public key hashes
             if dev_mode {
                 verify_warn!("Dev mode: copying from image PQC RKTH");
                 parms.soc_RoTNVM.soc_rkh_1.copy_from_slice(&pqc_rkth_words);

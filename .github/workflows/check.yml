@@ -41,9 +41,12 @@ jobs:
       - name: cargo fmt --check (libs)
         run: cargo fmt --check
         working-directory: "./libs"
-      - name: cargo fmt --check (examples)
+      - name: cargo fmt --check (examples/rt685s)
         run: cargo fmt --check
         working-directory: "./examples/rt685s"
+      - name: cargo fmt --check (examples/mcxa-577app)
+        run: cargo fmt --check
+        working-directory: "./examples/mcxa-577app"
       - name: cargo fmt --check (bootloader-tool)
         run: cargo fmt --check
         working-directory: "./bootloader-tool"
@@ -78,13 +81,20 @@ jobs:
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./libs"
-      - name: cargo clippy (examples)
+      - name: cargo clippy (examples/rt685s)
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./examples/rt685s"
+      - name: cargo clippy (examples/mcxa-577app)
+        uses: giraffate/clippy-action@v1
+        with:
+          reporter: "github-pr-check"
+          clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workdir: "./examples/mcxa-577app"
       - name: cargo clippy (bootloader-tool)
         uses: giraffate/clippy-action@v1
         with:
@@ -135,7 +145,7 @@ jobs:
         working-directory: "./libs"
         env:
           RUSTDOCFLAGS: --cfg docsrs
-      - name: cargo doc (examples)
+      - name: cargo doc (examples/rt685s)
         run: cargo doc --no-deps
         working-directory: "./examples/rt685s"
         env:
@@ -197,11 +207,17 @@ jobs:
           log-level: warn
           manifest-path: ./libs/Cargo.toml
           command: check
-      - name: Cargo deny (examples)
+      - name: Cargo deny (examples/rt685s)
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           log-level: warn
           manifest-path: ./examples/rt685s/Cargo.toml
+          command: check
+      - name: Cargo deny (examples/mcxa-577app)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          log-level: warn
+          manifest-path: ./examples/mcxa-577app/Cargo.toml
           command: check
 
   msrv:
@@ -233,9 +249,12 @@ jobs:
       - name: cargo +${{ matrix.msrv }} check (libs)
         run: cargo check --features mimxrt685s
         working-directory: "./libs"
-      - name: cargo +${{ matrix.msrv }} check (examples)
+      - name: cargo +${{ matrix.msrv }} check (examples/rt685s)
         run: cargo check
         working-directory: "./examples/rt685s"
+      - name: cargo +${{ matrix.msrv }} check (examples/mcxa-577app)
+        run: cargo check
+        working-directory: "./examples/mcxa-577app"
       - name: cargo +${{ matrix.msrv }} check (bootloader-tool)
         run: cargo check
         working-directory: "./bootloader-tool"

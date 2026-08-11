@@ -22,8 +22,10 @@ macro_rules! jump_info {
     ($($arg:tt)*) => {};
 }
 
+/// # Safety
+///
+/// `entry` must be a valid pointer to a loaded, authenticated image in flash.
 pub unsafe fn jump_to_image(entry: *const u32) -> ! {
-
     // Guards: validate image header fields (Table 204 Nx4x security reference manual)
 
     let entry_bytes = entry as *const u8;
@@ -86,5 +88,5 @@ pub unsafe fn jump_to_image(entry: *const u32) -> ! {
 
     // Load MSP/reset from the vector table and transfer control using the standard Cortex-M helper.
     jump_info!("jump: bootload to 0x{:08X}", entry as u32);
-    cortex_m::asm::bootload(entry as *const u32)
+    cortex_m::asm::bootload(entry)
 }

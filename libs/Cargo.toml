@@ -36,6 +36,7 @@ num_enum = { version = "0.7", default-features = false }
 device-driver = "1.0"
 
 [patch.crates-io]
+embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
 embassy-time = { git = "https://github.com/embassy-rs/embassy" }
 embassy-time-driver = { git = "https://github.com/embassy-rs/embassy" }
 embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy" }

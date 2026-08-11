@@ -1,3 +1,7 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
+use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
+
 use crate::error::FlashStatus;
 use crate::memory::{INTERNAL_FLASH_PAGE_SIZE, INTERNAL_FLASH_SECTOR_SIZE, JOURNAL_SIZE, JOURNAL_START};
 use crate::rom_api::{
@@ -5,8 +9,6 @@ use crate::rom_api::{
     FlashReadEccOption, FlashReadMarginOption, FlashReadSingleWordConfig, FlashSetReadModeConfig,
     FlashSetWriteModeConfig, FLASH_API_ERASE_KEY,
 };
-use embedded_storage_async::nor_flash::NorFlash;
-use embedded_storage_async::nor_flash::{ErrorType, NorFlashErrorKind, ReadNorFlash};
 
 pub struct InternalFlash {
     pub cfg: FlashConfig,
@@ -76,7 +78,9 @@ impl ReadNorFlash for InternalFlash {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
         let flash_driver_api = flash_driver();
-        let abs = JOURNAL_START.checked_add(offset).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        let abs = JOURNAL_START
+            .checked_add(offset)
+            .ok_or(NorFlashErrorKind::OutOfBounds)?;
         let status = flash_driver_api.flash_read(&mut self.cfg, abs, buf.as_mut_ptr(), read_len);
         if status == FlashStatus::Success {
             Ok(())
@@ -101,14 +105,16 @@ impl NorFlash for InternalFlash {
         if end > JOURNAL_SIZE {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
-        if offset % INTERNAL_FLASH_PAGE_SIZE != 0 {
+        if !offset.is_multiple_of(INTERNAL_FLASH_PAGE_SIZE) {
             return Err(NorFlashErrorKind::NotAligned);
         }
         if data.len() > INTERNAL_FLASH_PAGE_SIZE as usize {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
         let flash_driver_api = flash_driver();
-        let abs_start = JOURNAL_START.checked_add(offset).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        let abs_start = JOURNAL_START
+            .checked_add(offset)
+            .ok_or(NorFlashErrorKind::OutOfBounds)?;
 
         // Page was erased prior to this write — fill rest with 0xFF and program.
         let mut page_buf = [0xFFu8; INTERNAL_FLASH_PAGE_SIZE as usize];
@@ -153,7 +159,9 @@ impl NorFlash for InternalFlash {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
 
-        let len = to_aligned.checked_sub(from_aligned).ok_or(NorFlashErrorKind::OutOfBounds)?;
+        let len = to_aligned
+            .checked_sub(from_aligned)
+            .ok_or(NorFlashErrorKind::OutOfBounds)?;
         if len == 0 {
             return Ok(());
         }
