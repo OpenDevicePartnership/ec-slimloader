@@ -25,7 +25,7 @@ async fn main(_spawner: Spawner) {
 
     let mut dma_ch0 = DmaChannel::new(p.DMA0_CH0.reborrow());
     let mut hash_result = [0u8; 48];
-    let mut input_data = [0u8; 256];
+    let input_data: [u8; 256] = core::array::from_fn(|i| i as u8);
 
     for (index, byte) in input_data.iter_mut().enumerate() {
         *byte = index as u8;
