@@ -27,10 +27,6 @@ async fn main(_spawner: Spawner) {
     let mut hash_result = [0u8; 48];
     let input_data: [u8; 256] = core::array::from_fn(|i| i as u8);
 
-    for (index, byte) in input_data.iter_mut().enumerate() {
-        *byte = index as u8;
-    }
-
     let mut sgi = Sgi::new(p.SGI0.reborrow(), Irqs).unwrap();
     match sgi
         .sha2_start_and_finalize(&mut dma_ch0, HashSize::Sha384, &input_data, &mut hash_result)
