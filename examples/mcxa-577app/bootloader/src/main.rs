@@ -12,9 +12,6 @@ use mcxa_security_provisioning::{
 };
 use panic_probe as _;
 
-#[cfg(feature = "defmt")]
-defmt::timestamp!("{=u32}", 0);
-
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) -> ! {
     if is_cmpa_erased() && is_cfpa_erased() {
