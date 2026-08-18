@@ -343,6 +343,35 @@ impl CanAdvanceTo<Bricked> for InField {}
 impl CanAdvanceTo<Bricked> for OemFieldReturn {}
 impl CanAdvanceTo<Bricked> for FailureAnalysis {}
 
+/// Maps a zero-sized lifecycle type to its runtime `NbootLifecycleState` value.
+/// Used by `verify_lifecycle_transition` to assert the device is actually in
+/// the expected `From` state before committing a transition.
+pub trait ActualLifecycleState: sealed::Sealed {
+    const STATE: NbootLifecycleState;
+}
+
+impl ActualLifecycleState for Develop {
+    const STATE: NbootLifecycleState = NbootLifecycleState::Develop;
+}
+impl ActualLifecycleState for Develop2 {
+    const STATE: NbootLifecycleState = NbootLifecycleState::Develop2;
+}
+impl ActualLifecycleState for InField {
+    const STATE: NbootLifecycleState = NbootLifecycleState::InField;
+}
+impl ActualLifecycleState for InFieldLocked {
+    const STATE: NbootLifecycleState = NbootLifecycleState::InFieldLocked;
+}
+impl ActualLifecycleState for OemFieldReturn {
+    const STATE: NbootLifecycleState = NbootLifecycleState::OemFieldReturn;
+}
+impl ActualLifecycleState for FailureAnalysis {
+    const STATE: NbootLifecycleState = NbootLifecycleState::FailureAnalysis;
+}
+impl ActualLifecycleState for Bricked {
+    const STATE: NbootLifecycleState = NbootLifecycleState::Bricked;
+}
+
 // Forward declarations of subtables.
 #[repr(C)]
 pub(super) struct NbootDriverRaw {

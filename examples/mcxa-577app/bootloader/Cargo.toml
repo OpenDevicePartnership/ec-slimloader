@@ -5,14 +5,16 @@ edition = "2021"
 license.workspace = true
 
 [features]
-default = ["defmt", "certificate-logging", "verification-logging"]
+default = ["defmt", "certificate-logging", "verification-logging", "mcxa"]
 defmt = ["dep:defmt", "dep:defmt-or-log", "dep:defmt-rtt", "defmt-or-log/defmt"]
 log = ["dep:defmt-or-log", "defmt-or-log/log"]
+mcxa = ["ec-slimloader-mcxa/mcxa5xx"]
+mcxa5xxevk = ["ec-slimloader-mcxa/mcxa5xxevk"]
 certificate-logging = ["ec-slimloader-mcxa/certificate-logging"]
 verification-logging = ["ec-slimloader-mcxa/verification-logging"]
 
 [[bin]]
-name = "mcxa-577app-bootloader"
+name = "bootloader"
 path = "src/main.rs"
 
 [dependencies]
@@ -23,15 +25,15 @@ defmt-or-log = { version = "0.2.3", optional = true }
 defmt-rtt = { version = "1.0", optional = true }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 
-ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["internal-only", "mcxa5xx", "defmt"] }
+heapless = { version = "0.8", default-features = false }
+partition-manager = { workspace = true, features = ["macros"] }
+partition-manager-macros = { workspace = true }
+embassy-sync = { workspace = true }
+
+ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["mcxa5xx", "defmt"] }
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
+ec-slimloader-state = { path = "../../../libs/ec-slimloader-state", default-features = false }
 mcxa-security-provisioning = { path = "../../../mcxa-security-provisioning", default-features = false, features = ["defmt"] }
 
-embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["rt", "mcxa5xx"] }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["platform-cortex-m", "executor-thread"] }
-
-[profile.release]
-debug = 2            # Full DWARF info for defmt/probe-rs decoding
-lto = false          # Disable LTO to prevent stripping debug patterns
-opt-level = 2        # Standard optimization
-panic = "abort"      # Smaller binaries
+embassy-mcxa = { workspace = true, features = ["rt", "mcxa5xx"] }
+embassy-executor = { workspace = true, features = ["platform-cortex-m", "executor-thread"] }

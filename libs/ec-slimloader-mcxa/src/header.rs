@@ -1,5 +1,3 @@
-use crate::memory::INTERNAL_FLASH_PAGE_SIZE;
-
 #[repr(C)]
 pub struct VectorAndHeaderRaw {
     // ARM CortexM vector table interleaved with NXP bootloader fields
@@ -89,26 +87,6 @@ impl<'a> ImageHeader<'a> {
     pub fn manifest_offset(&self) -> u32 {
         // assume manifest immediately after certificate block
         self.cert_block_offset() // caller will add certificate size once parsed
-    }
-    pub fn aligned_copy_length(&self, slot_size: u32) -> Result<u32, HeaderError> {
-        let len = self.image_length();
-        let remainder = len % INTERNAL_FLASH_PAGE_SIZE;
-        if remainder == 0 {
-            if len <= slot_size {
-                return Ok(len);
-            } else {
-                return Err(HeaderError::LengthTooLarge);
-            }
-        }
-
-        let aligned_len = len
-            .checked_add(INTERNAL_FLASH_PAGE_SIZE - remainder)
-            .ok_or(HeaderError::LengthTooLarge)?;
-        if aligned_len > slot_size {
-            return Err(HeaderError::LengthTooLarge);
-        }
-
-        Ok(aligned_len)
     }
 }
 

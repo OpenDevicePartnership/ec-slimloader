@@ -6,12 +6,11 @@ use defmt_or_log::info;
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
 use embassy_executor::Spawner;
+use mcxa_577app_bootloader::{Bootloader, Config, JOURNAL_BUFFER_SIZE};
 use mcxa_security_provisioning::{
     is_cfpa_erased, is_cmpa_erased, log_cmpa_write_error, set_ifr_initial_config_and_reset,
 };
 use panic_probe as _;
-
-const JOURNAL_BUFFER_SIZE: usize = 4096;
 
 #[cfg(feature = "defmt")]
 defmt::timestamp!("{=u32}", 0);
@@ -38,5 +37,5 @@ async fn main(_spawner: Spawner) -> ! {
     }
     #[cfg(any(feature = "defmt", feature = "log"))]
     info!("Starting MCXA bootloader");
-    ec_slimloader::start::<ec_slimloader_mcxa::McxaBoard, JOURNAL_BUFFER_SIZE>(ec_slimloader_mcxa::Config).await
+    ec_slimloader::start::<Bootloader, { JOURNAL_BUFFER_SIZE }>(Config).await
 }

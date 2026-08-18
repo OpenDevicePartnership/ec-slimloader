@@ -9,17 +9,13 @@ cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = { version = "0.7", features = ["set-sp", "set-vtor"] }
 defmt = "1.0"
 defmt-rtt = "1.0"
-embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["rt", "defmt", "mcxa5xx"] }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["platform-cortex-m", "executor-thread"] }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-mcxa = { workspace = true, features = ["rt", "defmt", "mcxa5xx"] }
+embassy-executor = { workspace = true, features = ["platform-cortex-m", "executor-thread"] }
+embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-debug = 2          # Full DWARF info for probe-rs RTT location decoding
-lto = false          # Disable LTO to prevent stripping debug patterns
-opt-level = 2        # Standard optimization
+[[bin]]
+name = "app"
+path = "src/main.rs"
 
 

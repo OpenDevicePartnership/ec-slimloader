@@ -44,9 +44,9 @@ async fn main(_spawner: Spawner) {
 
     defmt::info!("It's showtime...");
 
-    loop {
+    for _ in 0..10 {
         if rate > 1000 {
-            rate = 250; // wrap rate to avoid overflow and excessively long timers.
+            rate = 250;
         }
         red.toggle();
         Timer::after_millis(rate).await;
@@ -62,5 +62,30 @@ async fn main(_spawner: Spawner) {
 
         Timer::after_millis(rate).await;
         rate = rate.wrapping_add(100);
+    }
+
+    defmt::info!("10 blink cycles done - jumping to FLASH1");
+    flash1_pattern(&mut red, &mut green, &mut blue).await;
+}
+
+/// Runs from FLASH1 (~1.5MB offset). All three LEDs pulse together, white,
+/// distinct from section 1's sequential RGB pattern.
+#[link_section = ".text_flash1"]
+#[inline(never)]
+async fn flash1_pattern(
+    red: &mut hal::gpio::Output<'_>,
+    green: &mut hal::gpio::Output<'_>,
+    blue: &mut hal::gpio::Output<'_>,
+) {
+    defmt::info!("Running from FLASH1");
+    loop {
+        red.set_low();
+        green.set_low();
+        blue.set_low();
+        Timer::after_millis(1000).await;
+        red.set_high();
+        green.set_high();
+        blue.set_high();
+        Timer::after_millis(1000).await;
     }
 }

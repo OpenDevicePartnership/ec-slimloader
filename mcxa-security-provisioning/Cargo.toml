@@ -6,18 +6,28 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 
 [dependencies]
+cortex-m.workspace = true
 defmt = { version = "0.3", optional = true }
 defmt-or-log = { version = "0.2.3" }
 log = { version = "0.4", optional = true }
-cortex-m = "0.7"
-embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", default-features = false, features = ["rt"] }
+embedded-storage-async = "0.4.1"
+embassy-futures = { workspace = true }
+embassy-time = { workspace = true }
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = ["mimxrt685s"] }
+embassy-mcxa = { workspace = true }
+embassy-sync = { workspace = true }
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services", tag = "v0.1.0", default-features = false }
+partition-manager-macros = { git = "https://github.com/OpenDevicePartnership/embedded-services", tag = "v0.1.0" }
+static_cell = "2.1"
 
 # Re-uses the MCXA lifecycle/IFR types defined in ec-slimloader-mcxa
-ec-slimloader-mcxa = { path = "../libs/ec-slimloader-mcxa", default-features = false }
+ec-slimloader-mcxa = { workspace = true, default-features = false }
+
 
 [features]
-default = ["log", "mcxa5xx"]
+default = ["mcxa5xx", "defmt"]
 defmt = ["dep:defmt", "defmt-or-log/defmt", "ec-slimloader-mcxa/defmt"]
 log = ["dep:log", "defmt-or-log/log", "ec-slimloader-mcxa/log"]
 mcxa2xx = ["embassy-mcxa/mcxa2xx", "ec-slimloader-mcxa/mcxa2xx"]
 mcxa5xx = ["embassy-mcxa/mcxa5xx", "ec-slimloader-mcxa/mcxa5xx"]
+mcxa5xxevk = ["ec-slimloader-mcxa/mcxa5xxevk"]

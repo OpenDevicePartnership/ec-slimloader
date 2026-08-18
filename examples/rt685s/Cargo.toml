@@ -26,12 +26,6 @@ defmt = "1.0.1"
 defmt-or-log = { version = "0.2.2", default-features = false }
 defmt-rtt = "0.4.0"
 
-[patch.crates-io]
-embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy" }
-embassy-time-driver = { git = "https://github.com/embassy-rs/embassy" }
-embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy" }
-
 [profile.release]
 lto = true      # better optimizations
 debug = 2

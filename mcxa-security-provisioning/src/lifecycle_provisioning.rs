@@ -12,8 +12,9 @@ pub use ec_slimloader_mcxa::lifecycle::{
     SecureBootLevel, XipImageProtect,
 };
 pub use ec_slimloader_mcxa::rom_api::{
-    flash_cfg_for_rom_api, flash_driver, Bricked, CanAdvanceTo, Develop, Develop2, FailureAnalysis, FlashConfig,
-    InField, InFieldLocked, NbootLifecycleState, NbootRootKeyUsage, OemFieldReturn, FLASH_API_ERASE_KEY,
+    flash_cfg_for_rom_api, flash_driver, ActualLifecycleState, Bricked, CanAdvanceTo, Develop, Develop2,
+    FailureAnalysis, FlashConfig, InField, InFieldLocked, NbootLifecycleState, NbootRootKeyUsage, OemFieldReturn,
+    FLASH_API_ERASE_KEY,
 };
 use embassy_mcxa::{peripherals, Peri};
 
@@ -149,6 +150,7 @@ fn build_cfpa_page_for_cmpa_update() -> Result<[u8; IFRPage::Cfpa.byte_len()], C
         Err(CfpaWriteError::CounterOverflow) => return Err(CmpaWriteError::CounterOverflow),
         Err(CfpaWriteError::SecurePolicyViolation) => return Err(CmpaWriteError::ConfigError),
         Err(CfpaWriteError::LifecycleRegression) => return Err(CmpaWriteError::LCStateInvalid),
+        Err(CfpaWriteError::LifecycleStateMismatch) => return Err(CmpaWriteError::LCStateInvalid),
         Err(CfpaWriteError::FlashError(status)) => return Err(CmpaWriteError::FlashError(status)),
         Err(CfpaWriteError::FlashVerify {
             status,
@@ -252,7 +254,10 @@ impl CmpaBootCfg0Write {
             // [1] IFLASH_DUAL_EN = 0 (always single-channel)
             | (1 << 0) // [0] IFLASH_BOOTEN = 1 (always enable internal flash boot)
     }
-    pub fn default() -> Self {
+}
+
+impl Default for CmpaBootCfg0Write {
+    fn default() -> Self {
         Self {
             boot_speed: BootSpeed::Fro192Md,
             rec_boot_en: None,
@@ -317,8 +322,10 @@ impl CmpaBootCfg1Write {
             | ((self.isp_spi_en.unwrap_or(false) as u32) << 1) // [1]
             | (self.isp_uart_en.unwrap_or(true)  as u32) // [0] default enabled
     }
+}
 
-    pub fn default() -> Self {
+impl Default for CmpaBootCfg1Write {
+    fn default() -> Self {
         Self {
             isp_ft_entry: IspEntryPolicy::Allowed,
             isp_dm_entry: IspEntryPolicy::Allowed,
@@ -441,10 +448,15 @@ impl CmpaLspiCfg0Write {
         // [6:1] Reserved
         | (self.qspi_auto_probe as u32) // [0]     QSPI_AUTO_PROBE_EN
     }
+}
 
-    pub fn default() -> Self {
+impl Default for CmpaLspiCfg0Write {
+    fn default() -> Self {
         Self {
+            #[cfg(not(feature = "mcxa5xxevk"))]
             qspi_port: QSpiPort::PortB1,
+            #[cfg(feature = "mcxa5xxevk")]
+            qspi_port: QSpiPort::PortA1,
             qspi_pwr_hold_time: QSpiPwrHoldTime::NoDelay,
             qspi_hold_time: QSpiHoldTime::Delay500us,
             qspi_reset_gpio_pin: 0, //TODO, check schematics for correct GPIO pin number for QSPI reset.
@@ -533,6 +545,8 @@ pub enum CfpaWriteError {
     SecurePolicyViolation,
     /// Requested lifecycle state is not a forward progression from current state.
     LifecycleRegression,
+    /// The device's actual lifecycle state in CFPA does not match the expected `From` state.
+    LifecycleStateMismatch,
     FlashError(FlashStatus),
     FlashVerify {
         status: FlashStatus,
@@ -542,7 +556,10 @@ pub enum CfpaWriteError {
 }
 
 fn read_cfpa_page_for_update() -> Result<[u8; IFRPage::Cfpa.byte_len()], CfpaWriteError> {
-    if IFRPage::Cfpa.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize() != 0 {
+    if !IFRPage::Cfpa
+        .byte_len()
+        .is_multiple_of(IFRWriteGeometry::FlashPhraseBytes.as_usize())
+    {
         return Err(CfpaWriteError::InvalidFlashGeometry);
     }
 
@@ -685,7 +702,7 @@ impl RotkRevokeConfig {
         let mut next = current_word;
 
         if let Some(value) = self.rotk0 {
-            next = (next & !(0b11 << 0)) | ((value as u32) << 0);
+            next = (next & !0b11) | (value as u32);
         }
         if let Some(value) = self.rotk1 {
             next = (next & !(0b11 << 2)) | ((value as u32) << 2);
@@ -805,15 +822,18 @@ pub fn verify_lifecycle_transition<From, Next>(
     next: NbootLifecycleState,
 ) -> Result<LifecycleAdvanceToken<Next>, CfpaWriteError>
 where
-    From: CanAdvanceTo<Next>,
+    From: CanAdvanceTo<Next> + ActualLifecycleState,
 {
+    if let Some(current) = load_lifecycle_from_cfpa() {
+        if current != From::STATE {
+            return Err(CfpaWriteError::LifecycleStateMismatch);
+        }
+        if !current.can_advance_to(next) {
+            return Err(CfpaWriteError::LifecycleRegression);
+        }
+    }
     if next == NbootLifecycleState::Bricked {
         // Bricking the device is a special case that doesn't require CMPA policy to be valid, since the device will be unusable after this action regardless.
-        if let Some(current) = load_lifecycle_from_cfpa() {
-            if !current.can_advance_to(next) {
-                return Err(CfpaWriteError::LifecycleRegression);
-            }
-        }
         //erase all internal (todo: external) flash except the sticky locked SBL region.
         let drv = flash_driver();
         let mut cfg = flash_cfg_for_rom_api();
@@ -840,11 +860,6 @@ where
     if !hybrid_secure_boot_enforced() || !cnsa_enforced() || fast_boot_enabled() || !low_power_authentication_enforced()
     {
         return Err(CfpaWriteError::SecurePolicyViolation);
-    }
-    if let Some(current) = load_lifecycle_from_cfpa() {
-        if !current.can_advance_to(next) {
-            return Err(CfpaWriteError::LifecycleRegression);
-        }
     }
     Ok(LifecycleAdvanceToken::new(next))
 }
@@ -940,8 +955,12 @@ pub fn read_cmpa_page_for_update() -> Result<[u8; IFRPage::CmpaAll.byte_len()], 
 // Stages the provided CMPA page image into SCRATCH. Reads the current CFPA page, sets
 // UPD_TYPE to CMPA, erases scratch, programs both CFPA and CMPA scratch pages, then verifies.
 pub fn write_cmpa_page_to_scratch(cmpa_page: &[u8; IFRPage::CmpaAll.byte_len()]) -> Result<(), CmpaWriteError> {
-    if (IFRPage::Cfpa.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize()) != 0
-        || (IFRPage::CmpaAll.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize()) != 0
+    if !IFRPage::Cfpa
+        .byte_len()
+        .is_multiple_of(IFRWriteGeometry::FlashPhraseBytes.as_usize())
+        || !IFRPage::CmpaAll
+            .byte_len()
+            .is_multiple_of(IFRWriteGeometry::FlashPhraseBytes.as_usize())
     {
         return Err(CmpaWriteError::InvalidFlashGeometry);
     }
@@ -1095,8 +1114,12 @@ pub fn read_cmpa_core_page_for_update() -> Result<[u8; IFRPage::Cmpa.byte_len()]
 /// Stages only the 512-byte core CMPA page into SCRATCH.
 /// Matches read_cmpa_core_page_for_update; use when EXT_CMPA_32B_SIZE is 0.
 pub fn write_cmpa_core_page_to_scratch(cmpa_page: &[u8; IFRPage::Cmpa.byte_len()]) -> Result<(), CmpaWriteError> {
-    if (IFRPage::Cfpa.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize()) != 0
-        || (IFRPage::Cmpa.byte_len() % IFRWriteGeometry::FlashPhraseBytes.as_usize()) != 0
+    if !IFRPage::Cfpa
+        .byte_len()
+        .is_multiple_of(IFRWriteGeometry::FlashPhraseBytes.as_usize())
+        || !IFRPage::Cmpa
+            .byte_len()
+            .is_multiple_of(IFRWriteGeometry::FlashPhraseBytes.as_usize())
     {
         return Err(CmpaWriteError::InvalidFlashGeometry);
     }
@@ -1233,7 +1256,7 @@ pub fn write_cmpa_default_config_to_scratch_and_reset(config: CmpaDefaultConfig)
         | ((CnsaLevel::CnsaTwo as u32) << 8)                // [9:8]  = 0b10
         | ((config.enf_tzm_preset as u32) << 10)            // [11:10] configurable
         | (0x3 << 12)                                       // [13:12]= 0b11 fast boot disabled
-        | ((XipImageProtect::WriteProtectSticky as u32) << 14) // [15:14]= 0b01 write protect with sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
+        | ((XipImageProtect::WriteProtect as u32) << 14) // [15:14]= 0b10 write protect without sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
         | (0x1 << 30); // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
 
     let mut cmpa_page = read_cmpa_page_for_update()?;
@@ -1508,7 +1531,7 @@ pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(
         | ((CnsaLevel::CnsaTwo as u32) << 8)                        // [9:8]  = 0b10
         | ((TzmPreset::Enforce as u32) << 10)                       // [11:10] Enforce TZM preset (if present)
         | (0x3 << 12)                                               // [13:12]= 0b11 fast boot disabled
-        | ((XipImageProtect::WriteProtectSticky as u32) << 14)      // [15:14]= 0b01 write protect with sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
+        | ((XipImageProtect::WriteProtect as u32) << 14)      // [15:14]= 0b10 write protect without sticky lock //TODO : Maybe XOM, but does that get in way of app authenticating the SBL?
         | (0x1 << 30); // [31:30] Disable NXP signed FW = b01 (Disable any non provisioned FW)
 
     cmpa_page[CmpaUpdateConfigData::SecureBootCfg.byte_range()].copy_from_slice(&secure_boot_cfg.to_le_bytes());
@@ -1521,7 +1544,7 @@ pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(
 /// The `From` and `Next` type parameters enforce compile-time validation of allowed transitions.
 pub fn advance_lifecycle_and_reset<From, Next>(next: NbootLifecycleState) -> Result<Infallible, CfpaWriteError>
 where
-    From: CanAdvanceTo<Next>,
+    From: CanAdvanceTo<Next> + ActualLifecycleState,
 {
     let token = verify_lifecycle_transition::<From, Next>(next)?;
     cfpa_stage_lifecycle_advance_and_reset(token)

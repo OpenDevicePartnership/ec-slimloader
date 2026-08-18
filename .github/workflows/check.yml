@@ -50,6 +50,9 @@ jobs:
       - name: cargo fmt --check (bootloader-tool)
         run: cargo fmt --check
         working-directory: "./bootloader-tool"
+      - name: cargo fmt --check (mcxa-security-provisioning)
+        run: cargo fmt --check
+        working-directory: "./mcxa-security-provisioning"
 
   clippy:
     runs-on: ubuntu-latest
@@ -81,6 +84,7 @@ jobs:
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./libs"
+          extra_args: --features mimxrt685s
       - name: cargo clippy (examples/rt685s)
         uses: giraffate/clippy-action@v1
         with:
@@ -102,6 +106,13 @@ jobs:
           clippy_flags: -- -D clippy::suspicious -D clippy::correctness -D clippy::perf -D clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./bootloader-tool"
+      - name: cargo clippy (mcxa-security-provisioning)
+        uses: giraffate/clippy-action@v1
+        with:
+          reporter: "github-pr-check"
+          clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workdir: "./mcxa-security-provisioning"
 
   # Enable once we have a released crate
   # semver:
@@ -219,6 +230,12 @@ jobs:
           log-level: warn
           manifest-path: ./examples/mcxa-577app/Cargo.toml
           command: check
+      - name: Cargo deny (mcxa-security-provisioning)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          log-level: warn
+          manifest-path: ./mcxa-security-provisioning/Cargo.toml
+          command: check
 
   msrv:
     # check that we can build using the minimal rust version that is specified by this crate
@@ -258,6 +275,9 @@ jobs:
       - name: cargo +${{ matrix.msrv }} check (bootloader-tool)
         run: cargo check
         working-directory: "./bootloader-tool"
+      - name: cargo +${{ matrix.msrv }} check (mcxa-security-provisioning)
+        run: cargo check
+        working-directory: "./mcxa-security-provisioning"
 
   fuzz:
     runs-on: ubuntu-latest

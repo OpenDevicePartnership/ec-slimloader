@@ -4,6 +4,10 @@ A light-weight bootloader written in Rust with a fail-safe NOR-flash backed stat
 This framework can run on any platform if support for the platform is implemented.
 It is only opinionated with regards to how the state is stored.
 
+Currently only supports the NXP IMXRT685S and IMXRT633S where it acts as a stage-two bootloader and copies the program to application RAM.
+Also contains a tool for signing images, flashing them to the device, setting fuses (or shadow registers) containing crypto keys,
+and an example application to showcase the bootloaders A/B state functionality for this family of chipsets.
+
 ## Organisation
 
 This repository is split up into three parts:
@@ -12,28 +16,28 @@ This repository is split up into three parts:
 * bootloader-tool: a command-line utility only used to perform operations related to the NXP RT685S platform.
   It uses the NXP SPSDK tooling to generate keys, sign images, and flash them to the target device. Also integrates probe-rs and allows for attaching to the RTT buffer for displaying `defmt` output.
   This tool is not relevant if you want to use `ec-slimloader` with any other platform.
-* examples/mcxa-577app: example bootloader and blinky demo application, can be run on MCXA5xx evalutation kit.
 
 The libraries are split out as follows:
 * ec-slimloader: general library crate providing a basic structure to build your bootloader binary application.
 * ec-slimloader-state: library crate with all code relating to managing the state journal. Used by both the bootloader and the application to change which image slot should be booted.
-* ec-slimloader-mcxa: library crate implementing support for the NXP MCXA5xx family with PQC cryptography support.
+* ec-slimloader-imxrt: library crate implementing support for the NXP IMXRT685S and IMXRT633S.
+* imxrt-rom: library crate implementing Rust support for the NXP ROM API which provides access to fuses and allows calling into a verification routine for images.
 
 ## How it works
 Assuming your platform is already supported, you can define:
 * a region of NOR-flash memory containing at least 2 pages for the bootloader state.
 * at least two regions of any memory that will fit an application image.
 
-Using the library crate for your platform (e.g., `ec-slimloader-mcxa`) you can implement your own bootloader binary by calling the `start` function in the `ec-slimloader` library crate.
+Using the library crate for your platform (like `ec-slimloader-imxrt`) you can then implement your own bootloader binary by calling the `start` function in the `ec-slimloader` library crate.
 
 The `ec-slimloader` crate will handle for you:
 * it will read from the state journal what image slot will be booted.
 * on subsequent reboots, it will fall back to your defined backup slot if you do not mark your current application image as `confirmed`.
 
 However, some aspects are handled by the platform support crate (and can differ from project-to-project):
-* how application images are loaded.
-* how application images are verified.
-* how application images are bootloaded, or in other words are jumped to.
+* how application images are loaded. For `ec-slimloader-imxrt` images are copied to RAM in a quite chip-specific way. Typically for other platforms you might want to swap images between on-chip NOR flash and external NOR flash. The latter method is not implemented in this repository (yet).
+* how application images are verified. By default the images themselves are not checked at all. `ec-slimloader-imxrt` leverages the native NXP authentication routines to check image integrity.
+* how application images are bootloaded, or in other words are jumped to. This differs for cortex-m or RISCV processors.
 
 Even when using `ec-slimloader-imxrt`, you will still have to implement a few details:
 * from what memory is the `ec-slimloader` started, and what memory range is used for the bootloader data?
@@ -45,7 +49,7 @@ Finally, your application needs to also work with the state journal to:
 * after rebooting, mark the current image slot from which the application is running as `confirmed`.
   If the application does not do this, the bootloader will load the old 'backup' image and mark the current boot as `failed`.
 
-For a full tour on how to use this framework for MCXA5xx, refer to the MCX examples.
+For a full tour on how to use this framework, please refer to the `examples/rt685s` folder.
 
 ## Quick guide
 This guide details how to use this repository on the NXP MIMXRT685S-EVK. First step is compiling the bootloader and application:
@@ -119,6 +123,3 @@ cargo run -- run application -i ../examples/rt685s/target/thumbv8m.main-none-eab
 You can use the `USER_1` button to change the state journal to either `confirmed` or try the other slot in state `initial` if the current image is already `confirmed`.
 
 You can use the `USER_2` button the reboot into the bootloader, which will set an image to `failed` if it does not verify or if it was in `attempting` without putting the state in `confirmed`.
-
-The following describes the process for generating artifacts and signing/flashing for MCXA:
-...

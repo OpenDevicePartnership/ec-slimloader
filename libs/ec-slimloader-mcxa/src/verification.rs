@@ -54,51 +54,35 @@ fn is_dev_mode(secure_boot_state: SecureBootState) -> bool {
         && matches!(load_lifecycle_from_cfpa(), Some(NbootLifecycleState::Develop))
 }
 
-/// Verify the authenticity of the image at the given base address using the NBOOT ROM API. This includes initializing the NBOOT context, loading lifecycle and root of trust information from CFPA/CMPA,
-/// deriving the image RKTH from the AHAB container, and calling nboot_img_authenticate_romapi. Returns Ok(()) if authentication is successful, or an appropriate BootError if any step fails or if authentication fails.
-/// Will ONLY authenticate if CMPA secure boot settings is configured correctly, correct key set (as established by the ROTKH values) is used for signing, and the image is properly signed as an HYBRID (ECDSA + ML-DSA) image.
-/// In dev mode, if the RKTH derived from the image does not match the ROTKH in CMPA, it will be copied to the ROTKH to allow authentication to proceed (this allows flexibility in dev mode since keys may not be provisioned yet),
-/// but in production mode, a mismatch will cause authentication to fail (to prevent unauthorized images from being authenticated).
-pub fn verify_authenticity<'d>(
-    mut peri: Peri<'d, peripherals::SGI0>,
-    image_base: *const u8,
-) -> Result<(), ec_slimloader::BootError> {
-    let n_boot_api = nboot();
-    let mut ctx: NbootCtx = unsafe { core::mem::zeroed() };
-    let mut sig_ok: NbootBool = NbootBoolValue::False as u32;
+const DEFAULT_NBOOT_PARMS: NbootImgAuthParms = NbootImgAuthParms {
+    soc_RoTNVM: NbootRotAuthParms {
+        soc_rootKeyRevocation: [
+            NbootRootKeyRevocation::Revoked as u32,
+            NbootRootKeyRevocation::Revoked as u32,
+            NbootRootKeyRevocation::Revoked as u32,
+            NbootRootKeyRevocation::Revoked as u32,
+            //Start as revoked by default for safety; will be updated with real values from CFPA if read is successful.
+            // This way if CFPA read fails for some reason, we won't accidentally treat revoked keys as valid.
+        ],
+        soc_imageKeyRevocation: 0xFFFF_FFFF, //Image key revocation use case: None? Still set highest revocation value by default for safety; will be updated with real value from CFPA if read is successful.
+        soc_rkh: [0; 12],
+        soc_rkh_1: [0; 12],      // PQC hash for hybrid keys
+        soc_numberOfRootKeys: 4, // TODO: Must equal 4 per NXP example code.
+        soc_rootKeyUsage: [
+            NbootRootKeyUsage::Unused as u32,
+            NbootRootKeyUsage::Unused as u32,
+            NbootRootKeyUsage::Unused as u32,
+            NbootRootKeyUsage::Unused as u32,
+            // Start as unused by default for safety; will be updated with real values from CMPA if read is successful.
+        ],
+        soc_rootKeyTypeAndLength: NbootRootKeyType::EcdsaP384Mldsa87 as u32, //FIXED TO THIS because we are CNSA 2.0 compliant.
+        soc_lifecycle: NbootLifecycleState::InField.nboot_soc_lifecycle(), // default to INFIELD (strict start), gets updated with real one further below.
+    },
+    soc_trustedFirmwareVersion: 0xFFFF_FFFF, // default to max version to be safe (any real version should be lower), gets updated with real one from CFPA further below
+};
 
-    verify_trace!("Initializing NBOOT context");
-    let context_init_status = n_boot_api.nboot_context_init(&mut ctx);
-    if context_init_status != crate::error::NbootStatus::Success {
-        return Err(ec_slimloader::BootError::Authenticate);
-    }
-
-    let mut parms = NbootImgAuthParms {
-        soc_RoTNVM: NbootRotAuthParms {
-            soc_rootKeyRevocation: [
-                NbootRootKeyRevocation::Revoked as u32,
-                NbootRootKeyRevocation::Revoked as u32,
-                NbootRootKeyRevocation::Revoked as u32,
-                NbootRootKeyRevocation::Revoked as u32,
-                //Start as revoked by default for safety; will be updated with real values from CFPA if read is successful.
-                // This way if CFPA read fails for some reason, we won't accidentally treat revoked keys as valid.
-            ],
-            soc_imageKeyRevocation: 0xFFFF_FFFF, //Image key revoocation use case: None? Still set highest revocation value by default for safety; will be updated with real value from CFPA if read is successful.
-            soc_rkh: [0; 12],
-            soc_rkh_1: [0; 12],      // PQC hash for hybrid keys
-            soc_numberOfRootKeys: 4, // TODO: Must equal 4 per NXP example code.
-            soc_rootKeyUsage: [
-                NbootRootKeyUsage::Unused as u32,
-                NbootRootKeyUsage::Unused as u32,
-                NbootRootKeyUsage::Unused as u32,
-                NbootRootKeyUsage::Unused as u32,
-                // Start as unused by default for safety; will be updated with real values from CMPA if read is successful.
-            ],
-            soc_rootKeyTypeAndLength: NbootRootKeyType::EcdsaP384Mldsa87 as u32, //FIXED TO THIS because we are CNSA 2.0 compliant.
-            soc_lifecycle: NbootLifecycleState::InField.nboot_soc_lifecycle(), // default to INFIELD (strict start), gets updated with real one further below.
-        },
-        soc_trustedFirmwareVersion: 0xFFFF_FFFF, // default to max version to be safe (any real version should be lower), gets updated with real one from CFPA further below
-    };
+fn load_nboot_auth_parms_from_ifr() -> Result<NbootImgAuthParms, ec_slimloader::BootError> {
+    let mut parms = DEFAULT_NBOOT_PARMS;
 
     if let Some(cmpa_rotkh) = load_rotkh_from_cmpa() {
         parms.soc_RoTNVM.soc_rkh = cmpa_rotkh;
@@ -138,15 +122,17 @@ pub fn verify_authenticity<'d>(
         parms.soc_RoTNVM.soc_lifecycle = cfpa_lifecycle.nboot_soc_lifecycle();
     }
 
-    let secure_boot_state = secure_boot_state();
+    Ok(parms)
+}
+
+fn verify_secure_boot_policies(
+    dev_mode: bool,
+    secure_boot_state: SecureBootState,
+) -> Result<(), ec_slimloader::BootError> {
     if matches!(secure_boot_state, SecureBootState::Unknown) {
         verify_error!("Secure boot state could not be validated");
-        n_boot_api.nboot_context_deinit(&mut ctx);
         return Err(ec_slimloader::BootError::Integrity);
     }
-
-    let dev_mode = is_dev_mode(secure_boot_state);
-
     if !dev_mode
         && (!matches!(secure_boot_state, SecureBootState::HybridEnforced)
             || !cnsa_enforced()
@@ -160,8 +146,36 @@ pub fn verify_authenticity<'d>(
             fast_boot_enabled(),
             low_power_authentication_enforced()
         );
-        n_boot_api.nboot_context_deinit(&mut ctx);
         return Err(ec_slimloader::BootError::Integrity);
+    }
+    Ok(())
+}
+
+/// Verify the authenticity of the image at the given base address using the NBOOT ROM API. This includes initializing the NBOOT context, loading lifecycle and root of trust information from CFPA/CMPA,
+/// deriving the image RKTH from the AHAB container, and calling nboot_img_authenticate_romapi. Returns Ok(()) if authentication is successful, or an appropriate BootError if any step fails or if authentication fails.
+/// Will ONLY authenticate if CMPA secure boot settings is configured correctly, correct key set (as established by the ROTKH values) is used for signing, and the image is properly signed as an HYBRID (ECDSA + ML-DSA) image.
+/// In dev mode, if the RKTH derived from the image does not match the ROTKH in CMPA, it will be copied to the ROTKH to allow authentication to proceed (this allows flexibility in dev mode since keys may not be provisioned yet),
+/// but in production mode, a mismatch will cause authentication to fail (to prevent unauthorized images from being authenticated).
+pub fn verify_authenticity<'d>(
+    mut peri: Peri<'d, peripherals::SGI0>,
+    image_base: *const u8,
+) -> Result<(), ec_slimloader::BootError> {
+    let mut parms = load_nboot_auth_parms_from_ifr()?;
+
+    let secure_boot_state = secure_boot_state();
+
+    let dev_mode = is_dev_mode(secure_boot_state);
+
+    verify_secure_boot_policies(dev_mode, secure_boot_state)?;
+
+    let n_boot_api = nboot();
+    let mut ctx: NbootCtx = unsafe { core::mem::zeroed() };
+    let mut sig_ok: NbootBool = NbootBoolValue::False as u32;
+
+    verify_trace!("Initializing NBOOT context");
+    let context_init_status = n_boot_api.nboot_context_init(&mut ctx);
+    if context_init_status != crate::error::NbootStatus::Success {
+        return Err(ec_slimloader::BootError::Authenticate);
     }
 
     const MAX_FLASH_SLOT_SIZE: u32 = 2 * 1024 * 1024; // 2MB, TODO: make this configurable or derive from flash size
@@ -186,7 +200,7 @@ pub fn verify_authenticity<'d>(
                 verify_warn!("Dev mode: copying from image RKTH");
                 parms.soc_RoTNVM.soc_rkh.copy_from_slice(&image_rkth_words);
             } else {
-                verify_warn!("Production: image RKTH differs; not copying, will call ecdsa_verify anyway");
+                verify_warn!("Production: image RKTH differs; not copying, will not call verify ");
                 n_boot_api.nboot_context_deinit(&mut ctx);
                 return Err(ec_slimloader::BootError::RootOfTrust);
             }
@@ -210,7 +224,7 @@ pub fn verify_authenticity<'d>(
                 verify_warn!("Dev mode: copying from image PQC RKTH");
                 parms.soc_RoTNVM.soc_rkh_1.copy_from_slice(&pqc_rkth_words);
             } else {
-                verify_warn!("Production: image PQC RKTH differs; not copying");
+                verify_warn!("Production: image PQC RKTH differs; not copying, will not call verify");
                 //TODO: just return Err() here?
                 n_boot_api.nboot_context_deinit(&mut ctx);
                 return Err(ec_slimloader::BootError::RootOfTrust);

@@ -37,7 +37,7 @@ pub trait Board {
     ///
     /// Does not return if the boot is successful.
     /// Yields [BootError] if at any stage the boot is aborted.
-    async fn check_and_boot<const JOURNAL_BUFFER_SIZE: usize>(&mut self, slot: &Slot) -> BootError;
+    async fn check_and_boot(&mut self, slot: &Slot) -> BootError;
 
     /// Give up booting into an application.
     ///
@@ -70,8 +70,6 @@ pub enum BootError {
     Integrity,
     /// Root of Trust verification failure
     RootOfTrust,
-    /// Operation succeeded but requires retry with different slot
-    SlotRetryRequired,
     /// Hashing error, such as an unsupported configuration or a failure in the hashing peripheral.
     Hash,
 }
@@ -149,16 +147,9 @@ pub async fn start<B: Board, const JOURNAL_BUFFER_SIZE: usize>(config: B::Config
     };
 
     info!("Attempting to boot {:?} in {:?}", intent, slot);
-    let error = board.check_and_boot::<JOURNAL_BUFFER_SIZE>(&slot).await; // If this function returns, it implies that the boot has failed.
+    let error = board.check_and_boot(&slot).await; // If this function returns, it implies that the boot has failed.
     warn!("Failed to boot {:?} in {:?} because {:?}", intent, slot, error);
 
-    // Handle SlotRetryRequired differently - operation succeeded, just restart
-    if matches!(error, BootError::SlotRetryRequired) {
-        info!("Slot copy completed successfully, restarting bootloader for retry");
-        cortex_m::peripheral::SCB::sys_reset() // Proper system reset!
-    }
-
-    // Normal error handling for all other errors (only reached if NOT SlotRetryRequired)
     // Mark our state as [Failed] if it was not set to be so already.
     if state.status() != Status::Failed {
         set_status::<_, JOURNAL_BUFFER_SIZE>(&mut board, &mut state, Status::Failed).await;
@@ -170,7 +161,7 @@ pub async fn start<B: Board, const JOURNAL_BUFFER_SIZE: usize>(config: B::Config
         // So attempt to boot the backup for now.
 
         info!("Attempting to boot backup in {:?}", slot);
-        let error = board.check_and_boot::<JOURNAL_BUFFER_SIZE>(&state.backup()).await; // If this function returns, it implies that the boot has failed.
+        let error = board.check_and_boot(&state.backup()).await; // If this function returns, it implies that the boot has failed.
         warn!("Failed to boot backup in {:?} because {:?}", slot, error);
     }
 

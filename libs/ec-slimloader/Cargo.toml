@@ -21,7 +21,6 @@ default = []
 [dependencies]
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 
-cortex-m = { workspace = true }
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 embedded-storage-async = { workspace = true }
