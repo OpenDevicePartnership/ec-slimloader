@@ -10,6 +10,7 @@
 
 use core::ops::Range;
 
+use crate::{header, jump, verification};
 use ec_slimloader::{Board, BootError, BootStatePolicy};
 use ec_slimloader_state::flash::FlashJournal;
 use ec_slimloader_state::state::{Slot, Status};
@@ -57,11 +58,19 @@ fn in_emulation_window(offset: usize, len: usize) -> bool {
 
 // ─── FlexSPI NOR backend (MCXA hardware only) ─────────────────────────────
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+use embassy_mcxa::clocks::config::{
+    CoreSleep, Div8, FircConfig, FircFreqSel, FlashSleep, MainClockConfig, MainClockSource, VddDriveStrength, VddLevel,
+};
+#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+use embassy_mcxa::clocks::PoweredClock;
+#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::flexspi::lookup::opcodes::sdr::{CMD, RADDR, READ, WRITE};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::flexspi::lookup::{Command, Instr, LookupTable, Pads, SequenceBuilder};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::flexspi::{Blocking, ClockConfig, FlashConfig, Flexspi, NorFlash as FlexspiNor};
+#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+use embassy_mcxa::{peripherals, Peri};
 
 /// Single-lane (1-bit SPI) LUT + geometry for the Macronix MX25U.
 /// Port A (EVK, `mcxa5xxevk` feature): flash starts at SFAR=0, use actual size.
@@ -328,38 +337,13 @@ impl NorFlash for ExternalStorage {
 /// 1. External-flash (FlexSPI) journal read
 /// 2. Boot state validation
 /// 3. App bank selection (with rollback fallback)
-/// 4. Jump to selected app in internal flash
+/// 4. Jump to selected app in internal flash once hybrid ECDSA+MLDSA signature is verified.
 pub struct Mcxa<C: McxaConfig> {
     journal: FlashJournal<StatePartition>,
     slots: Vec<SlotPartition, MAX_SLOT_COUNT>,
     _config: C,
-}
-
-/// Jump to application already in internal flash.
-///
-/// Reads the initial stack pointer and reset handler from the app's vector
-/// table at `app_base`, updates VTOR, sets MSP, and branches
-///
-/// # Safety
-/// `app_base` must point to a valid Cortex-M vector table in readable memory.
-#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-unsafe fn jump_to_app(app_base: usize) -> ! {
-    let sp = unsafe { *(app_base as *const u32) };
-    let reset = unsafe { *((app_base + 4) as *const u32) };
-
-    unsafe { (*cortex_m::peripheral::SCB::PTR).vtor.write(app_base as u32) };
-
-    cortex_m::interrupt::disable();
-
-    unsafe {
-        core::arch::asm!(
-            "msr msp, {sp}",
-            "bx  {reset}",
-            sp = in(reg) sp,
-            reset = in(reg) reset,
-            options(noreturn),
-        );
-    }
+    #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+    sgi: Peri<'static, peripherals::SGI0>,
 }
 
 /// Erased NOR flash reads as `0xFFFF_FFFF`, which fails both checks, so an empty
@@ -394,8 +378,62 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
         static EXT_FLASH: StaticCell<PartitionManager<ExternalStorage, NoopRawMutex>> = StaticCell::new();
 
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+        let p = {
+            let mut bl_cfg = embassy_mcxa::config::Config::default();
+
+            // Enable 192M FIRC, NOTE that this following configuration is intended for MCXA5xx family of MCUs.
+            // Feature-gate as needed for other family of MCXA MCUs.
+
+            let mut fcfg = FircConfig::default();
+            fcfg.frequency = FircFreqSel::Mhz192;
+            fcfg.power = PoweredClock::NormalEnabledDeepSleepDisabled;
+            fcfg.fro_hf_enabled = true;
+            fcfg.clk_hf_fundamental_enabled = false;
+            fcfg.fro_hf_div = None; // Not sure what we would need the hf_div clock for here.
+            bl_cfg.clock_cfg.firc = Some(fcfg);
+
+            // Enable 12M osc to use as ostimer clock
+            bl_cfg.clock_cfg.sirc.fro_12m_enabled = true;
+            bl_cfg.clock_cfg.sirc.fro_lf_div = None;
+            bl_cfg.clock_cfg.sirc.power = PoweredClock::AlwaysEnabled;
+
+            // Disable 16K osc
+            bl_cfg.clock_cfg.fro16k = None;
+
+            // Disable external osc
+            bl_cfg.clock_cfg.sosc = None;
+
+            // Disable PLL
+            bl_cfg.clock_cfg.spll = None;
+
+            // Feed core from 192M osc
+            bl_cfg.clock_cfg.main_clock = MainClockConfig {
+                source: MainClockSource::FircHfRoot,
+                power: PoweredClock::NormalEnabledDeepSleepDisabled,
+                ahb_clk_div: Div8::no_div(),
+            };
+
+            // Set the core in high power active mode
+            bl_cfg.clock_cfg.vdd_power.active_mode.level = VddLevel::OverDriveMode;
+            bl_cfg.clock_cfg.vdd_power.active_mode.drive = VddDriveStrength::Normal;
+            // Set the core in low power sleep mode
+            bl_cfg.clock_cfg.vdd_power.low_power_mode.level = VddLevel::MidDriveMode;
+            bl_cfg.clock_cfg.vdd_power.low_power_mode.drive = VddDriveStrength::Low { enable_bandgap: false };
+
+            // Set "deep sleep" mode
+            bl_cfg.clock_cfg.vdd_power.core_sleep = CoreSleep::DeepSleep;
+
+            // Set flash doze, allowing internal flash clocks to be gated on sleep
+            bl_cfg.clock_cfg.vdd_power.flash_sleep = FlashSleep::FlashDoze;
+
+            embassy_mcxa::init(bl_cfg)
+        };
+
+        #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+        let sgi = p.SGI0;
+
+        #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         let external = {
-            let p = embassy_mcxa::init(embassy_mcxa::config::Config::default());
             let flexspi = Flexspi::new_blocking(
                 p.FLEXSPI0,
                 #[cfg(not(feature = "mcxa5xxevk"))]
@@ -517,6 +555,8 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             journal,
             slots,
             _config: config,
+            #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+            sgi,
         }
     }
 
@@ -524,7 +564,7 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
         &mut self.journal
     }
 
-    async fn check_and_boot(&mut self, slot: &Slot) -> BootError {
+    async fn check_and_boot(&mut self, slot: &Slot) -> ec_slimloader::BootError {
         let index = usize::from(u8::from(*slot));
         if self.slots.get_mut(index).is_none() {
             return BootError::SlotUnknown;
@@ -534,19 +574,29 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             return BootError::SlotUnknown;
         };
 
-        #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-        {
-            if !slot_has_valid_app(app_base) {
-                return BootError::Markers;
-            }
-            board_info!("Booting slot {} from internal flash at {:#010x}", index, app_base);
-            unsafe { jump_to_app(app_base) }
+        if !slot_has_valid_app(app_base) {
+            return BootError::Markers;
         }
 
-        #[cfg(not(all(target_os = "none", feature = "mcxa5xx")))]
-        {
-            let _ = app_base;
-            BootError::Authenticate
+        const SLOT_SIZE: u32 = 0x000F_8000; // 992 KB
+        let image_base = app_base as *const u8;
+        let jump_address = image_base as *const u32;
+        let image_header = match unsafe { header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
+            Ok(header) => header,
+            Err(_) => return ec_slimloader::BootError::Markers,
+        };
+
+        let image_len = image_header.image_length();
+        let cert_offset = image_header.cert_block_offset();
+        if !(0x40..=SLOT_SIZE).contains(&image_len) || (cert_offset & 0x3) != 0 || cert_offset >= image_len {
+            return ec_slimloader::BootError::Markers;
+        }
+
+        match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
+            Ok(()) => unsafe {
+                jump::jump_to_image(jump_address);
+            },
+            Err(error) => error,
         }
     }
 
