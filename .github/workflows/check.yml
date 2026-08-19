@@ -81,6 +81,7 @@ jobs:
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
+          fail_on_error: true
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./libs"
@@ -89,6 +90,7 @@ jobs:
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
+          fail_on_error: true
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./examples/rt685s"
@@ -96,6 +98,7 @@ jobs:
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
+          fail_on_error: true
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./examples/mcxa-577app"
@@ -103,6 +106,7 @@ jobs:
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
+          fail_on_error: true
           clippy_flags: -- -D clippy::suspicious -D clippy::correctness -D clippy::perf -D clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./bootloader-tool"
@@ -110,6 +114,7 @@ jobs:
         uses: giraffate/clippy-action@v1
         with:
           reporter: "github-pr-check"
+          fail_on_error: true
           clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workdir: "./mcxa-security-provisioning"

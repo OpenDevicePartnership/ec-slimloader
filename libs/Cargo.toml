@@ -1,6 +1,14 @@
 [workspace]
 resolver = "3"
 members = [
+    "../mcxa-security-provisioning",
+    "ec-slimloader",
+    "ec-slimloader-imxrt",
+    "ec-slimloader-state",
+    "ec-slimloader-mcxa",
+    "imxrt-rom",
+]
+default-members = [
     "ec-slimloader",
     "ec-slimloader-imxrt",
     "ec-slimloader-state",
@@ -18,6 +26,8 @@ repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 manual_let_else = "deny"
 
 [workspace.dependencies]
+ec-slimloader-mcxa = { path = "ec-slimloader-mcxa", default-features = false }
+
 defmt = "0.3.7"
 defmt-or-log = { version = "0.2.2", default-features = false }
 log = "0.4"
