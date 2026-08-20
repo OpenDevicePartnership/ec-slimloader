@@ -49,9 +49,39 @@ macro_rules! verify_error {
     };
 }
 
-fn is_dev_mode(secure_boot_state: SecureBootState) -> bool {
-    matches!(secure_boot_state, SecureBootState::Disabled)
+/// DO NOT use as single source of truth, can lead to single point of entry for fault injection.
+fn eval_dev_config_from_ifr() -> bool {
+    matches!(secure_boot_state(), SecureBootState::Disabled)
         && matches!(load_lifecycle_from_cfpa(), Some(NbootLifecycleState::Develop))
+}
+
+#[repr(transparent)]
+struct DevMode(u32);
+
+impl DevMode {
+    const DEV: u32 = 0x3CA5_5AC3;
+    const PROD: u32 = 0xC35A_A53C; // bitwise complement of DEV
+
+    fn compute() -> Result<Self, ec_slimloader::BootError> {
+        // eval() ultimately ends in volatile IFR reads, so both
+        // evaluations are performed and their results cannot be assumed equal.
+        let first = eval_dev_config_from_ifr();
+        let second = eval_dev_config_from_ifr();
+        if first != second {
+            return Err(ec_slimloader::BootError::Integrity);
+        }
+        let mut token = Self(0);
+        unsafe {
+            core::ptr::write_volatile(&mut token.0, if first && second { Self::DEV } else { Self::PROD });
+        }
+        Ok(token)
+    }
+
+    fn is_dev_mode(&self) -> bool {
+        // The volatile load's result may not be value-forwarded or folded, so the
+        // compiler cannot prove it is DEV-or-PROD: the full 32-bit compares must be performed.
+        unsafe { core::ptr::read_volatile(&self.0) == Self::DEV }
+    }
 }
 
 const DEFAULT_NBOOT_PARMS: NbootImgAuthParms = NbootImgAuthParms {
@@ -126,14 +156,16 @@ fn load_nboot_auth_parms_from_ifr() -> Result<NbootImgAuthParms, ec_slimloader::
 }
 
 fn verify_secure_boot_policies(
-    dev_mode: bool,
+    dev_mode: &DevMode,
     secure_boot_state: SecureBootState,
 ) -> Result<(), ec_slimloader::BootError> {
     if matches!(secure_boot_state, SecureBootState::Unknown) {
         verify_error!("Secure boot state could not be validated");
         return Err(ec_slimloader::BootError::Integrity);
     }
-    if !dev_mode
+    // If we are NOT in development mode, make sure secure boot policies are compliant.
+    if !(dev_mode.is_dev_mode()
+        && eval_dev_config_from_ifr())
         && (!matches!(secure_boot_state, SecureBootState::HybridEnforced)
             || !cnsa_enforced()
             || fast_boot_enabled()
@@ -164,9 +196,9 @@ pub fn verify_authenticity<'d>(
 
     let secure_boot_state = secure_boot_state();
 
-    let dev_mode = is_dev_mode(secure_boot_state);
+    let dev_mode = DevMode::compute()?;
 
-    verify_secure_boot_policies(dev_mode, secure_boot_state)?;
+    verify_secure_boot_policies(&dev_mode, secure_boot_state)?;
 
     let n_boot_api = nboot();
     let mut ctx: NbootCtx = unsafe { core::mem::zeroed() };
@@ -193,10 +225,10 @@ pub fn verify_authenticity<'d>(
     if let Some(image_rkth) = image_rkth {
         let image_rkth_words = image_rkth.as_le_words();
 
-        verify_info!("Derived image RKTH: {:x}", image_rkth_words);
+        verify_info!("Derived image RKTH: {:?}", image_rkth_words);
         if image_rkth_words != parms.soc_RoTNVM.soc_rkh {
             // non-const time is okay, these are public key hashes.
-            if dev_mode {
+            if dev_mode.is_dev_mode() && eval_dev_config_from_ifr() {
                 verify_warn!("Dev mode: copying from image RKTH");
                 parms.soc_RoTNVM.soc_rkh.copy_from_slice(&image_rkth_words);
             } else {
@@ -217,10 +249,10 @@ pub fn verify_authenticity<'d>(
     if let Some(pqc_rkth) = pqc_rkth {
         let pqc_rkth_words = pqc_rkth.as_le_words();
 
-        verify_info!("Derived image PQC RKTH: {:x}", pqc_rkth_words);
+        verify_info!("Derived image PQC RKTH: {:?}", pqc_rkth_words);
         if pqc_rkth_words != parms.soc_RoTNVM.soc_rkh_1 {
             //non-const time comparison is okay, these are public key hashes
-            if dev_mode {
+            if dev_mode.is_dev_mode() && eval_dev_config_from_ifr() {
                 verify_warn!("Dev mode: copying from image PQC RKTH");
                 parms.soc_RoTNVM.soc_rkh_1.copy_from_slice(&pqc_rkth_words);
             } else {
@@ -237,6 +269,17 @@ pub fn verify_authenticity<'d>(
         n_boot_api.nboot_context_deinit(&mut ctx);
         return Err(ec_slimloader::BootError::RootOfTrust);
     }
+
+    // Last check to make sure that at this point, if NOT dev mode, we are handing over the correct IFR hashes to ROM.
+    if !(dev_mode.is_dev_mode() && eval_dev_config_from_ifr()) {
+        let rkh_ok = load_rotkh_from_cmpa().is_some_and(|h| parms.soc_RoTNVM.soc_rkh == h);
+        let pqc_ok = load_pqc_rotkh_from_cmpa().is_some_and(|h| parms.soc_RoTNVM.soc_rkh_1 == h);
+        if !(rkh_ok && pqc_ok) {
+            n_boot_api.nboot_context_deinit(&mut ctx);
+            return Err(ec_slimloader::BootError::Integrity);
+        }
+    }
+
     verify_trace!("begin auth");
     let status = n_boot_api.nboot_img_authenticate_romapi(&mut ctx, image_base, &mut sig_ok, &mut parms);
 
