@@ -1261,6 +1261,8 @@ pub fn write_cmpa_default_config_to_scratch_and_reset(config: CmpaDefaultConfig)
 
     let mut cmpa_page = read_cmpa_page_for_update()?;
 
+    let mut x: u32 = 0;
+
     // Preserve the header marker in [31:16]; apply config bits to [15:0].
     let existing_boot_cfg0 =
         unsafe { ptr::read_unaligned(cmpa_page[CmpaUpdateConfigData::BootCfg0.byte_range()].as_ptr() as *const u32) };

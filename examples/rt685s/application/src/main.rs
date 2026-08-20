@@ -32,6 +32,8 @@ const FUSE_DELAY: Duration = Duration::from_secs(5);
 async fn main(_spawner: Spawner) {
     defmt_or_log::info!("Example application");
 
+    let x: u32 = 0;
+
     const SYSTEM_CORE_CLOCK_HZ: u32 = 500_000_000;
     let p = embassy_imxrt::init(Default::default());
 
