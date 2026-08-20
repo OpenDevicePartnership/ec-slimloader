@@ -20,7 +20,7 @@ pub async fn process(config: &Config, command: DownloadCommands) -> anyhow::Resu
             download_prelude(&prelude_path, &probe_args).await?;
         }
         Other(args) => {
-            process_other(config, args).await?;
+            process_other(config, *args).await?;
         }
     };
     Ok(())

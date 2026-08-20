@@ -51,13 +51,9 @@ jobs:
   clippy:
     runs-on: ubuntu-latest
     name: ${{ matrix.toolchain }} / clippy
-    permissions:
-      contents: read
-      checks: write
     strategy:
       fail-fast: false
       matrix:
-        # Get early warning of new lints which are regularly introduced in beta channels.
         toolchain: [stable, beta]
         target: [thumbv8m.main-none-eabihf]
     steps:
@@ -72,26 +68,14 @@ jobs:
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo clippy (libs)
-        uses: giraffate/clippy-action@v1
-        with:
-          reporter: "github-pr-check"
-          clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workdir: "./libs"
+        run: cargo clippy --locked --features mimxrt685s -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
+        working-directory: "./libs"
       - name: cargo clippy (examples)
-        uses: giraffate/clippy-action@v1
-        with:
-          reporter: "github-pr-check"
-          clippy_flags: -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workdir: "./examples/rt685s"
+        run: cargo clippy --locked -- -F clippy::suspicious -D clippy::correctness -F clippy::perf -F clippy::style
+        working-directory: "./examples/rt685s"
       - name: cargo clippy (bootloader-tool)
-        uses: giraffate/clippy-action@v1
-        with:
-          reporter: "github-pr-check"
-          clippy_flags: -- -D clippy::suspicious -D clippy::correctness -D clippy::perf -D clippy::style
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workdir: "./bootloader-tool"
+        run: cargo clippy --locked -- -D clippy::suspicious -D clippy::correctness -D clippy::perf -D clippy::style
+        working-directory: "./bootloader-tool"
 
   # Enable once we have a released crate
   # semver:
@@ -131,12 +115,12 @@ jobs:
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo doc (libs)
-        run: cargo doc --no-deps --features mimxrt685s
+        run: cargo doc --locked --no-deps --features mimxrt685s
         working-directory: "./libs"
         env:
           RUSTDOCFLAGS: --cfg docsrs
       - name: cargo doc (examples)
-        run: cargo doc --no-deps
+        run: cargo doc --locked --no-deps
         working-directory: "./examples/rt685s"
         env:
           RUSTDOCFLAGS: --cfg docsrs
@@ -197,12 +181,14 @@ jobs:
           log-level: warn
           manifest-path: ./libs/Cargo.toml
           command: check
+          arguments: --locked
       - name: Cargo deny (examples)
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           log-level: warn
           manifest-path: ./examples/rt685s/Cargo.toml
           command: check
+          arguments: --locked
 
   msrv:
     # check that we can build using the minimal rust version that is specified by this crate
@@ -212,7 +198,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msrv: ["1.90"] # We are depending on embassy-imxrt.
+        msrv: ["1.93"] # fixed 1.31.0 requires 1.93 or later
         target: [thumbv8m.main-none-eabihf]
     name: ubuntu / MSRV ${{ matrix.msrv }}
     steps:
@@ -231,13 +217,13 @@ jobs:
       - name: rustup target add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
       - name: cargo +${{ matrix.msrv }} check (libs)
-        run: cargo check --features mimxrt685s
+        run: cargo check --locked --features mimxrt685s
         working-directory: "./libs"
       - name: cargo +${{ matrix.msrv }} check (examples)
-        run: cargo check
+        run: cargo check --locked
         working-directory: "./examples/rt685s"
       - name: cargo +${{ matrix.msrv }} check (bootloader-tool)
-        run: cargo check
+        run: cargo check --locked
         working-directory: "./bootloader-tool"
 
   fuzz:

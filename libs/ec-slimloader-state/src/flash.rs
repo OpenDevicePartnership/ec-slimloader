@@ -103,9 +103,7 @@ impl<T: NorFlash> FlashJournal<T> {
             let slice = &mut buf[0..block_end - block_start];
             inner.read(block_start as u32, slice).await?;
 
-            for (chunk_i, chunk) in slice.chunks_exact(CHUNK_SIZE).enumerate() {
-                // Note(unsafe): we are using chunks_exact and then cast the slice into the same size array.
-                let chunk: [u8; CHUNK_SIZE] = unsafe { chunk.try_into().unwrap_unchecked() };
+            for (chunk_i, &chunk) in slice.as_chunks::<CHUNK_SIZE>().0.iter().enumerate() {
                 let address = block_start + chunk_i * CHUNK_SIZE;
                 match State::try_new(chunk) {
                     Ok(state) => {

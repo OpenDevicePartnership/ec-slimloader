@@ -3,7 +3,9 @@ use itertools::Itertools;
 
 pub fn parse_hex(s: &str) -> anyhow::Result<Vec<u8>> {
     s.as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16))
         .try_collect::<_, Vec<_>, _>()
         .context("Input not hexidecimal")
@@ -18,13 +20,17 @@ pub fn generate_hex(buf: &[u8]) -> String {
 }
 
 pub fn bytes_to_u32_le(b: &[u8]) -> Vec<u32> {
-    b.chunks_exact(4)
-        .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+    b.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|chunk| u32::from_le_bytes(*chunk))
         .collect::<Vec<u32>>()
 }
 
 pub fn bytes_to_u32_be(b: &[u8]) -> Vec<u32> {
-    b.chunks_exact(4)
-        .map(|chunk| u32::from_be_bytes(chunk.try_into().unwrap()))
+    b.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|chunk| u32::from_be_bytes(*chunk))
         .collect::<Vec<u32>>()
 }
