@@ -10,3 +10,12 @@ MEMORY
 
 /* Stack grows down from end of RAM */
 _stack_start = ORIGIN(RAM) + LENGTH(RAM);
+
+/* Extra linker section for code placed in FLASH1 (~1.5MB offset).
+ * Functions annotated with #[link_section = ".text_flash1"] will land here.
+ */
+SECTIONS {
+    .text_flash1 : ALIGN(4) {
+        *(.text_flash1 .text_flash1.*)
+    } > FLASH1
+} INSERT AFTER .text;

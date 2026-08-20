@@ -11,13 +11,7 @@ fn main() {
         .unwrap()
         .write_all(include_bytes!("memory.x"))
         .unwrap();
-    File::create(out.join("flash1.x"))
-        .unwrap()
-        .write_all(include_bytes!("flash1.x"))
-        .unwrap();
     println!("cargo:rustc-link-search={}", out.display());
-    println!("cargo:rustc-link-arg=-Tflash1.x");
 
     println!("cargo:rerun-if-changed=memory.x");
-    println!("cargo:rerun-if-changed=flash1.x");
 }

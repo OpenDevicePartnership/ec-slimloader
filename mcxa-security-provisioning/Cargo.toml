@@ -6,21 +6,21 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 
 [dependencies]
-cortex-m.workspace = true
+cortex-m = { version = "0.7.7" }
 defmt = { version = "0.3", optional = true }
 defmt-or-log = { version = "0.2.3" }
 log = { version = "0.4", optional = true }
 embedded-storage-async = "0.4.1"
-embassy-futures = { workspace = true }
-embassy-time = { workspace = true }
-embassy-mcxa = { workspace = true }
-embassy-sync = { workspace = true }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
+embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0", default-features = false }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services", tag = "v0.1.0", default-features = false }
 partition-manager-macros = { git = "https://github.com/OpenDevicePartnership/embedded-services", tag = "v0.1.0" }
 static_cell = "2.1"
 
 # Re-uses the MCXA lifecycle/IFR types defined in ec-slimloader-mcxa
-ec-slimloader-mcxa = { workspace = true, default-features = false }
+ec-slimloader-mcxa = { path = "../libs/ec-slimloader-mcxa", default-features = false }
 
 
 [features]
