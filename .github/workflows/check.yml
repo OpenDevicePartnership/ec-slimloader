@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable]
+        toolchain: [stable, beta]
         target: [thumbv8m.main-none-eabihf]
     steps:
       - uses: actions/checkout@v4
@@ -198,7 +198,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msrv: ["1.93"]
+        msrv: ["1.93"] # fixed 1.31.0 requires 1.93 or later
         target: [thumbv8m.main-none-eabihf]
     name: ubuntu / MSRV ${{ matrix.msrv }}
     steps:
