@@ -190,5 +190,5 @@ pub enum DownloadCommands {
     },
 
     #[command(flatten)]
-    Other(RunCommands),
+    Other(Box<RunCommands>),
 }
