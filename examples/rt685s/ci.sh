@@ -26,6 +26,6 @@ FEATURE_COMBINATIONS=(
 )
 cargo batch \
       $(for features in "${FEATURE_COMBINATIONS[@]}"; do
-    echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf "
-	  echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
+    echo "--- build --locked --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf "
+	  echo "--- build --locked --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
 	done) $BUILD_EXTRA

@@ -32,7 +32,7 @@ FEATURE_COMBINATIONS=(
 )
 cargo batch \
       $(for features in "${FEATURE_COMBINATIONS[@]}"; do
-	  echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
+    echo "--- build --locked --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
 	done) $BUILD_EXTRA
 
 cargo test --locked  --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt633s"
