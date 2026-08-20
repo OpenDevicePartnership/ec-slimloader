@@ -1,3 +1,9 @@
+> **Note:** The authoritative guidance for AI agents (including GitHub Copilot)
+> working in this repository now lives in [`AGENTS.md`](../AGENTS.md) at the
+> repository root. That file is a superset of this one and should be preferred
+> when the two disagree. This file is preserved so tools that look for
+> `.github/copilot-instructions.md` by name continue to find it.
+
 # Copilot Instructions
 
 ## Commit Messages
