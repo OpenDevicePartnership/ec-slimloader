@@ -48,7 +48,7 @@ pub struct HmacKey(pub [u8; 16]);
 
 pub fn generate(config: &Config) -> anyhow::Result<Otp> {
     if std::fs::exists(&config.otp_path)? {
-        log::warn!("OTP file {} already generated, skipping...", &config.otp_path.display());
+        log::warn!("OTP file {} already generated, skipping...", config.otp_path.display());
         return get_otp(config);
     }
 
