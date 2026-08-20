@@ -20,7 +20,7 @@ const SYSTEM_CORE_CLOCK_HZ: u32 = (5 * 1000 * 1000) / 2;
 pub struct Rkh(pub [u8; 32]);
 
 impl Rkh {
-    pub fn to_rkth(rkhs: &[Rkh; 4], hashcrypt: Peri<HASHCRYPT>) -> Rkth {
+    pub fn to_rkth(rkhs: &[Rkh; 4], hashcrypt: Peri<HASHCRYPT>) -> Result<Rkth, BootError> {
         // Safety: Rkh's will be at least as aligned as u8's.
         let rkhs = unsafe {
             core::slice::from_raw_parts(rkhs.as_ptr() as *const u8, rkhs.len() * core::mem::size_of::<Rkh>())
@@ -28,8 +28,15 @@ impl Rkh {
         let mut hashcrypt = Hashcrypt::new_blocking(hashcrypt);
 
         let mut result = [0u8; 32];
-        hashcrypt.new_sha256().hash(rkhs, &mut result);
-        Rkth::from(result)
+
+        // The hash length is hardcoded to 32 bytes and sha256 is always supported on imxrt
+        // so we should never get an error here
+        hashcrypt
+            .new_sha256()
+            .hash(rkhs, &mut result)
+            .map_err(|_| BootError::Hash)?;
+
+        Ok(Rkth::from(result))
     }
 
     pub fn read_all_from_slice(data: &[u8]) -> Option<[Rkh; 4]> {
@@ -72,7 +79,7 @@ impl<C: ImxrtConfig> CheckImage for Imxrt<C> {
                 return Err(BootError::TooLarge);
             };
 
-            Rkh::to_rkth(&rkhs, self.hashcrypt.reborrow())
+            Rkh::to_rkth(&rkhs, self.hashcrypt.reborrow())?
         };
 
         info!("RKTH (image) {:?}", image_rkth);

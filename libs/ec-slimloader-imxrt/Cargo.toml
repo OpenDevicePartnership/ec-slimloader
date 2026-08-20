@@ -61,7 +61,7 @@ ec-slimloader-state = { path = "../ec-slimloader-state", default-features = fals
 imxrt-rom = { path = "../imxrt-rom", features = ["rt"] }
 
 cortex-m = { workspace = true }
-embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = [
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", tag = "v0.1.0", default-features = false, features = [
     "unstable-pac",
 ] }
 
@@ -74,7 +74,7 @@ log = { workspace = true, optional = true }
 embassy-embedded-hal = "0.5.0"
 
 embassy-sync = { workspace = true }
-partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", features = [
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", tag = "v0.1.0", features = [
     "esa",
     "macros",
 ], default-features = false }

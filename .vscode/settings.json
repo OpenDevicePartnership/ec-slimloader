@@ -13,7 +13,7 @@
     "rust-analyzer.check.command": "clippy",
     "rust-analyzer.cargo.target": "thumbv8m.main-none-eabihf",
     "rust-analyzer.linkedProjects": [
-        "${workspaceFolder}/Cargo.toml",
+        "${workspaceFolder}/libs/Cargo.toml",
     ],
     "rust-analyzer.cargo.features": [
         "mimxrt685s-evk",
