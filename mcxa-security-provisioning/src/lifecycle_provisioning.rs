@@ -570,6 +570,16 @@ fn read_cfpa_page_for_update() -> Result<[u8; IFRPage::Cfpa.byte_len()], CfpaWri
         unsafe {
             let header_ptr = page.as_mut_ptr().add(CfpaWriteField::Header.byte_offset()) as *mut u32;
             ptr::write_unaligned(header_ptr, NbootLifecycleState::Develop as u32);
+
+            // is_cfpa_erased() skips ERR_AUTH_FAIL_COUNT and ERR_ITRC_COUNT so the ROM can
+            // update them autonomously. Preserve whatever the ROM has written so we don't
+            // reset them to zero when staging this fresh page.
+            for field in [CfpaWriteField::ErrAuthFailCount, CfpaWriteField::ErrItrcCount] {
+                let addr = IFRConfigAreaBase::Cfpa as u32 + field.byte_offset() as u32;
+                let live_val = core::ptr::read_volatile(addr as *const u32);
+                let dst = page.as_mut_ptr().add(field.byte_offset()) as *mut u32;
+                ptr::write_unaligned(dst, live_val);
+            }
         }
         return Ok(page);
     } else if load_cfpa_header_word().is_none() {
@@ -917,7 +927,7 @@ pub struct CmpaDefaultConfig {
     pub rotkh: [u8; 48],
     pub pqc_rotkh: [u8; 48],
 }
-//TODO: impl default for CmpaDefaultConfig with safe values for all fields.
+
 
 // Reads the current CMPA page from CFG, validates state, and initializes the header for a
 // first write if the page is erased. Returns the page buffer ready for field patching.
