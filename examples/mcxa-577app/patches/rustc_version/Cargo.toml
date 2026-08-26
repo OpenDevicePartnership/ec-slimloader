@@ -1,0 +1,4 @@
+[package]
+name = "rustc_version"
+version = "0.2.3"
+edition = "2018"
