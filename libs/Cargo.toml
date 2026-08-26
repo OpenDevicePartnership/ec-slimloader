@@ -50,3 +50,4 @@ embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2
 embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
 embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
 embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
+rustc_version = { path = "../examples/mcxa-577app/patches/rustc_version" }

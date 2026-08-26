@@ -30,7 +30,7 @@ pub struct Rkth([u8; 48]);
 impl Rkth {
     pub fn as_be_words(&self) -> [u32; 12] {
         let mut w = [0u32; 12];
-        for (i, chunk) in self.0.chunks_exact(4).enumerate() {
+        for (i, chunk) in self.0.as_chunks::<4>().0.iter().enumerate() {
             w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         }
         w
@@ -38,7 +38,7 @@ impl Rkth {
 
     pub fn as_le_words(&self) -> [u32; 12] {
         let mut w = [0u32; 12];
-        for (i, chunk) in self.0.chunks_exact(4).enumerate() {
+        for (i, chunk) in self.0.as_chunks::<4>().0.iter().enumerate() {
             w[i] = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         }
         w
