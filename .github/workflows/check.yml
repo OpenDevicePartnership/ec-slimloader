@@ -193,7 +193,8 @@ jobs:
           log-level: warn
           manifest-path: ./libs/Cargo.toml
           command: check
-      - name: Cargo deny (examples/rt685s)
+          arguments: --locked
+      - name: Cargo deny (examples)
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           log-level: warn
