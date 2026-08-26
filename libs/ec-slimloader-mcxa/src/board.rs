@@ -10,7 +10,6 @@
 
 use core::ops::Range;
 
-use crate::{header, jump, verification};
 use ec_slimloader::{Board, BootError, BootStatePolicy};
 use ec_slimloader_state::flash::FlashJournal;
 use ec_slimloader_state::state::Slot;
@@ -21,6 +20,8 @@ use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, 
 use heapless::Vec;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
+
+use crate::{header, jump, verification};
 
 macro_rules! board_info {
     ($($arg:tt)*) => {
