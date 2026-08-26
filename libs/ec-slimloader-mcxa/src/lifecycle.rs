@@ -19,6 +19,11 @@ use crate::rom_api::{NbootLifecycleDiscriminator, NbootLifecycleState, NbootRoot
 //   CMPA  0x1100_2200 - 0x1100_23FF
 //   CMPA customer-defined 0x1100_2400 - 0x1100_37FF
 
+const CMPA_HEADER_MARKER: u16 = 0x5963;
+const CFPA_HEADER_MARKER: u16 = 0x9635;
+// Any field reading back this value should be treated as "not provisioned" rather than a real configuration.
+const ERASED_WORD: u32 = 0xFFFF_FFFF;
+
 // CFG bases (use for reading)
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,20 +88,22 @@ pub fn load_cmpa_boot_cfg1() -> u32 {
     unsafe { core::ptr::read_volatile(CMPA_BOOT_CFG1 as *const u32) }
 }
 
-pub fn is_cmpa_erased() -> bool {
+// Erased scan: OR-accumulate, no early exit.
+pub fn cmpa_erased_deviation() -> u32 {
     // NOTE: ifr_verify_erase_page is NOT a read-only check; it erases then verifies (destructive).
     // Therefore it cannot be used to check erased state of CFG area (protected by ROM).
     // read_volatile is the correct approach for a non-destructive erased check.
     let base = IFRConfigAreaBase::Cmpa as u32;
     let word_count = IFRPage::Cmpa.byte_len() / core::mem::size_of::<u32>();
+    let mut d = 0u32;
     for i in 0..word_count {
-        let addr = base + (i as u32 * 4);
-        let val = unsafe { core::ptr::read_volatile(addr as *const u32) };
-        if val != ERASED_WORD {
-            return false;
-        }
+        d |= unsafe { core::ptr::read_volatile((base + i as u32 * 4) as *const u32) } ^ ERASED_WORD;
     }
-    true
+    d
+}
+
+pub fn is_cmpa_erased() -> bool {
+    cmpa_erased_deviation() == 0
 }
 
 pub fn is_cfpa_erased() -> bool {
@@ -123,10 +130,13 @@ pub fn is_cfpa_erased() -> bool {
     true
 }
 
+fn cmpa_marker_deviation() -> u32 {
+    (load_cmpa_boot_cfg0() >> 16) ^ (CMPA_HEADER_MARKER as u32) // Measures if CMPA header marker is valid (0 deviation = valid, non-zero deviation = invalid) without branching.
+}
+
 #[inline(always)]
 fn load_cmpa_header_marker() -> u16 {
-    let word = load_cmpa_boot_cfg0();
-    (word >> 16) as u16
+    (load_cmpa_boot_cfg0() >> 16) as u16
 }
 
 #[inline(always)]
@@ -137,7 +147,6 @@ pub fn cmpa_header_marker_is_valid() -> bool {
     // to 0x00 before setting the CMPA header marker.
     //
     // Layout assumed consistent with CFPA header marker usage: marker stored in bits [31:16].
-    const CMPA_HEADER_MARKER: u16 = 0x5963;
     load_cmpa_header_marker() == CMPA_HEADER_MARKER
 }
 
@@ -150,6 +159,57 @@ pub fn cmpa_header_marker_is_valid() -> bool {
 fn load_cmpa_secure_boot_cfg() -> u32 {
     const CMPA_SECURE_BOOT_CFG: u32 = IFRConfigAreaBase::Cmpa as u32 + 0x0050; // 0x0100_0250
     unsafe { core::ptr::read_volatile(CMPA_SECURE_BOOT_CFG as *const u32) }
+}
+
+/// Optimization barrier for fault-injection countermeasures: the asm operand contract forces the compiler to treat the returned value as arbitrary.
+/// Deliberately not `pure`/`nomem`, so the block also cannot be elided, duplicated, or reordered across memory operations.
+#[inline(always)]
+pub(crate) fn asm_opaque(value: u32) -> u32 {
+    let mut v = value;
+    // SAFETY: no-op asm; the operand only appears as a comment in the template.
+    unsafe { core::arch::asm!("/* {0} */", inout(reg) v, options(nostack, preserves_flags)) };
+    v
+}
+
+/// All-ones iff d == 0, else all-zeros, computed without a conditional branch
+/// (log-time OR-reduction of all 32 bits into bit 0, then widened). This is
+/// the single unavoidable wide-to-narrow fold in the dev-mode design: it is
+/// kept behind a barrier so the cascade cannot be constant-folded or lowered
+/// back to a bit-test when the input has a compiler-visible value set, and it
+/// sits adjacent to its consumer so the narrow value never travels. Every
+/// instance has a ~1-bit-wide tail, which is why no single fold is ever
+/// trusted alone (boot-time token × live derivation at every consumer).
+#[inline(always)]
+pub(crate) fn zero_mask(d: u32) -> u32 {
+    let mut d = asm_opaque(d);
+    d |= d >> 16;
+    d |= d >> 8;
+    d |= d >> 4;
+    d |= d >> 2;
+    d |= d >> 1;
+    !((d & 1).wrapping_neg())
+}
+
+/// Measures the "deviation" without any branches from the live configuration of a device from the expected configuration of a development device. This is used to determine if the device
+/// is in development mode or production mode. The function returns 0 if the device is in development mode, and non-zero if the device is in production mode.
+pub fn dev_config_deviation() -> u32 {
+    // Lifecycle leg: full-word match against the derived Develop pattern.
+    let lc_dev = load_cfpa_header_word_raw() ^ cfpa_header_for(NbootLifecycleState::Develop); // If we are in Develop LC, 0 deviation because XOR.
+
+    // Provisioned-dev leg: valid CMPA marker AND SEC_BOOT_EN bit 1 clear.
+    let provisioned_dev = cmpa_marker_deviation() // is marker valid? (0 = valid, non-zero = invalid)
+        | (load_cmpa_secure_boot_cfg() & 0b10).wrapping_mul(0x5555_5555); // Is secure boot enabled? (deviation of 0 = disabled, non-zero = enabled).
+                                                                          // Note that value of 0 or 1 in 1:0 in SEC_BOOT_EN means signature verification is not enforced.
+                                                                          // Multiply by 0x5555_5555 to spread the bit across all 32 bits for OR-accumulation. This here is the narrowest Shannon bit at source,
+                                                                          // beyond our control, so we can widen the single bit to all 32 bits without any branches.
+                                                                          // Signature verification enforcement causes deviation from the expected dev-mode configuration.
+
+    // Blank-part leg: whole CMPA page still erased (provisioning bootstrap).
+    let sb_dev = !(zero_mask(provisioned_dev) | zero_mask(cmpa_erased_deviation())); // If secure boot is disabled AND CMPA marker is valid,
+                                                                                     // then we are in dev mode. Either false means deviation.  CMPA is not erased, deviation. BUT EITHER of these deviating means we have deviation from the expected dev-mode configuration.
+                                                                                     // Therefore, in that case, return non-zero deviation. If both are true, then we are in dev mode, return zero deviation.
+
+    lc_dev | sb_dev
 }
 
 #[repr(u8)]
@@ -469,7 +529,6 @@ pub fn load_pqc_rotkh_from_cmpa() -> Option<[u32; CmpaUpdateConfigData::PqcRotkh
 
 #[inline(always)]
 fn cfpa_header_word_is_valid(header: u32) -> bool {
-    const CFPA_HEADER_MARKER: u16 = 0x9635;
     let marker = (header >> 16) as u16;
     if marker != CFPA_HEADER_MARKER {
         return false;
@@ -480,20 +539,24 @@ fn cfpa_header_word_is_valid(header: u32) -> bool {
     inv_lifecycle == (!lifecycle)
 }
 
+pub fn load_cfpa_header_word_raw() -> u32 {
+    const CFPA_HEADER: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0010;
+    unsafe { core::ptr::read_volatile(CFPA_HEADER as *const u32) }
+}
+
 /// Load CFPA header word and check validity, returning None if header is invalid (e.g. incorrect marker, which could indicate unprovisioned/partially provisioned state or corruption). This is used as a prerequisite check for other CFPA fields since the header validity is an indicator of whether the CFPA contents can be trusted.
 #[inline(always)]
 pub fn load_cfpa_header_word() -> Option<u32> {
-    const CFPA_HEADER: u32 = IFRConfigAreaBase::Cfpa as u32 + 0x0010;
-    let header = unsafe { core::ptr::read_volatile(CFPA_HEADER as *const u32) };
-    if !cfpa_header_word_is_valid(header) {
-        return None;
-    }
-
-    Some(header)
+    let h = load_cfpa_header_word_raw();
+    cfpa_header_word_is_valid(h).then_some(h)
 }
 
-// Any field reading back this value should be treated as "not provisioned" rather than a real configuration.
-const ERASED_WORD: u32 = 0xFFFF_FFFF;
+/// The exact CFPA header word for a given lifecycle state:
+/// marker | !lc | lc. Derived, not a magic literal.
+const fn cfpa_header_for(lc: NbootLifecycleState) -> u32 {
+    let lc = lc as u32 & 0xFF;
+    ((CFPA_HEADER_MARKER as u32) << 16) | ((!lc & 0xFF) << 8) | lc
+}
 
 #[inline(always)]
 fn load_cfpa_word(address: u32) -> Option<u32> {

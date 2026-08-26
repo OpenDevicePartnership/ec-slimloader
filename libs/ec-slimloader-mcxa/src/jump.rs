@@ -1,11 +1,4 @@
 #[cfg(any(feature = "defmt", feature = "log"))]
-macro_rules! jump_error {
-    ($($arg:tt)*) => {
-        defmt_or_log::error!($($arg)*);
-    };
-}
-
-#[cfg(any(feature = "defmt", feature = "log"))]
 macro_rules! jump_info {
     ($($arg:tt)*) => {
         defmt_or_log::info!($($arg)*);
@@ -21,7 +14,6 @@ macro_rules! jump_info {
 ///
 /// `entry` must be a valid pointer to a loaded, authenticated image in flash.
 pub unsafe fn jump_to_image(entry: *const u32) -> ! {
-
     // The following code is replicated from IMXRT bootloader.
     // Disable interrupts globally while we reset the NVIC.
     cortex_m::interrupt::disable();

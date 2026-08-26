@@ -928,7 +928,6 @@ pub struct CmpaDefaultConfig {
     pub pqc_rotkh: [u8; 48],
 }
 
-
 // Reads the current CMPA page from CFG, validates state, and initializes the header for a
 // first write if the page is erased. Returns the page buffer ready for field patching.
 pub fn read_cmpa_page_for_update() -> Result<[u8; IFRPage::CmpaAll.byte_len()], CmpaWriteError> {

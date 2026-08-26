@@ -26,11 +26,6 @@ impl NbootBoolValue {
     }
 }
 
-#[inline(always)]
-pub const fn nboot_bool_is_true(value: NbootBool) -> bool {
-    matches!(NbootBoolValue::from_raw(value), Some(NbootBoolValue::True)) // Only using TRUE because only supporting hybrid mode, NO ECDSA only support.
-}
-
 #[repr(C)]
 pub struct NbootCtx {
     // Opaque context buffer. Size must match NBOOT_CONTEXT_SIZE from the ROM header.

@@ -59,7 +59,7 @@ fn in_emulation_window(offset: usize, len: usize) -> bool {
 // ─── FlexSPI NOR backend (MCXA hardware only) ─────────────────────────────
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::clocks::config::{
-    CoreSleep, Div8, FircConfig, FircFreqSel, FlashSleep, MainClockConfig, MainClockSource, VddDriveStrength, VddLevel,
+    CoreSleep, Div8, FircConfig, FircFreqSel, MainClockConfig, MainClockSource, VddDriveStrength, VddLevel,
 };
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::clocks::PoweredClock;
@@ -420,11 +420,11 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             bl_cfg.clock_cfg.vdd_power.low_power_mode.level = VddLevel::MidDriveMode;
             bl_cfg.clock_cfg.vdd_power.low_power_mode.drive = VddDriveStrength::Low { enable_bandgap: false };
 
-            // Set "deep sleep" mode
-            bl_cfg.clock_cfg.vdd_power.core_sleep = CoreSleep::DeepSleep;
-
-            // Set flash doze, allowing internal flash clocks to be gated on sleep
-            bl_cfg.clock_cfg.vdd_power.flash_sleep = FlashSleep::FlashDoze;
+            // Do NOT use DeepSleep: the bootloader has no custom executor capable of
+            // handling deep sleep wakeup, and DeepSleep gates peripheral clocks (including
+            // FlexSPI) on WFE, which crashes the async journal read. WfeGated (the
+            // default) only gates the CPU clock domain, leaving FlexSPI alive.
+            bl_cfg.clock_cfg.vdd_power.core_sleep = CoreSleep::WfeGated;
 
             embassy_mcxa::init(bl_cfg)
         };
@@ -434,37 +434,47 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         let external = {
+            // FIRC is 192 MHz; use div=16 → 12 MHz serial clock, matching the
+            // known-good speed from the original 48 MHz FIRC + div=4 default.
+            // The MX25U standard-SPI READ (0x03) max is ~50 MHz but board
+            // capacitance probably makes 48 MHz (192/4) unreliable.
+            use embassy_mcxa::clocks::periph_helpers::{Div4, FlexspiClockSel};
+            const FLEXSPI_DIV: Div4 = match Div4::from_divisor(16) {
+                Some(d) => d,
+                None => panic!("invalid FlexSPI divisor"),
+            };
+            const FLEXSPI_CLOCK: ClockConfig = ClockConfig {
+                power: PoweredClock::NormalEnabledDeepSleepDisabled,
+                source: FlexspiClockSel::FroHf,
+                div: FLEXSPI_DIV,
+            };
+
+            #[cfg(not(feature = "mcxa5xxevk"))]
             let flexspi = Flexspi::new_blocking(
                 p.FLEXSPI0,
-                #[cfg(not(feature = "mcxa5xxevk"))]
                 p.P3_17, // Port B: B_SS0 (CS0)
-                #[cfg(feature = "mcxa5xxevk")]
-                p.P3_0, // Port A EVK: A_SS0 (CS0)
-                #[cfg(not(feature = "mcxa5xxevk"))]
                 p.P3_16, // Port B: B_SCLK
-                #[cfg(feature = "mcxa5xxevk")]
-                p.P3_7, // Port A EVK: A_SCLK
-                #[cfg(not(feature = "mcxa5xxevk"))]
-                p.P3_1, // Port B: B_DQS
-                #[cfg(feature = "mcxa5xxevk")]
-                p.P3_6, // Port A EVK: A_DQS
-                #[cfg(not(feature = "mcxa5xxevk"))]
+                p.P3_1,  // Port B: B_DQS
                 p.P3_15, // Port B: B_DATA0
-                #[cfg(feature = "mcxa5xxevk")]
-                p.P3_8, // Port A EVK: A_DATA0
-                #[cfg(not(feature = "mcxa5xxevk"))]
                 p.P3_14, // Port B: B_DATA1
-                #[cfg(feature = "mcxa5xxevk")]
-                p.P3_9, // Port A EVK: A_DATA1
-                #[cfg(not(feature = "mcxa5xxevk"))]
                 p.P3_13, // Port B: B_DATA2
-                #[cfg(feature = "mcxa5xxevk")]
-                p.P3_10, // Port A EVK: A_DATA2
-                #[cfg(not(feature = "mcxa5xxevk"))]
                 p.P3_12, // Port B: B_DATA3
-                #[cfg(feature = "mcxa5xxevk")]
+                FLEXSPI_CLOCK,
+                MX25U_FLASH_CONFIG,
+            )
+            .unwrap_or_else(|_| panic!("FlexSPI init failed"));
+
+            #[cfg(feature = "mcxa5xxevk")]
+            let flexspi = Flexspi::new_blocking(
+                p.FLEXSPI0,
+                p.P3_0,  // Port A EVK: A_SS0 (CS0)
+                p.P3_7,  // Port A EVK: A_SCLK
+                p.P3_6,  // Port A EVK: A_DQS
+                p.P3_8,  // Port A EVK: A_DATA0
+                p.P3_9,  // Port A EVK: A_DATA1
+                p.P3_10, // Port A EVK: A_DATA2
                 p.P3_11, // Port A EVK: A_DATA3
-                ClockConfig::default(),
+                FLEXSPI_CLOCK,
                 MX25U_FLASH_CONFIG,
             )
             .unwrap_or_else(|_| panic!("FlexSPI init failed"));
@@ -531,17 +541,21 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             Err(_e) => panic!("Failed to initialize MCXA journal"),
         };
 
-        // Seed external flash with a hardcoded boot-journal record on first
-        // boot. When the journal partition is blank and slot 1 has a valid app,
-        // initialize to Confirmed{target=S1, backup=S0}.
+        // Seed the boot journal when:
+        // - Journal is blank (first boot), OR
+        // - Journal has a stale Failed state but S0 has a valid app (dev workflow reset).
+        // Always seed toward S0 as the target when S0 is valid.
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
-            if journal.get().is_none() && slot_has_valid_app(APP_BASES[1]) {
-                let initial_state = ec_slimloader_state::state::State::new(Status::Confirmed, Slot::S1, Slot::S0);
+            let needs_seed = journal.get().is_none()
+                || (cfg!(feature = "mcxa5xxevk")
+                    && journal.get().is_some_and(|s| matches!(s.status(), Status::Failed)));
+            if needs_seed && slot_has_valid_app(APP_BASES[0]) {
+                let initial_state = ec_slimloader_state::state::State::new(Status::Confirmed, Slot::S0, Slot::S1);
                 match journal.set::<JOURNAL_BUFFER_SIZE>(&initial_state).await {
                     Ok(()) => {
                         #[cfg(feature = "verification-logging")]
-                        board_info!("Initialized boot journal: target=S1 backup=S0");
+                        board_info!("Initialized boot journal: target=S0 backup=S1");
                     }
                     Err(_e) => {
                         #[cfg(feature = "verification-logging")]
