@@ -13,7 +13,9 @@ use core::ops::Range;
 use crate::{header, jump, verification};
 use ec_slimloader::{Board, BootError, BootStatePolicy};
 use ec_slimloader_state::flash::FlashJournal;
-use ec_slimloader_state::state::{Slot, Status};
+use ec_slimloader_state::state::Slot;
+#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+use ec_slimloader_state::state::Status;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
 use heapless::Vec;
@@ -536,10 +538,12 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 
         let Partitions { state, slots } = config.partitions(ext_flash_manager);
 
-        let mut journal = match FlashJournal::new::<JOURNAL_BUFFER_SIZE>(state).await {
+        let journal = match FlashJournal::new::<JOURNAL_BUFFER_SIZE>(state).await {
             Ok(journal) => journal,
             Err(_e) => panic!("Failed to initialize MCXA journal"),
         };
+        #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+        let mut journal = journal;
 
         // Seed the boot journal when:
         // - Journal is blank (first boot), OR
@@ -588,29 +592,38 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             return BootError::SlotUnknown;
         };
 
-        if !slot_has_valid_app(app_base) {
-            return BootError::Markers;
+        #[cfg(not(all(target_os = "none", feature = "mcxa5xx")))]
+        {
+            let _ = app_base;
+            return BootError::Integrity;
         }
 
-        const SLOT_SIZE: u32 = 0x000F_8000; // 992 KB
-        let image_base = app_base as *const u8;
-        let jump_address = image_base as *const u32;
-        let image_header = match unsafe { header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
-            Ok(header) => header,
-            Err(_) => return ec_slimloader::BootError::Markers,
-        };
+        #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+        {
+            if !slot_has_valid_app(app_base) {
+                return BootError::Markers;
+            }
 
-        let image_len = image_header.image_length();
-        let cert_offset = image_header.cert_block_offset();
-        if !(0x40..=SLOT_SIZE).contains(&image_len) || (cert_offset & 0x3) != 0 || cert_offset >= image_len {
-            return ec_slimloader::BootError::Markers;
-        }
+            const SLOT_SIZE: u32 = 0x000F_8000; // 992 KB
+            let image_base = app_base as *const u8;
+            let jump_address = image_base as *const u32;
+            let image_header = match unsafe { header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
+                Ok(header) => header,
+                Err(_) => return ec_slimloader::BootError::Markers,
+            };
 
-        match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
-            Ok(()) => unsafe {
-                jump::jump_to_image(jump_address);
-            },
-            Err(error) => error,
+            let image_len = image_header.image_length();
+            let cert_offset = image_header.cert_block_offset();
+            if !(0x40..=SLOT_SIZE).contains(&image_len) || (cert_offset & 0x3) != 0 || cert_offset >= image_len {
+                return ec_slimloader::BootError::Markers;
+            }
+
+            match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
+                Ok(()) => unsafe {
+                    jump::jump_to_image(jump_address);
+                },
+                Err(error) => error,
+            }
         }
     }
 
