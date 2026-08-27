@@ -46,15 +46,15 @@ const KSTATUS_FLEXSPINOR_UNSUPPORTED_SFDP_VERSION: u32 = 20108;
 const KSTATUS_FLEXSPINOR_FLASH_NOT_FOUND: u32 = 20109;
 const KSTATUS_FLEXSPINOR_DTR_READ_DUMMY_PROBE_FAILED: u32 = 20110;
 
-const KSTATUS_NBOOT_SUCCESS: u64 = 0x5A5A_5A5A;
-const KSTATUS_NBOOT_FAIL: u64 = 0x5A5A_A5A5;
-const KSTATUS_NBOOT_INVALID_ARGUMENT: u64 = 0x5A5A_A5F0;
+const KSTATUS_NBOOT_SUCCESS: u32 = 0x5A5A_5A5A;
+const KSTATUS_NBOOT_FAIL: u32 = 0x5A5A_A5A5;
+const KSTATUS_NBOOT_INVALID_ARGUMENT: u32 = 0x5A5A_A5F0;
 
 // NBOOT API status codes (MCXA ROM, Table 46 / 9.2.5.11)
 // These are returned by APIs such as `nboot_mem_crypt_range_checker`.
-const KNBOOT_OPERATION_ALLOWED: u64 = 0x3C5A_33CC;
-const KNBOOT_OPERATION_DISALLOWED: u64 = 0x5AA5_CC33;
-const KSTATUS_NBOOT_KEY_NOT_AVAILABLE: u64 = 0x5A5A_A5E6;
+const KNBOOT_OPERATION_ALLOWED: u32 = 0x3C5A_33CC;
+const KNBOOT_OPERATION_DISALLOWED: u32 = 0x5AA5_CC33;
+const KSTATUS_NBOOT_KEY_NOT_AVAILABLE: u32 = 0x5A5A_A5E6;
 
 const KSTATUS_ROMLDR_DATA_UNDERRUN: u32 = 10109;
 const KSTATUS_ROMLDR_JUMP_RETURNED: u32 = 10110;
@@ -80,27 +80,28 @@ const KSTATUS_KB_INVALID_BUFFER: u32 = KSTATUS_ROM_API_INVALID_BUFFER;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u32)]
 pub enum FlashStatus {
-    Success,
-    InvalidArgument,
-    AlignmentError,
-    AddressError,
-    SizeError,
-    CommandFailure,
-    UnknownProperty,
-    EraseKeyError,
-    RegionExecuteOnly,
-    CommandNotSupported,
-    ReadOnlyProperty,
-    InvalidPropertyValue,
-    EccError,
-    CompareError,
-    InvalidWaitStateCycles,
-    Unknown(u32),
+    Success = KSTATUS_FLASH_SUCCESS,
+    InvalidArgument = KSTATUS_FLASH_INVALID_ARGUMENT,
+    AlignmentError = KSTATUS_FLASH_ALIGNMENT_ERROR,
+    AddressError = KSTATUS_FLASH_ADDRESS_ERROR,
+    SizeError = KSTATUS_FLASH_SIZE_ERROR,
+    CommandFailure = KSTATUS_FLASH_COMMAND_FAILURE,
+    UnknownProperty = KSTATUS_FLASH_UNKNOWN_PROPERTY,
+    EraseKeyError = KSTATUS_FLASH_ERASE_KEY_ERROR,
+    RegionExecuteOnly = KSTATUS_FLASH_REGION_EXECUTE_ONLY,
+    CommandNotSupported = KSTATUS_FLASH_COMMAND_NOT_SUPPORTED,
+    ReadOnlyProperty = KSTATUS_FLASH_READ_ONLY_PROPERTY,
+    InvalidPropertyValue = KSTATUS_FLASH_INVALID_PROPERTY_VALUE,
+    EccError = KSTATUS_FLASH_ECC_ERROR,
+    CompareError = KSTATUS_FLASH_COMPARE_ERROR,
+    InvalidWaitStateCycles = KSTATUS_FLASH_INVALID_WAIT_STATE_CYCLES,
+    Unknown(u32) = 0xFFFF_FFFF,
 }
 
-impl FlashStatus {
-    pub const fn from_raw(raw: u32) -> Self {
+impl From<u32> for FlashStatus {
+    fn from(raw: u32) -> Self {
         match raw {
             KSTATUS_FLASH_SUCCESS => Self::Success,
             KSTATUS_FLASH_INVALID_ARGUMENT => Self::InvalidArgument,
@@ -123,14 +124,15 @@ impl FlashStatus {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
 pub enum SpiFlashStatus {
-    Success,
-    Fail,
-    Unknown(u32),
+    Success = KSTATUS_SPIFLASH_SUCCESS,
+    Fail = KSTATUS_SPIFLASH_FAIL,
+    Unknown(u32) = 0xFFFF_FFFF,
 }
 
-impl SpiFlashStatus {
-    pub const fn from_raw(raw: u32) -> Self {
+impl From<u32> for SpiFlashStatus {
+    fn from(raw: u32) -> Self {
         match raw {
             KSTATUS_SPIFLASH_SUCCESS => Self::Success,
             KSTATUS_SPIFLASH_FAIL => Self::Fail,
@@ -140,28 +142,29 @@ impl SpiFlashStatus {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
 pub enum FlexspiStatus {
-    Success,
-    Fail,
-    InvalidArgument,
-    SequenceExecutionTimeout,
-    InvalidSequence,
-    DeviceTimeout,
-    ProgramFail,
-    EraseSectorFail,
-    EraseAllFail,
-    WaitTimeout,
-    WriteAlignmentError,
-    CommandFailure,
-    SfdpNotFound,
-    UnsupportedSfdpVersion,
-    FlashNotFound,
-    DtrReadDummyProbeFailed,
-    Unknown(u32),
+    Success = KSTATUS_FLEXSPI_SUCCESS,
+    Fail = KSTATUS_FLEXSPI_FAIL,
+    InvalidArgument = KSTATUS_FLEXSPI_INVALID_ARGUMENT,
+    SequenceExecutionTimeout = KSTATUS_FLEXSPI_SEQUENCE_EXECUTION_TIMEOUT,
+    InvalidSequence = KSTATUS_FLEXSPI_INVALID_SEQUENCE,
+    DeviceTimeout = KSTATUS_FLEXSPI_DEVICE_TIMEOUT,
+    ProgramFail = KSTATUS_FLEXSPINOR_PROGRAM_FAIL,
+    EraseSectorFail = KSTATUS_FLEXSPINOR_ERASE_SECTOR_FAIL,
+    EraseAllFail = KSTATUS_FLEXSPINOR_ERASE_ALL_FAIL,
+    WaitTimeout = KSTATUS_FLEXSPINOR_WAIT_TIMEOUT,
+    WriteAlignmentError = KSTATUS_FLEXSPINOR_WRITE_ALIGNMENT_ERROR,
+    CommandFailure = KSTATUS_FLEXSPINOR_COMMAND_FAILURE,
+    SfdpNotFound = KSTATUS_FLEXSPINOR_SFDP_NOT_FOUND,
+    UnsupportedSfdpVersion = KSTATUS_FLEXSPINOR_UNSUPPORTED_SFDP_VERSION,
+    FlashNotFound = KSTATUS_FLEXSPINOR_FLASH_NOT_FOUND,
+    DtrReadDummyProbeFailed = KSTATUS_FLEXSPINOR_DTR_READ_DUMMY_PROBE_FAILED,
+    Unknown(u32) = 0xFFFF_FFFF,
 }
 
-impl FlexspiStatus {
-    pub const fn from_raw(raw: u32) -> Self {
+impl From<u32> for FlexspiStatus {
+    fn from(raw: u32) -> Self {
         match raw {
             KSTATUS_FLEXSPI_SUCCESS => Self::Success,
             KSTATUS_FLEXSPI_FAIL => Self::Fail,
@@ -186,20 +189,22 @@ impl FlexspiStatus {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u32)]
 pub enum NbootStatus {
-    Success,
-    Fail,
-    InvalidArgument,
-    OperationAllowed,
-    OperationDisallowed,
-    KeyNotAvailable,
-    Unknown(u64),
+    Success = KSTATUS_NBOOT_SUCCESS,
+    Fail = KSTATUS_NBOOT_FAIL,
+    InvalidArgument = KSTATUS_NBOOT_INVALID_ARGUMENT,
+    OperationAllowed = KNBOOT_OPERATION_ALLOWED,
+    OperationDisallowed = KNBOOT_OPERATION_DISALLOWED,
+    KeyNotAvailable = KSTATUS_NBOOT_KEY_NOT_AVAILABLE,
+    Unknown(u32) = 0xFFFF_FFFF, // Catch-all for unknown status codes, including saturated values.
 }
 
-impl NbootStatus {
-    pub const fn from_raw(raw: u64) -> Self {
-        // The ROM returns a usable 32-bit value; upper 32 bits are likely security related metadata/ fault attack protection, need to mask it out.
-        let raw = raw & 0xFFFF_FFFF;
+impl From<u64> for NbootStatus {
+    fn from(raw: u64) -> Self {
+        // The ROM returns a usable 32-bit value; upper 32 bits are likely security related metadata/fault attack protection.
+        // TODO: Discuss the FI counter usage with NXP.
+        let raw = raw as u32;
         match raw {
             KSTATUS_NBOOT_SUCCESS => Self::Success,
             KSTATUS_NBOOT_FAIL => Self::Fail,
@@ -213,21 +218,22 @@ impl NbootStatus {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
 pub enum KbStatus {
-    Success,
-    Fail,
-    InvalidArgument,
-    RomLdrDataUnderrun,
-    RomLdrJumpReturned,
-    RomLdrRollbackBlocked,
-    RomLdrPendingJumpCommand,
-    RomApiBufferSizeNotEnough,
-    RomApiInvalidBuffer,
-    Unknown(u32),
+    Success = KSTATUS_KB_SUCCESS,
+    Fail = KSTATUS_KB_FAIL,
+    InvalidArgument = KSTATUS_KB_INVALID_ARGUMENT,
+    RomLdrDataUnderrun = KSTATUS_KB_ROMLDR_DATA_UNDERRUN,
+    RomLdrJumpReturned = KSTATUS_KB_ROMLDR_JUMP_RETURNED,
+    RomLdrRollbackBlocked = KSTATUS_KB_ROMLDR_ROLLBACK_BLOCKED,
+    RomLdrPendingJumpCommand = KSTATUS_KB_ROMLDR_PENDING_JUMP_COMMAND,
+    RomApiBufferSizeNotEnough = KSTATUS_KB_BUFFER_SIZE_NOT_ENOUGH,
+    RomApiInvalidBuffer = KSTATUS_KB_INVALID_BUFFER,
+    Unknown(u32) = 0xFFFF_FFFF,
 }
 
-impl KbStatus {
-    pub const fn from_raw(raw: u32) -> Self {
+impl From<u32> for KbStatus {
+    fn from(raw: u32) -> Self {
         match raw {
             KSTATUS_KB_SUCCESS => Self::Success,
             KSTATUS_KB_FAIL => Self::Fail,

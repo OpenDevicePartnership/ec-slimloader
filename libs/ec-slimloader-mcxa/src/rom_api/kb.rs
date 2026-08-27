@@ -117,14 +117,14 @@ impl KBApiDriver {
     }
 
     pub fn kb_init(&self, session: *mut *mut KbSessionRef, options: *const KbOptions) -> KbStatus {
-        unsafe { KbStatus::from_raw((self.raw.kb_init)(session, options)) }
+        unsafe { KbStatus::from((self.raw.kb_init)(session, options)) }
     }
 
     pub fn kb_deinit(&self, session: *mut KbSessionRef) -> KbStatus {
-        unsafe { KbStatus::from_raw((self.raw.kb_deinit)(session)) }
+        unsafe { KbStatus::from((self.raw.kb_deinit)(session)) }
     }
 
     pub fn kb_execute(&self, session: *mut KbSessionRef, data: *const u8, dataLength: u32) -> KbStatus {
-        unsafe { KbStatus::from_raw((self.raw.kb_execute)(session, data, dataLength)) }
+        unsafe { KbStatus::from((self.raw.kb_execute)(session, data, dataLength)) }
     }
 }

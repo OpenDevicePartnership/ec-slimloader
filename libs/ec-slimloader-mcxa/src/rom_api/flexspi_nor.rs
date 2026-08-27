@@ -333,27 +333,27 @@ impl FlexspiNorFlashDriver {
     }
 
     pub fn init(&self, instance: u32, cfg: *mut FlexspiNorConfig) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.init)(instance, cfg)) }
+        unsafe { FlexspiStatus::from((self.raw.init)(instance, cfg)) }
     }
 
     pub fn page_program(&self, instance: u32, cfg: *mut FlexspiNorConfig, dst: u32, src: *const u32) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.page_program)(instance, cfg, dst, src)) }
+        unsafe { FlexspiStatus::from((self.raw.page_program)(instance, cfg, dst, src)) }
     }
 
     pub fn erase_all(&self, instance: u32, cfg: *mut FlexspiNorConfig) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.erase_all)(instance, cfg)) }
+        unsafe { FlexspiStatus::from((self.raw.erase_all)(instance, cfg)) }
     }
 
     pub fn erase(&self, instance: u32, cfg: *mut FlexspiNorConfig, start: u32, len: u32) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.erase)(instance, cfg, start, len)) }
+        unsafe { FlexspiStatus::from((self.raw.erase)(instance, cfg, start, len)) }
     }
 
     pub fn erase_sector(&self, instance: u32, cfg: *mut FlexspiNorConfig, addr: u32) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.erase_sector)(instance, cfg, addr)) }
+        unsafe { FlexspiStatus::from((self.raw.erase_sector)(instance, cfg, addr)) }
     }
 
     pub fn erase_block(&self, instance: u32, cfg: *mut FlexspiNorConfig, addr: u32) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.erase_block)(instance, cfg, addr)) }
+        unsafe { FlexspiStatus::from((self.raw.erase_block)(instance, cfg, addr)) }
     }
 
     pub fn get_config(
@@ -362,7 +362,7 @@ impl FlexspiNorFlashDriver {
         cfg: *mut FlexspiNorConfig,
         opt: *mut SerialNorConfigOption,
     ) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.get_config)(instance, cfg, opt)) }
+        unsafe { FlexspiStatus::from((self.raw.get_config)(instance, cfg, opt)) }
     }
 
     pub fn read(
@@ -373,19 +373,19 @@ impl FlexspiNorFlashDriver {
         start: u32,
         bytes: u32,
     ) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.read)(instance, cfg, dst, start, bytes)) }
+        unsafe { FlexspiStatus::from((self.raw.read)(instance, cfg, dst, start, bytes)) }
     }
 
     pub fn xfer(&self, instance: u32, xfer: *mut FlexspiXfer) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.xfer)(instance, xfer)) }
+        unsafe { FlexspiStatus::from((self.raw.xfer)(instance, xfer)) }
     }
 
     pub fn update_lut(&self, instance: u32, seq_index: u32, lut_base: *const u32, num_seq: u32) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.update_lut)(instance, seq_index, lut_base, num_seq)) }
+        unsafe { FlexspiStatus::from((self.raw.update_lut)(instance, seq_index, lut_base, num_seq)) }
     }
 
     pub fn set_clock_source(&self, clock_src: FlexspiClockSource) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.set_clock_source)(clock_src as u32)) }
+        unsafe { FlexspiStatus::from((self.raw.set_clock_source)(clock_src as u32)) }
     }
 
     pub fn config_clock(
@@ -405,6 +405,6 @@ impl FlexspiNorFlashDriver {
         src: *const u32,
         len: u32,
     ) -> FlexspiStatus {
-        unsafe { FlexspiStatus::from_raw((self.raw.partial_program)(instance, cfg, dst, src, len)) }
+        unsafe { FlexspiStatus::from((self.raw.partial_program)(instance, cfg, dst, src, len)) }
     }
 }

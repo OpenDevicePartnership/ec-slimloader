@@ -432,15 +432,15 @@ impl NbootDriver {
     }
 
     pub fn nboot_context_init(&self, ctx: *mut NbootCtx) -> NbootStatus {
-        unsafe { NbootStatus::from_raw((self.raw.nboot_context_init)(ctx)) }
+        unsafe { NbootStatus::from((self.raw.nboot_context_init)(ctx)) }
     }
 
     pub fn nboot_context_deinit(&self, ctx: *mut NbootCtx) -> NbootStatus {
-        unsafe { NbootStatus::from_raw((self.raw.nboot_context_deinit)(ctx)) }
+        unsafe { NbootStatus::from((self.raw.nboot_context_deinit)(ctx)) }
     }
 
     pub fn nboot_context_set_uuid(&self, ctx: *mut NbootCtx, uuid: *const u8) -> NbootStatus {
-        unsafe { NbootStatus::from_raw((self.raw.nboot_context_set_uuid)(ctx, uuid)) }
+        unsafe { NbootStatus::from((self.raw.nboot_context_set_uuid)(ctx, uuid)) }
     }
 
     pub fn nboot_sb4_load_manifest(
@@ -449,11 +449,11 @@ impl NbootDriver {
         manifest: *const u32,
         parms: *mut NbootSb4LoadManifestParms,
     ) -> NbootStatus {
-        unsafe { NbootStatus::from_raw((self.raw.nboot_sb4_load_manifest)(ctx, manifest, parms)) }
+        unsafe { NbootStatus::from((self.raw.nboot_sb4_load_manifest)(ctx, manifest, parms)) }
     }
 
     pub fn nboot_sb4_load_block(&self, ctx: *mut NbootCtx, block: *mut u32) -> NbootStatus {
-        unsafe { NbootStatus::from_raw((self.raw.nboot_sb4_load_block)(ctx, block)) }
+        unsafe { NbootStatus::from((self.raw.nboot_sb4_load_block)(ctx, block)) }
     }
 
     pub fn nboot_sb4_check_authenticity_and_completeness_romapi(
@@ -463,7 +463,7 @@ impl NbootDriver {
         parms: *mut NbootSb4LoadManifestParms,
     ) -> NbootStatus {
         unsafe {
-            NbootStatus::from_raw((self.raw.nboot_sb4_check_authenticity_and_completeness_romapi)(
+            NbootStatus::from((self.raw.nboot_sb4_check_authenticity_and_completeness_romapi)(
                 ctx, address, parms,
             ))
         }
@@ -477,7 +477,7 @@ impl NbootDriver {
         parms: *mut NbootImgAuthParms,
     ) -> NbootStatus {
         unsafe {
-            NbootStatus::from_raw((self.raw.nboot_img_authenticate_romapi)(
+            NbootStatus::from((self.raw.nboot_img_authenticate_romapi)(
                 ctx,
                 image_start,
                 is_signature_verified,
@@ -494,7 +494,7 @@ impl NbootDriver {
         iped_mode_select: NbootMemCryptIpedModeSelect,
     ) -> NbootStatus {
         unsafe {
-            NbootStatus::from_raw((self.raw.nboot_mem_crypt_enable_encrypt_for_address_range)(
+            NbootStatus::from((self.raw.nboot_mem_crypt_enable_encrypt_for_address_range)(
                 ctx,
                 region_number,
                 region_config,
@@ -516,7 +516,7 @@ impl NbootDriver {
         npx_erase_check_en: u32,
     ) -> NbootStatus {
         unsafe {
-            NbootStatus::from_raw((self.raw.nboot_mem_crypt_range_checker)(
+            NbootStatus::from((self.raw.nboot_mem_crypt_range_checker)(
                 ctx,
                 operation,
                 address,
@@ -532,6 +532,6 @@ impl NbootDriver {
     pub fn nboot_background_hash_enable(&self, ctx: *mut NbootCtx, hash_dma_channel: u32) -> NbootStatus {
         // should enum for DMA channel selection be added? (Answer is yes but which channels??) For now just pass 0 for default channel. By doing an enum,
         // we can impose limitations on valid values (e.g. if only 2 channels are supported, etc.)
-        unsafe { NbootStatus::from_raw((self.raw.nboot_background_hash_enable)(ctx, hash_dma_channel)) }
+        unsafe { NbootStatus::from((self.raw.nboot_background_hash_enable)(ctx, hash_dma_channel)) }
     }
 }

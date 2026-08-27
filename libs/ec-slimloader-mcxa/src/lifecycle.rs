@@ -1,6 +1,7 @@
 use core::mem;
 
 use crate::rom_api::{NbootLifecycleDiscriminator, NbootLifecycleState, NbootRootKeyRevocation, NbootRootKeyUsage};
+use crate::verification::zero_mask;
 
 // MCXA configuration flash layout (CFG vs SCRATCH)
 //
@@ -159,35 +160,6 @@ pub fn cmpa_header_marker_is_valid() -> bool {
 fn load_cmpa_secure_boot_cfg() -> u32 {
     const CMPA_SECURE_BOOT_CFG: u32 = IFRConfigAreaBase::Cmpa as u32 + 0x0050; // 0x0100_0250
     unsafe { core::ptr::read_volatile(CMPA_SECURE_BOOT_CFG as *const u32) }
-}
-
-/// Optimization barrier for fault-injection countermeasures: the asm operand contract forces the compiler to treat the returned value as arbitrary.
-/// Deliberately not `pure`/`nomem`, so the block also cannot be elided, duplicated, or reordered across memory operations.
-#[inline(always)]
-pub(crate) fn asm_opaque(value: u32) -> u32 {
-    let mut v = value;
-    // SAFETY: no-op asm; the operand only appears as a comment in the template.
-    unsafe { core::arch::asm!("/* {0} */", inout(reg) v, options(nostack, preserves_flags)) };
-    v
-}
-
-/// All-ones iff d == 0, else all-zeros, computed without a conditional branch
-/// (log-time OR-reduction of all 32 bits into bit 0, then widened). This is
-/// the single unavoidable wide-to-narrow fold in the dev-mode design: it is
-/// kept behind a barrier so the cascade cannot be constant-folded or lowered
-/// back to a bit-test when the input has a compiler-visible value set, and it
-/// sits adjacent to its consumer so the narrow value never travels. Every
-/// instance has a ~1-bit-wide tail, which is why no single fold is ever
-/// trusted alone (boot-time token × live derivation at every consumer).
-#[inline(always)]
-pub(crate) fn zero_mask(d: u32) -> u32 {
-    let mut d = asm_opaque(d);
-    d |= d >> 16;
-    d |= d >> 8;
-    d |= d >> 4;
-    d |= d >> 2;
-    d |= d >> 1;
-    !((d & 1).wrapping_neg())
 }
 
 /// Measures the "deviation" without any branches from the live configuration of a device from the expected configuration of a development device. This is used to determine if the device

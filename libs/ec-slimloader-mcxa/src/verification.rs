@@ -4,10 +4,10 @@ use embassy_mcxa::{peripherals, Peri};
 
 use crate::certificate::derive_image_rkth_pair;
 use crate::lifecycle::{
-    asm_opaque, cnsa_enforced, dev_config_deviation, fast_boot_enabled, load_firmware_version_from_cfpa,
+    cnsa_enforced, dev_config_deviation, fast_boot_enabled, load_firmware_version_from_cfpa,
     load_image_key_revocation_from_cfpa, load_lifecycle_from_cfpa, load_pqc_rotkh_from_cmpa,
     load_root_key_revocation_from_cfpa, load_rotk_usage_from_cmpa, load_rotkh_from_cmpa,
-    low_power_authentication_enforced, secure_boot_state, zero_mask, SecureBootState,
+    low_power_authentication_enforced, secure_boot_state, SecureBootState,
 };
 use crate::rom_api::{
     nboot, NbootBool, NbootBoolValue, NbootCtx, NbootImgAuthParms, NbootLifecycleState, NbootRootKeyRevocation,
@@ -50,8 +50,33 @@ macro_rules! verify_error {
     };
 }
 
-const fn nboot_bool_is_true(value: NbootBool) -> bool {
-    matches!(NbootBoolValue::from_raw(value), Some(NbootBoolValue::True)) // Only using TRUE because only supporting hybrid mode, NO ECDSA only support.
+/// Optimization barrier for fault-injection countermeasures: the asm operand contract forces the compiler to treat the returned value as arbitrary.
+/// Deliberately not `pure`/`nomem`, so the block also cannot be elided, duplicated, or reordered across memory operations.
+#[inline(always)]
+pub(crate) fn asm_opaque(value: u32) -> u32 {
+    let mut v = value;
+    // SAFETY: no-op asm; the operand only appears as a comment in the template.
+    unsafe { core::arch::asm!("/* {0} */", inout(reg) v, options(nostack, preserves_flags)) };
+    v
+}
+
+/// All-ones iff d == 0, else all-zeros, computed without a conditional branch
+/// (log-time OR-reduction of all 32 bits into bit 0, then widened). This is
+/// the single unavoidable wide-to-narrow fold in the dev-mode design: it is
+/// kept behind a barrier so the cascade cannot be constant-folded or lowered
+/// back to a bit-test when the input has a compiler-visible value set, and it
+/// sits adjacent to its consumer so the narrow value never travels. Every
+/// instance has a ~1-bit-wide tail, which is why no single fold is ever
+/// trusted alone (boot-time token × live derivation at every consumer).
+#[inline(always)]
+pub(crate) fn zero_mask(d: u32) -> u32 {
+    let mut d = asm_opaque(d);
+    d |= d >> 16;
+    d |= d >> 8;
+    d |= d >> 4;
+    d |= d >> 2;
+    d |= d >> 1;
+    !((d & 1).wrapping_neg())
 }
 
 #[repr(transparent)]
@@ -86,7 +111,7 @@ impl DevMode {
     /// DO NOT STORE THIS VALUE INTO A VARIABLE AND REUSE IT, as it will be optimized out.
     fn dev_token(&self) -> u32 {
         let token = unsafe { core::ptr::read_volatile(&self.0) };
-        token & zero_mask(dev_config_deviation())
+        (token & zero_mask(dev_config_deviation())) | (Self::PROD & !zero_mask(dev_config_deviation()))
     }
 }
 
@@ -195,7 +220,7 @@ fn verify_secure_boot_policies(
 pub fn verify_authenticity<'d>(
     mut peri: Peri<'d, peripherals::SGI0>,
     image_base: *const u8,
-) -> Result<(), ec_slimloader::BootError> {
+) -> Result<u32, ec_slimloader::BootError> {
     let mut parms = load_nboot_auth_parms_from_ifr()?;
 
     let secure_boot_state = secure_boot_state();
@@ -301,9 +326,9 @@ pub fn verify_authenticity<'d>(
     //TODO: does de-init zeroize the context or do we need to do that manually for security?
 
     match (status, sig_ok) {
-        (crate::error::NbootStatus::Success, s) if nboot_bool_is_true(s) => {
+        (crate::error::NbootStatus::Success, s) if s == NbootBoolValue::True as u32 => {
             verify_info!("Hybrid Auth OK");
-            Ok(())
+            Ok(asm_opaque(s))
         }
         (status, _) => {
             let boot_error = crate::error::map_nboot_status_to_boot_error(status);
