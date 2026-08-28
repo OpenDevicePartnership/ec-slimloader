@@ -1,0 +1,17 @@
+[package]
+name = "secure-app"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+cortex-m = { workspace = true, features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+cortex-m-rt.workspace = true
+mimxrt685s-pac = { version = "0.5.0", features = [
+    "rt",
+    "critical-section",
+] }
+rtt-target.workspace = true

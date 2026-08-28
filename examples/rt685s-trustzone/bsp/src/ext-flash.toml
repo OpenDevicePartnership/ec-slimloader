@@ -1,0 +1,16 @@
+variants = ["bootloader", "application"]
+
+[disk]
+size = 0x800000
+alignment = 0x1000
+
+[partitions]
+# prelude = { offset = 0x0, size = 0x1000 }
+# bl_code = { offset = 0x1000, size = 0x8000 }
+# bl_descriptors = { offset = 0x9000, size = 0x1000 }
+# bl_mbi_suffix = { offset = 0xa000, size = 0x1000 }
+
+bl_state = { offset = 0xb000, size = 0x2000, access = { application = "rw", bootloader = "rw" } }
+
+app_slot0 = { offset = 0x0d000, size = 0xec000, access = { application = "rw", bootloader = "ro" } }
+app_slot1 = { offset = 0xf9000, size = 0xec000, access = { application = "rw", bootloader = "ro" } }

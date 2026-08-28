@@ -54,12 +54,16 @@ pub async fn process(config: &Config, command: RunCommands) -> anyhow::Result<()
 
     let mut command = std::process::Command::new(&run_args.probe_rs_path);
     command.args(["attach", "--chip", &run_args.probe_args.chip]);
+    command.args(["--no-catch-hardfault", "--no-catch-reset"]);
 
     if let Some(probe) = run_args.probe_args.probe.as_ref() {
         command.args(["--probe", probe]);
     }
 
-    command.arg(run_args.sign_args.input_path).status().unwrap();
+    command
+        .arg(run_args.sign_args.input_paths.last().unwrap())
+        .status()
+        .unwrap();
 
     Ok(())
 }
