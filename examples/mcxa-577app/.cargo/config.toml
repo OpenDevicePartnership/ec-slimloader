@@ -1,0 +1,21 @@
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+# Runner for app and bootloader. Provisioner overrides this in its own config.
+[target.thumbv8m.main-none-eabihf]
+runner = "probe-rs run --chip MCXA577 --speed 10000"
+
+# Flags for all workspace members (app, bootloader).
+# The provisioner sub-workspace uses RUSTFLAGS in its [env] to override this
+# set and exclude -Tdefmt.x, since it uses log/rtt-target instead of defmt.
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+rustflags = [
+    "-C", "linker=flip-link",
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Tdefmt.x",
+    "-C", "link-arg=--nmagic",
+    "-C", "force-frame-pointers=yes",
+]
+
+[env]
+DEFMT_LOG = "trace"

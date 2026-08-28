@@ -1,0 +1,5 @@
+[package]
+name = "rustc_version"
+version = "0.2.3"
+edition = "2018"
+license = "MIT OR Apache-2.0"

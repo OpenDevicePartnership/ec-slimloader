@@ -1,0 +1,21 @@
+[package]
+name = "mcxa-577app"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = { version = "0.7", features = ["set-sp", "set-vtor"] }
+defmt = "1.0"
+defmt-rtt = "1.0"
+embassy-mcxa = { workspace = true, features = ["rt", "defmt", "mcxa5xx"] }
+embassy-executor = { workspace = true, features = ["platform-cortex-m", "executor-thread"] }
+embassy-time = { workspace = true, features = ["defmt", "defmt-timestamp-uptime"] }
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+
+[[bin]]
+name = "app"
+path = "src/main.rs"
+
+

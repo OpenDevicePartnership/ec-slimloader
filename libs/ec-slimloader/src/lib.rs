@@ -66,6 +66,10 @@ pub enum BootError {
     Authenticate,
     /// The underlying NVM threw an error.
     IO,
+    /// CMPA/CFPA integrity failure
+    Integrity,
+    /// Root of Trust verification failure
+    RootOfTrust,
     /// Hashing error, such as an unsupported configuration or a failure in the hashing peripheral.
     Hash,
 }

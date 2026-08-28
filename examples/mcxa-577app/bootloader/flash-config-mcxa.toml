@@ -1,0 +1,12 @@
+
+variants = ["bootloader"]
+
+[disk]
+alignment = 0x1000
+# MCXA5 external FlexSPI flash: 2 MB total
+size = 0x200000
+
+[partitions]
+app_one = { access = { bootloader = "ro" }, offset = 0x100000, size = 0x80000 }
+app_two = { access = { bootloader = "ro" }, offset = 0x180000, size = 0x80000 }
+boot_journal = { access = { bootloader = "rw" }, offset = 0x1000, size = 0x2000 }

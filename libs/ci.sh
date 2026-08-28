@@ -35,5 +35,5 @@ cargo batch \
 	echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
 	done) $BUILD_EXTRA
 
-cargo test --locked  --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt633s"
-cargo test --locked  --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt685s"
+cargo test --locked  --workspace --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt633s" --exclude ec-slimloader-mcxa
+cargo test --locked  --workspace --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt685s" --exclude ec-slimloader-mcxa
