@@ -620,10 +620,8 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             }
 
             match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
-                Ok(s) if s == crate::rom_api::NbootBoolValue::True as u32 => unsafe {
-                    jump::jump_to_image(jump_address)
-                },
-                Ok(_) => ec_slimloader::BootError::Authenticate,
+                Ok(true) => unsafe { jump::jump_to_image(jump_address) },
+                Ok(false) => ec_slimloader::BootError::Authenticate,
                 Err(e) => e,
             }
         }

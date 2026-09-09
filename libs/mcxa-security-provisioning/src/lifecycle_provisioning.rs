@@ -3,20 +3,18 @@ use core::{mem, ptr};
 
 use defmt_or_log::error;
 use ec_slimloader_mcxa::certificate::derive_image_rkth_pair;
-pub use ec_slimloader_mcxa::error::FlashStatus;
 use ec_slimloader_mcxa::header::ImageHeader;
+use ec_slimloader_mcxa::lifecycle::NbootLifecycleState;
 pub use ec_slimloader_mcxa::lifecycle::{
     cmpa_header_marker_is_valid, cnsa_enforced, fast_boot_enabled, hybrid_secure_boot_enforced, is_cfpa_erased,
     is_cmpa_erased, load_cfpa_header_word, load_lifecycle_from_cfpa, load_pqc_rotkh_from_cmpa, load_rotkh_from_cmpa,
     low_power_authentication_enforced, CmpaUpdateConfigData, CnsaLevel, IFRConfigAreaBase, IFRPage, LpWakePolicy,
     SecureBootLevel, XipImageProtect,
 };
-pub use ec_slimloader_mcxa::rom_api::{
-    flash_cfg_for_rom_api, flash_driver, ActualLifecycleState, Bricked, CanAdvanceTo, Develop, Develop2,
-    FailureAnalysis, FlashConfig, InField, InFieldLocked, NbootLifecycleState, NbootRootKeyUsage, OemFieldReturn,
-    FLASH_API_ERASE_KEY,
-};
+use embassy_mcxa::rom::{FlashError, NbootRootKeyUsage};
 use embassy_mcxa::{peripherals, Peri};
+
+use crate::{CanAdvanceTo, LifecycleState};
 
 /// Token produced by `verify_lifecycle_transition()'. Carries the verified target
 /// `NbootLifecycleState` at runtime. The type parameter `Next` is compile-time
@@ -504,12 +502,18 @@ pub enum CmpaWriteError {
     HashError,
     InvalidInput,
     InvalidImageSlot,
-    FlashError(FlashStatus),
+    FlashError(FlashError),
     FlashVerify {
-        status: FlashStatus,
+        status: FlashError,
         failed_address: u32,
         failed_data: u32,
     },
+}
+
+impl From<FlashError> for CmpaWriteError {
+    fn from(v: FlashError) -> Self {
+        Self::FlashError(v)
+    }
 }
 
 pub fn log_cmpa_write_error(e: CmpaWriteError) {
@@ -547,12 +551,18 @@ pub enum CfpaWriteError {
     LifecycleRegression,
     /// The device's actual lifecycle state in CFPA does not match the expected `From` state.
     LifecycleStateMismatch,
-    FlashError(FlashStatus),
+    FlashError(FlashError),
     FlashVerify {
-        status: FlashStatus,
+        status: FlashError,
         failed_address: u32,
         failed_data: u32,
     },
+}
+
+impl From<FlashError> for CfpaWriteError {
+    fn from(v: FlashError) -> Self {
+        Self::FlashError(v)
+    }
 }
 
 fn read_cfpa_page_for_update() -> Result<[u8; IFRPage::Cfpa.byte_len()], CfpaWriteError> {
@@ -601,82 +611,21 @@ fn read_cfpa_page_for_update() -> Result<[u8; IFRPage::Cfpa.byte_len()], CfpaWri
 }
 
 fn write_cfpa_page_to_scratch(page: &[u8; IFRPage::Cfpa.byte_len()]) -> Result<(), CfpaWriteError> {
-    let drv = flash_driver();
-    let mut cfg = flash_cfg_for_rom_api();
-
-    let s = drv.flash_init(&mut cfg);
-    if s != FlashStatus::Success {
-        error!("cfpa: flash_init failed");
-        return Err(CfpaWriteError::FlashError(s));
-    }
+    let mut drv = embassy_mcxa::rom::get().flash()?;
 
     // flash_erase_sector supports "flash or User IFR(IFR0)" per ROM API docs.
     // Start only needs to be phrase-aligned (16-byte); 0x11002000 qualifies.
     // 0x11002000 + 0x2000 - 1 = 0x110037FF, which is the last byte before NMPA at 0x11003800.
-    let s = drv.flash_erase_sector(
-        &mut cfg,
+    drv.erase_sector(
         IFRScratchAreaBase::Cfpa as u32,
         IFRWriteGeometry::ScratchSectorBytes.as_u32(),
-        FLASH_API_ERASE_KEY,
-    );
-    if s != FlashStatus::Success {
-        error!(
-            "cfpa: flash_erase_sector(scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            IFRWriteGeometry::ScratchSectorBytes.as_u32()
-        );
-        return Err(CfpaWriteError::FlashError(s));
-    }
-    let s = drv.ifr_verify_erase_sector(
-        &mut cfg,
+    )?;
+    drv.ifr_verify_erase_sector(
         IFRScratchAreaBase::Cfpa as u32,
         IFRWriteGeometry::ScratchSectorBytes.as_u32(),
-    );
-    if s != FlashStatus::Success {
-        error!(
-            "cfpa: ifr_verify_erase_sector(scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            IFRWriteGeometry::ScratchSectorBytes.as_u32()
-        );
-        return Err(CfpaWriteError::FlashError(s));
-    }
-
-    let s = drv.flash_program_phrase(
-        &mut cfg,
-        IFRScratchAreaBase::Cfpa as u32,
-        page.as_ptr(),
-        page.len() as u32,
-    );
-    if s != FlashStatus::Success {
-        error!(
-            "cfpa: flash_program_phrase(addr=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            page.len() as u32
-        );
-        return Err(CfpaWriteError::FlashError(s));
-    }
-
-    let mut failed_address = 0u32;
-    let mut failed_data = 0u32;
-    let s = drv.flash_verify_program(
-        &mut cfg,
-        IFRScratchAreaBase::Cfpa as u32,
-        page.len() as u32,
-        page.as_ptr(),
-        &mut failed_address,
-        &mut failed_data,
-    );
-    if s != FlashStatus::Success {
-        error!(
-            "cfpa: flash_verify_program failed @ 0x{:08x} (data=0x{:08x})",
-            failed_address, failed_data
-        );
-        return Err(CfpaWriteError::FlashVerify {
-            status: s,
-            failed_address,
-            failed_data,
-        });
-    }
+    )?;
+    drv.program_phrase(IFRScratchAreaBase::Cfpa as u32, page)?;
+    drv.verify_program(IFRScratchAreaBase::Cfpa as u32, page)?;
 
     Ok(())
 }
@@ -832,10 +781,10 @@ pub fn verify_lifecycle_transition<From, Next>(
     next: NbootLifecycleState,
 ) -> Result<LifecycleAdvanceToken<Next>, CfpaWriteError>
 where
-    From: CanAdvanceTo<Next> + ActualLifecycleState,
+    From: CanAdvanceTo<Next> + LifecycleState,
 {
     if let Some(current) = load_lifecycle_from_cfpa() {
-        if current != From::STATE {
+        if current != From::RUNTIME_VALUE {
             return Err(CfpaWriteError::LifecycleStateMismatch);
         }
         if !current.can_advance_to(next) {
@@ -845,21 +794,11 @@ where
     if next == NbootLifecycleState::Bricked {
         // Bricking the device is a special case that doesn't require CMPA policy to be valid, since the device will be unusable after this action regardless.
         //erase all internal (todo: external) flash except the sticky locked SBL region.
-        let drv = flash_driver();
-        let mut cfg = flash_cfg_for_rom_api();
-        let s = drv.flash_init(&mut cfg);
-
-        if s != FlashStatus::Success {
-            return Err(CfpaWriteError::FlashError(s));
-        }
+        let mut drv = embassy_mcxa::rom::get().flash()?;
 
         const APP_START: u32 = 0x10000; // BL ends just before 0x10000, so this is the first address of the app region.
         const ERASE_SIZE: u32 = 0x0020_0000 - APP_START; // Erase from 0x10000 to 0x200000 (2MB flash size) to cover the app region.
-        let s = drv.flash_erase_sector(&mut cfg, APP_START, ERASE_SIZE, FLASH_API_ERASE_KEY);
-
-        if s != FlashStatus::Success {
-            return Err(CfpaWriteError::FlashError(s));
-        }
+        drv.erase_sector(APP_START, ERASE_SIZE)?;
 
         return Ok(LifecycleAdvanceToken::new(next));
     }
@@ -976,117 +915,23 @@ pub fn write_cmpa_page_to_scratch(cmpa_page: &[u8; IFRPage::CmpaAll.byte_len()])
 
     let cfpa_page = build_cfpa_page_for_cmpa_update()?;
 
-    let drv = flash_driver();
-    let mut cfg = flash_cfg_for_rom_api();
-
-    let status = drv.flash_init(&mut cfg);
-    if status != FlashStatus::Success {
-        error!("cmpa: flash_init failed");
-        return Err(CmpaWriteError::FlashError(status));
-    }
+    let mut drv = embassy_mcxa::rom::get().flash()?;
 
     // Erase the full 8 KB IFR scratch sector, then verify it is blank.
     // Start only needs to be phrase-aligned (16-byte); 0x11002000 qualifies.
     // 0x11002000 + 0x2000 - 1 = 0x110037FF, which is the last byte before NMPA at 0x11003800.
-    let status = drv.flash_erase_sector(
-        &mut cfg,
+    drv.erase_sector(
         IFRScratchAreaBase::Cfpa as u32,
         IFRWriteGeometry::ScratchSectorBytes.as_u32(),
-        FLASH_API_ERASE_KEY,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_erase_sector(scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            IFRWriteGeometry::ScratchSectorBytes.as_u32()
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-    let status = drv.ifr_verify_erase_sector(
-        &mut cfg,
+    )?;
+    drv.ifr_verify_erase_sector(
         IFRScratchAreaBase::Cfpa as u32,
         IFRWriteGeometry::ScratchSectorBytes.as_u32(),
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: ifr_verify_erase_sector(scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            IFRWriteGeometry::ScratchSectorBytes.as_u32()
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let status = drv.flash_program_phrase(
-        &mut cfg,
-        IFRScratchAreaBase::Cfpa as u32,
-        cfpa_page.as_ptr(),
-        cfpa_page.len() as u32,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_program_phrase(cfpa_scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            cfpa_page.len() as u32
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let status = drv.flash_program_phrase(
-        &mut cfg,
-        IFRScratchAreaBase::Cmpa as u32,
-        cmpa_page.as_ptr(),
-        cmpa_page.len() as u32,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_program_phrase(cmpa_scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cmpa as u32,
-            cmpa_page.len() as u32
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let mut failed_address = 0u32;
-    let mut failed_data = 0u32;
-    let status = drv.flash_verify_program(
-        &mut cfg,
-        IFRScratchAreaBase::Cfpa as u32,
-        cfpa_page.len() as u32,
-        cfpa_page.as_ptr(),
-        &mut failed_address,
-        &mut failed_data,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_verify_program(cfpa_scratch) failed @ 0x{:08x} (data=0x{:08x})",
-            failed_address, failed_data
-        );
-        return Err(CmpaWriteError::FlashVerify {
-            status,
-            failed_address,
-            failed_data,
-        });
-    }
-
-    let status = drv.flash_verify_program(
-        &mut cfg,
-        IFRScratchAreaBase::Cmpa as u32,
-        cmpa_page.len() as u32,
-        cmpa_page.as_ptr(),
-        &mut failed_address,
-        &mut failed_data,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_verify_program(cmpa_scratch) failed @ 0x{:08x} (data=0x{:08x})",
-            failed_address, failed_data
-        );
-        return Err(CmpaWriteError::FlashVerify {
-            status,
-            failed_address,
-            failed_data,
-        });
-    }
+    )?;
+    drv.program_phrase(IFRScratchAreaBase::Cfpa as u32, &cfpa_page)?;
+    drv.program_phrase(IFRScratchAreaBase::Cmpa as u32, cmpa_page)?;
+    drv.verify_program(IFRScratchAreaBase::Cfpa as u32, &cfpa_page)?;
+    drv.verify_program(IFRScratchAreaBase::Cmpa as u32, cmpa_page)?;
 
     Ok(())
 }
@@ -1135,114 +980,20 @@ pub fn write_cmpa_core_page_to_scratch(cmpa_page: &[u8; IFRPage::Cmpa.byte_len()
 
     let cfpa_page = build_cfpa_page_for_cmpa_update()?;
 
-    let drv = flash_driver();
-    let mut cfg = flash_cfg_for_rom_api();
+    let mut drv = embassy_mcxa::rom::get().flash()?;
 
-    let status = drv.flash_init(&mut cfg);
-    if status != FlashStatus::Success {
-        error!("cmpa: flash_init failed");
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let status = drv.flash_erase_sector(
-        &mut cfg,
+    drv.erase_sector(
         IFRScratchAreaBase::Cfpa as u32,
         IFRWriteGeometry::ScratchSectorBytes.as_u32(),
-        FLASH_API_ERASE_KEY,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_erase_sector(scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            IFRWriteGeometry::ScratchSectorBytes.as_u32()
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-    let status = drv.ifr_verify_erase_sector(
-        &mut cfg,
+    )?;
+    drv.ifr_verify_erase_sector(
         IFRScratchAreaBase::Cfpa as u32,
         IFRWriteGeometry::ScratchSectorBytes.as_u32(),
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: ifr_verify_erase_sector(scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            IFRWriteGeometry::ScratchSectorBytes.as_u32()
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let status = drv.flash_program_phrase(
-        &mut cfg,
-        IFRScratchAreaBase::Cfpa as u32,
-        cfpa_page.as_ptr(),
-        cfpa_page.len() as u32,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_program_phrase(cfpa_scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cfpa as u32,
-            cfpa_page.len() as u32
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let status = drv.flash_program_phrase(
-        &mut cfg,
-        IFRScratchAreaBase::Cmpa as u32,
-        cmpa_page.as_ptr(),
-        cmpa_page.len() as u32,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_program_phrase(cmpa_scratch=0x{:08x}, len=0x{:x}) failed",
-            IFRScratchAreaBase::Cmpa as u32,
-            cmpa_page.len() as u32
-        );
-        return Err(CmpaWriteError::FlashError(status));
-    }
-
-    let mut failed_address = 0u32;
-    let mut failed_data = 0u32;
-    let status = drv.flash_verify_program(
-        &mut cfg,
-        IFRScratchAreaBase::Cfpa as u32,
-        cfpa_page.len() as u32,
-        cfpa_page.as_ptr(),
-        &mut failed_address,
-        &mut failed_data,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_verify_program(cfpa_scratch) failed @ 0x{:08x} (data=0x{:08x})",
-            failed_address, failed_data
-        );
-        return Err(CmpaWriteError::FlashVerify {
-            status,
-            failed_address,
-            failed_data,
-        });
-    }
-
-    let status = drv.flash_verify_program(
-        &mut cfg,
-        IFRScratchAreaBase::Cmpa as u32,
-        cmpa_page.len() as u32,
-        cmpa_page.as_ptr(),
-        &mut failed_address,
-        &mut failed_data,
-    );
-    if status != FlashStatus::Success {
-        error!(
-            "cmpa: flash_verify_program(cmpa_scratch) failed @ 0x{:08x} (data=0x{:08x})",
-            failed_address, failed_data
-        );
-        return Err(CmpaWriteError::FlashVerify {
-            status,
-            failed_address,
-            failed_data,
-        });
-    }
+    )?;
+    drv.program_phrase(IFRScratchAreaBase::Cfpa as u32, &cfpa_page)?;
+    drv.program_phrase(IFRScratchAreaBase::Cmpa as u32, cmpa_page)?;
+    drv.verify_program(IFRScratchAreaBase::Cfpa as u32, &cfpa_page)?;
+    drv.verify_program(IFRScratchAreaBase::Cmpa as u32, cmpa_page)?;
 
     Ok(())
 }
@@ -1553,7 +1304,7 @@ pub fn configure_rotkh_and_enable_secure_boot_policies_and_reset(
 /// The `From` and `Next` type parameters enforce compile-time validation of allowed transitions.
 pub fn advance_lifecycle_and_reset<From, Next>(next: NbootLifecycleState) -> Result<Infallible, CfpaWriteError>
 where
-    From: CanAdvanceTo<Next> + ActualLifecycleState,
+    From: CanAdvanceTo<Next> + LifecycleState,
 {
     let token = verify_lifecycle_transition::<From, Next>(next)?;
     cfpa_stage_lifecycle_advance_and_reset(token)

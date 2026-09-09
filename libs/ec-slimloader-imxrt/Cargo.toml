@@ -53,7 +53,7 @@ log = [
     "ec-slimloader-state/log",
 ]
 
-default = []
+default = ["defmt"]
 
 [dependencies]
 ec-slimloader = { path = "../ec-slimloader" }

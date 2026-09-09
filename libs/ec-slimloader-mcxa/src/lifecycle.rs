@@ -1,6 +1,7 @@
 use core::mem;
 
-use crate::rom_api::{NbootLifecycleDiscriminator, NbootLifecycleState, NbootRootKeyRevocation, NbootRootKeyUsage};
+use embassy_mcxa::rom::{NbootRootKeyRevocation, NbootRootKeyUsage};
+
 use crate::verification::zero_mask;
 
 // MCXA configuration flash layout (CFG vs SCRATCH)
@@ -740,4 +741,115 @@ pub fn load_dice_inc_nxp_field_cfg_from_cmpa() -> bool {
     cmpa_rotk_usage_word_checked()
         .map(|word| ((word >> 15) & 1) != 0)
         .unwrap_or(false)
+}
+
+// Lifecycle state codes (low-byte discriminators) and full CFPA LC_STATE values.
+// Per Table 18 (Life Cycle States): LC_STATE is a u32 like 0x9635_FC03.
+// Some call sites only carry the low-byte discriminator (e.g. 0x03 for Develop),
+// so we keep both representations.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NbootLifecycleDiscriminator {
+    Develop = 0x03,
+    Develop2 = 0x07,
+    InField = 0x0F,
+    InFieldLocked = 0xCF,
+    OemFieldReturn = 0x1F,
+    FailureAnalysis = 0x3F,
+    Bricked = 0x5A,
+}
+
+impl NbootLifecycleDiscriminator {
+    #[inline(always)]
+    pub const fn from_raw(raw: u8) -> Option<Self> {
+        match raw {
+            0x03 => Some(Self::Develop),
+            0x07 => Some(Self::Develop2),
+            0x0F => Some(Self::InField),
+            0xCF => Some(Self::InFieldLocked),
+            0x1F => Some(Self::OemFieldReturn),
+            0x3F => Some(Self::FailureAnalysis),
+            0x5A => Some(Self::Bricked),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn state(self) -> NbootLifecycleState {
+        match self {
+            Self::Develop => NbootLifecycleState::Develop,
+            Self::Develop2 => NbootLifecycleState::Develop2,
+            Self::InField => NbootLifecycleState::InField,
+            Self::InFieldLocked => NbootLifecycleState::InFieldLocked,
+            Self::OemFieldReturn => NbootLifecycleState::OemFieldReturn,
+            Self::FailureAnalysis => NbootLifecycleState::FailureAnalysis,
+            Self::Bricked => NbootLifecycleState::Bricked,
+        }
+    }
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NbootLifecycleState {
+    Develop = 0x9635_FC03,
+    Develop2 = 0x9635_F807,
+    InField = 0x9635_F00F,
+    InFieldLocked = 0x9635_30CF,
+    OemFieldReturn = 0x9635_E01F,
+    FailureAnalysis = 0x9635_C03F,
+    Bricked = 0x9635_A55A,
+}
+impl TryFrom<u32> for NbootLifecycleState {
+    type Error = ();
+
+    fn try_from(raw: u32) -> Result<Self, Self::Error> {
+        match raw {
+            0x9635_FC03 => Ok(Self::Develop),
+            0x9635_F807 => Ok(Self::Develop2),
+            0x9635_F00F => Ok(Self::InField),
+            0x9635_30CF => Ok(Self::InFieldLocked),
+            0x9635_E01F => Ok(Self::OemFieldReturn),
+            0x9635_C03F => Ok(Self::FailureAnalysis),
+            0x9635_A55A => Ok(Self::Bricked),
+            _ => Err(()),
+        }
+    }
+}
+
+impl NbootLifecycleState {
+    const fn discriminator(self) -> NbootLifecycleDiscriminator {
+        match self {
+            Self::Develop => NbootLifecycleDiscriminator::Develop,
+            Self::Develop2 => NbootLifecycleDiscriminator::Develop2,
+            Self::InField => NbootLifecycleDiscriminator::InField,
+            Self::InFieldLocked => NbootLifecycleDiscriminator::InFieldLocked,
+            Self::OemFieldReturn => NbootLifecycleDiscriminator::OemFieldReturn,
+            Self::FailureAnalysis => NbootLifecycleDiscriminator::FailureAnalysis,
+            Self::Bricked => NbootLifecycleDiscriminator::Bricked,
+        }
+    }
+
+    pub const fn nboot_soc_lifecycle(self) -> u32 {
+        let discriminator = self.discriminator() as u16;
+        (((!discriminator) as u32) << 16) | (discriminator as u32)
+    }
+
+    /// Returns a monotonic rank for forward-only progression checks.
+    /// Higher rank = further along the lifecycle.
+    const fn rank(self) -> u8 {
+        match self {
+            Self::Develop => 0,
+            Self::Develop2 => 1,
+            Self::InField => 2,
+            Self::InFieldLocked => 2, // Same rank as InField since locking is not a lifecycle progression.
+            Self::OemFieldReturn => 3,
+            Self::FailureAnalysis => 4,
+            Self::Bricked => 5,
+        }
+    }
+
+    /// Returns true if advancing to `next` is a valid forward progression (no regressions, no same state).
+    pub const fn can_advance_to(self, next: Self) -> bool {
+        next.rank() >= self.rank() && (self as u32 != next as u32)
+    }
 }
