@@ -23,15 +23,6 @@ use static_cell::StaticCell;
 
 use crate::{header, jump, verification};
 
-macro_rules! board_info {
-    ($($arg:tt)*) => {
-        #[cfg(feature = "verification-logging")]
-        {
-            defmt_or_log::info!($($arg)*);
-        }
-    };
-}
-
 /// External flash total size (2 MB).
 const EXTERNAL_FLASH_SIZE: usize = 0x0020_0000;
 const READ_ALIGNMENT: usize = 1;
@@ -376,7 +367,7 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 
     #[allow(clippy::panic)]
     async fn init<const JOURNAL_BUFFER_SIZE: usize>(config: Self::Config) -> Self {
-        board_info!("Initializing MCXA slimloader backend");
+        defmt_or_log::info!("Initializing MCXA slimloader backend");
 
         static EXT_FLASH: StaticCell<PartitionManager<ExternalStorage, NoopRawMutex>> = StaticCell::new();
 
@@ -521,14 +512,14 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
                 // JEDEC/vendor id: proves the MCU can actually reach the external NOR.
                 flexspi_ip_command(0, Command::ReadId as u8, 3);
                 let jedec = pac::FLEXSPI0.rfdr(0).read().rxdata();
-                board_info!(
+                defmt_or_log::info!(
                     "flexspi-probe: JEDEC id = {:#010x} (MX25U low byte should be 0xc2)",
                     jedec
                 );
                 // Boot-journal bytes at external offset 0x1000 (read-only).
                 let mut j = [0u8; 16];
                 let _ = external.read(0x1000, &mut j).await;
-                board_info!(
+                defmt_or_log::info!(
                 "flexspi-probe: journal @0x1000 = [{:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}]",
                 j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7]
             );
@@ -559,12 +550,10 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
                 let initial_state = ec_slimloader_state::state::State::new(Status::Confirmed, Slot::S0, Slot::S1);
                 match journal.set::<JOURNAL_BUFFER_SIZE>(&initial_state).await {
                     Ok(()) => {
-                        #[cfg(feature = "verification-logging")]
-                        board_info!("Initialized boot journal: target=S0 backup=S1");
+                        defmt_or_log::info!("Initialized boot journal: target=S0 backup=S1");
                     }
                     Err(_e) => {
-                        #[cfg(feature = "verification-logging")]
-                        board_info!("Boot-journal initialization write failed");
+                        defmt_or_log::info!("Boot-journal initialization write failed");
                     }
                 }
             }
@@ -620,10 +609,8 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             }
 
             match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
-                Ok(s) if s == crate::rom_api::NbootBoolValue::True as u32 => unsafe {
-                    jump::jump_to_image(jump_address)
-                },
-                Ok(_) => ec_slimloader::BootError::Authenticate,
+                Ok(true) => unsafe { jump::jump_to_image(jump_address) },
+                Ok(false) => ec_slimloader::BootError::Authenticate,
                 Err(e) => e,
             }
         }

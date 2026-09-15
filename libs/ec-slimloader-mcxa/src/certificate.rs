@@ -5,24 +5,6 @@ use core::mem::size_of;
 
 use embassy_mcxa::{peripherals, Peri};
 
-macro_rules! cert_trace {
-    ($($arg:tt)*) => {
-        #[cfg(feature = "certificate-logging")]
-        {
-            defmt_or_log::trace!($($arg)*);
-        }
-    };
-}
-
-macro_rules! cert_error {
-    ($($arg:tt)*) => {
-        #[cfg(feature = "certificate-logging")]
-        {
-            defmt_or_log::error!($($arg)*);
-        }
-    };
-}
-
 // 384-bit Root Key Table Hash (SHA-384 digest of RoTK public key X||Y)
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Rkth([u8; 48]);
@@ -841,7 +823,7 @@ pub unsafe fn parse_ahab_container(
     if checked_end(sigblk_offset + sig_offset, sig_len)? > total {
         return Err(CertError::Bounds);
     }
-    cert_trace!(
+    defmt_or_log::trace!(
         "Parsed AHAB container: images={}, srk_array_len={}, cert_len={}, sig_len={}",
         images_len,
         srk_array_len,
@@ -984,7 +966,7 @@ pub unsafe fn parse_srk_array<'a>(
 
     let mldsa_records = core::slice::from_raw_parts(mldsa_rec_base, mldsa_rec_count);
     let mldsa_raw_table = core::slice::from_raw_parts(mldsa_tbl_ptr, mldsa_tbl_total_size);
-    cert_trace!(
+    defmt_or_log::trace!(
         "Parsed SRK array: ECDSA records={}, ML-DSA records={}",
         ecdsa_rec_count,
         mldsa_rec_count
@@ -1025,7 +1007,7 @@ pub fn derive_image_rkth_pair<'d>(
 
                     let result = sha512_rkth_48(peri.reborrow(), table_bytes).map(Rkth);
                     if result.is_none() {
-                        cert_error!("SHA-512 unavailable for ECDSA RKTH");
+                        defmt_or_log::error!("SHA-512 unavailable for ECDSA RKTH");
                     }
                     result
                 };
@@ -1039,17 +1021,17 @@ pub fn derive_image_rkth_pair<'d>(
 
                     let result = sha512_rkth_48(peri.reborrow(), table_bytes).map(Rkth);
                     if result.is_none() {
-                        cert_error!("SHA-512 unavailable for PQC RKTH");
+                        defmt_or_log::error!("SHA-512 unavailable for PQC RKTH");
                     }
                     result
                 };
-                cert_trace!("Derived both ECDSA and ML-DSA RKTH values");
+                defmt_or_log::trace!("Derived both ECDSA and ML-DSA RKTH values");
                 return (ecdsa_rkth, mldsa_rkth);
             } else {
-                cert_error!("Failed to parse SRK array");
+                defmt_or_log::error!("Failed to parse SRK array");
             }
         } else {
-            cert_error!("Failed to parse AHAB container");
+            defmt_or_log::error!("Failed to parse AHAB container");
         }
     }
     (None, None)

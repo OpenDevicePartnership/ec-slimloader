@@ -21,19 +21,17 @@ TARGET="thumbv8m.main-none-eabihf"
 BUILD_EXTRA=""
 
 FEATURE_COMBINATIONS=(
-  "mimxrt633s"
-  "mimxrt633s,defmt"
-  "mimxrt633s,log"
-  "mimxrt633s,non-secure"
-  "mimxrt685s"
-  "mimxrt685s,defmt"
-  "mimxrt685s,log"
-  "mimxrt685s,non-secure"
+  "mcxa5xx,mimxrt633s,defmt"
+  "mcxa5xx,mimxrt633s,log"
+  "mcxa5xx,mimxrt633s,defmt,non-secure"
+  "mcxa5xx,mimxrt685s,defmt"
+  "mcxa5xx,mimxrt685s,log"
+  "mcxa5xx,mimxrt685s,defmt,non-secure"
 )
-cargo batch \
+DEFMT_LOG="off" cargo batch \
       $(for features in "${FEATURE_COMBINATIONS[@]}"; do
-	echo "--- build --release --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features "
+	echo "--- build --manifest-path Cargo.toml --target thumbv8m.main-none-eabihf --features $features --no-default-features"
 	done) $BUILD_EXTRA
 
-cargo test --locked  --workspace --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt633s" --exclude ec-slimloader-mcxa
-cargo test --locked  --workspace --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt685s" --exclude ec-slimloader-mcxa
+cargo test --locked --workspace --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt633s" --exclude ec-slimloader-mcxa --exclude mcxa-security-provisioning --no-default-features
+cargo test --locked --workspace --manifest-path Cargo.toml --target x86_64-unknown-linux-gnu --features "mimxrt685s" --exclude ec-slimloader-mcxa --exclude mcxa-security-provisioning --no-default-features

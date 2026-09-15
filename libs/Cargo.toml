@@ -6,6 +6,7 @@ members = [
     "ec-slimloader-state",
     "ec-slimloader-mcxa",
     "imxrt-rom",
+    "mcxa-security-provisioning"
 ]
 
 [workspace.package]
@@ -18,12 +19,12 @@ repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
 manual_let_else = "deny"
 
 [workspace.dependencies]
-defmt = "0.3.7"
-defmt-or-log = { version = "0.2.2", default-features = false }
-log = "0.4"
+defmt = "1.1.1"
+defmt-or-log = { version = "0.2.3", default-features = false }
+log = "0.4.34"
 
 cortex-m = { version = "0.7.7" }
-panic-probe = "0.3"
+panic-probe = "1.0.0"
 arbitrary = "1.4"
 crc = "3.2"
 num_enum = { version = "0.7", default-features = false }
@@ -36,18 +37,10 @@ partition-manager-macros = { git = "https://github.com/OpenDevicePartnership/emb
 embassy-sync = "0.8.0"
 embassy-time = "0.5.0"
 embassy-futures = "0.1.0"
-embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0", default-features = false }
-embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = ["mimxrt685s"] }
+embassy-mcxa = { git = "https://github.com/embassy-rs/embassy", rev = "21efdacdcdd16d7f263427d4807f64d414b03193", default-features = false }
+embassy-imxrt = { git = "https://github.com/OpenDevicePartnership/embassy-imxrt.git", default-features = false, features = [
+    "mimxrt685s",
+] }
 
-# Redirect crates.io embassy deps (e.g. pulled in by embassy-imxrt) to the same git rev.
 [patch.crates-io]
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-executor-macros = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-hal-internal = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-embassy-time-queue-utils = { git = "https://github.com/embassy-rs/embassy", rev = "f21d63db2d104a3b4c070408e529c109a64e65b0" }
-rustc_version = { path = "../examples/mcxa-577app/patches/rustc_version" }
+embassy-time-driver = { git = "https://github.com/embassy-rs/embassy", rev = "21efdacdcdd16d7f263427d4807f64d414b03193" }

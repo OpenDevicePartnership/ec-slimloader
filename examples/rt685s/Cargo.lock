@@ -366,7 +366,7 @@ dependencies = [
 name = "ec-slimloader"
 version = "0.2.0"
 dependencies = [
- "defmt 0.3.100",
+ "defmt 1.1.1",
  "defmt-or-log",
  "ec-slimloader-state",
  "embedded-storage-async",
@@ -377,7 +377,7 @@ name = "ec-slimloader-imxrt"
 version = "0.2.0"
 dependencies = [
  "cortex-m",
- "defmt 0.3.100",
+ "defmt 1.1.1",
  "defmt-or-log",
  "ec-slimloader",
  "ec-slimloader-state",
@@ -398,7 +398,7 @@ name = "ec-slimloader-state"
 version = "0.2.0"
 dependencies = [
  "crc",
- "defmt 0.3.100",
+ "defmt 1.1.1",
  "defmt-or-log",
  "embedded-storage-async",
  "num_enum",
@@ -852,7 +852,7 @@ name = "imxrt-rom"
 version = "0.2.0"
 dependencies = [
  "cortex-m",
- "defmt 0.3.100",
+ "defmt 1.1.1",
  "defmt-or-log",
  "device-driver",
  "embassy-imxrt",

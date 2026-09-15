@@ -1,0 +1,28 @@
+[package]
+name = "mcxa-security-provisioning"
+version = "0.2.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/OpenDevicePartnership/ec-slimloader"
+
+[dependencies]
+cortex-m = { version = "0.7.7" }
+defmt = { version = "0.3", optional = true }
+defmt-or-log = { version = "0.2.3" }
+log = { version = "0.4", optional = true }
+embedded-storage-async = "0.4.1"
+embassy-futures = "0.1.2"
+embassy-mcxa = { workspace = true, features = ["mcxa5xx"] }
+embassy-sync = "0.8.0"
+partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services", tag = "v0.1.0", default-features = false }
+partition-manager-macros = { git = "https://github.com/OpenDevicePartnership/embedded-services", tag = "v0.1.0" }
+static_cell = "2.1"
+
+# Re-uses the MCXA lifecycle/IFR types defined in ec-slimloader-mcxa
+ec-slimloader-mcxa = { path = "../ec-slimloader-mcxa", default-features = false, features = ["mcxa5xx"] }
+
+[features]
+defmt = ["dep:defmt", "defmt-or-log/defmt", "ec-slimloader-mcxa/defmt", "embassy-mcxa/defmt"]
+log = ["dep:log", "defmt-or-log/log", "ec-slimloader-mcxa/log"]
+mcxa5xx = ["embassy-mcxa/mcxa5xx", "ec-slimloader-mcxa/mcxa5xx"]
+mcxa5xxevk = ["ec-slimloader-mcxa/mcxa5xxevk"]

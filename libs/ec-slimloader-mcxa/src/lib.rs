@@ -6,7 +6,6 @@ pub mod error;
 pub mod header;
 pub mod jump;
 pub mod lifecycle;
-pub mod rom_api;
 pub mod verification;
 
 pub use board::{ExternalStorage, Mcxa, McxaConfig, Partitions, SlotPartition, StatePartition};

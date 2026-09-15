@@ -2,16 +2,14 @@
 name = "mcxa-577app-bootloader"
 version = "0.1.0"
 edition = "2021"
-license.workspace = true
+license = "MIT"
 
 [features]
-default = ["defmt", "certificate-logging", "verification-logging", "mcxa"]
+default = ["defmt", "mcxa"]
 defmt = ["dep:defmt", "dep:defmt-or-log", "dep:defmt-rtt", "defmt-or-log/defmt"]
 log = ["dep:defmt-or-log", "defmt-or-log/log"]
 mcxa = ["ec-slimloader-mcxa/mcxa5xx"]
 mcxa5xxevk = ["ec-slimloader-mcxa/mcxa5xxevk"]
-certificate-logging = ["ec-slimloader-mcxa/certificate-logging"]
-verification-logging = ["ec-slimloader-mcxa/verification-logging"]
 
 [[bin]]
 name = "bootloader"
@@ -33,7 +31,7 @@ embassy-sync = { workspace = true }
 ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["mcxa5xx", "defmt"] }
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
 ec-slimloader-state = { path = "../../../libs/ec-slimloader-state", default-features = false }
-mcxa-security-provisioning = { path = "../../../mcxa-security-provisioning", default-features = false, features = ["defmt"] }
+mcxa-security-provisioning = { path = "../../../libs/mcxa-security-provisioning", default-features = false, features = ["defmt"] }
 
 embassy-mcxa = { workspace = true, features = ["rt", "mcxa5xx"] }
 embassy-executor = { workspace = true, features = ["platform-cortex-m", "executor-thread"] }

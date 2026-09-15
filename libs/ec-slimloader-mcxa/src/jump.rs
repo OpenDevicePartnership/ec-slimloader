@@ -1,15 +1,3 @@
-#[cfg(any(feature = "defmt", feature = "log"))]
-macro_rules! jump_info {
-    ($($arg:tt)*) => {
-        defmt_or_log::info!($($arg)*);
-    };
-}
-
-#[cfg(not(any(feature = "defmt", feature = "log")))]
-macro_rules! jump_info {
-    ($($arg:tt)*) => {};
-}
-
 /// # Safety
 ///
 /// `entry` must be a valid pointer to a loaded, authenticated image in flash.
@@ -39,6 +27,6 @@ pub unsafe fn jump_to_image(entry: *const u32) -> ! {
     p.SCB.vtor.write(entry as u32);
 
     // Load MSP/reset from the vector table and transfer control using the standard Cortex-M helper.
-    jump_info!("jump: bootload to 0x{:08X}", entry as u32);
+    defmt_or_log::info!("jump: bootload to 0x{:08X}", entry as u32);
     cortex_m::asm::bootload(entry)
 }
