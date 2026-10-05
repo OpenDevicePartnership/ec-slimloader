@@ -20,8 +20,11 @@ cfg_select! {
 }
 
 pub fn test_implementations() {
-    assert_eq!(protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAA, || {}), Some(()));
-    assert_eq!(protected_if::<0xAAAAAAAA, _, _, _>(|| 0, || {}), None);
+    assert_eq!(protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAA, || {}), Ok(()));
+    assert_eq!(
+        protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAB, || {}),
+        Err(0xAAAAAAAB)
+    );
 }
 
 #[cfg(test)]

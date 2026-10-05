@@ -459,6 +459,7 @@ dependencies = [
  "ec-slimloader-state",
  "embedded-storage-async",
  "log",
+ "num_enum",
 ]
 
 [[package]]

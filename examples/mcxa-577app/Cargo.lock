@@ -316,6 +316,7 @@ dependencies = [
  "defmt-or-log",
  "ec-slimloader-state",
  "embedded-storage-async",
+ "num_enum",
 ]
 
 [[package]]

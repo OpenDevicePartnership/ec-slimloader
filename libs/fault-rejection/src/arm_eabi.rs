@@ -1,8 +1,9 @@
 use core::mem::ManuallyDrop;
 
-#[must_use]
-#[inline(always)]
-pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(expression: E, body: B) -> Option<R> {
+pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(
+    expression: E,
+    body: B,
+) -> Result<R, u32> {
     use core::mem::{ManuallyDrop, MaybeUninit};
 
     // We're going to be handing the callbacks to the trampoline through a pointer
@@ -11,7 +12,7 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(ex
     let mut body = ManuallyDrop::new(body);
 
     let mut result = MaybeUninit::uninit();
-    let mut branch_taken = 0;
+    let mut expression_value = 0;
 
     unsafe {
         core::arch::asm!(
@@ -39,7 +40,7 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(ex
             exp = in(reg) &mut expression as *mut _,
             body = in(reg) &mut body as *mut _,
             res = in(reg) &mut result as *mut _,
-            expv = in(reg) &mut branch_taken as *mut _,
+            expv = in(reg) &mut expression_value as *mut _,
             true = const TRUE,
             false = const !TRUE,
             out("r0") _,
@@ -50,10 +51,10 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(ex
         )
     }
 
-    if branch_taken != 0 {
-        Some(unsafe { result.assume_init() })
+    if expression_value == TRUE {
+        Ok(unsafe { result.assume_init() })
     } else {
-        None
+        Err(expression_value)
     }
 }
 
