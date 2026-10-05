@@ -495,6 +495,7 @@ dependencies = [
  "embassy-mcxa",
  "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embedded-storage-async",
+ "fault-rejection",
  "heapless 0.8.0",
  "log",
  "mcxa-ifr",
@@ -908,6 +909,10 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "fault-rejection"
+version = "0.2.0"
 
 [[package]]
 name = "find-msvc-tools"
