@@ -74,7 +74,7 @@ fn load_nboot_auth_parms_from_ifr(ifr: &IFR) -> Result<NbootImgAuthParms, BootEr
 pub fn verify_authenticity<'d>(
     mut peri: Peri<'d, peripherals::SGI0>,
     image_base: *const u8,
-    dev_mode: bool,
+    dev_mode: impl FnOnce() -> u32,
 ) -> Result<NbootBoolValue, BootError> {
     let ifr = unsafe { mcxa_ifr::IFR::current() };
 
@@ -83,33 +83,30 @@ pub fn verify_authenticity<'d>(
     defmt_or_log::trace!("Initializing NBOOT context");
     let mut n_boot_api = embassy_mcxa::rom::get().nboot().map_err(|_| BootError::Authenticate)?;
 
-    let result = protected_if::<{ true as u32 }, Result<(), BootError>, _, _>(
-        || dev_mode as u32,
-        || {
-            // In dev mode, we're going to lie to nboot and derive the rkth's ourselves so they're always correct
-            // This makes the provisioning process easier. Once no longer in dev mode, this branch is not taken and
-            // only the flashed keys are used
+    let result = protected_if::<{ true as u32 }, Result<(), BootError>, _, _>(dev_mode, || {
+        // In dev mode, we're going to lie to nboot and derive the rkth's ourselves so they're always correct
+        // This makes the provisioning process easier. Once no longer in dev mode, this branch is not taken and
+        // only the flashed keys are used
 
-            const MAX_FLASH_SLOT_SIZE: u32 = 2 * 1024 * 1024; // 2MB
-            let image_header =
-                unsafe { mcxa_security_provisioning::header::ImageHeader::from_ptr(image_base, MAX_FLASH_SLOT_SIZE) }
-                    .map_err(|_| BootError::Integrity)?;
+        const MAX_FLASH_SLOT_SIZE: u32 = 2 * 1024 * 1024; // 2MB
+        let image_header =
+            unsafe { mcxa_security_provisioning::header::ImageHeader::from_ptr(image_base, MAX_FLASH_SLOT_SIZE) }
+                .map_err(|_| BootError::Integrity)?;
 
-            // Parse AHAB container once and derive both RKTH values
-            let (image_rkth, pqc_rkth) = derive_image_rkth_pair(
-                peri.reborrow(),
-                image_base,
-                image_header.extended_header_offset(),
-                image_header.image_length(),
-            )
-            .map_err(|_| BootError::Hash)?;
+        // Parse AHAB container once and derive both RKTH values
+        let (image_rkth, pqc_rkth) = derive_image_rkth_pair(
+            peri.reborrow(),
+            image_base,
+            image_header.extended_header_offset(),
+            image_header.image_length(),
+        )
+        .map_err(|_| BootError::Hash)?;
 
-            parms.soc_rot_nvm.soc_rkh.copy_from_slice(&image_rkth.as_words());
-            parms.soc_rot_nvm.soc_rkh_1.copy_from_slice(&pqc_rkth.as_words());
+        parms.soc_rot_nvm.soc_rkh.copy_from_slice(&image_rkth.as_words());
+        parms.soc_rot_nvm.soc_rkh_1.copy_from_slice(&pqc_rkth.as_words());
 
-            Ok(())
-        },
-    );
+        Ok(())
+    });
 
     match result {
         Ok(if_result) => if_result?,

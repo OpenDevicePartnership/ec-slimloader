@@ -638,7 +638,8 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             }
 
             let Err(if_result) = protected_if::<{ NbootBoolValue::True as u32 }, _, _, _>(
-                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, Self::dev_mode()) {
+                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, || Self::dev_mode() as u32)
+                {
                     Ok(result) => result as u32,
                     Err(error) => error as u32, // Error has no overlap in value with Nboot bool, so this is safe to do
                 },

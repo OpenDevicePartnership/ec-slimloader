@@ -25,7 +25,7 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(
             "mov r0, {exp}", // Load arg 0, pointer to the fnonce
             "mov r1, {expv}", // Load arg 1, pointer to the out parameter
             "bl {exp_tramp}", // Call the trampoline, which will execute th fnonce
-            
+
             // The returned value is now in [expv]. We must test if it's not 0
             // If it's not, we execute the body
             "movs r0, 1", // Clear the zero flag, so a skipped cmp cannot trigger the beq
@@ -36,7 +36,7 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(
             "movw r3, #:lower16:{true}", // Load the true value
             "movt r3, #:upper16:{true}",
             "cmp r0, r3", // Compare the loaded value with the loaded 'true' value
-            
+
             "beq 2f", // If the compare set the Z flag, we jump to the body. If the compare was skipped, Z is not set and we don't take the branch
             "b 3f", // If the beq was not taken or skipped, we branch to the exit
             "udf 0", // If the b was skipped, we crash the CPU
