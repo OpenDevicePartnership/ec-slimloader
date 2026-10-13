@@ -38,7 +38,7 @@ struct StateWithAddr {
     address: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Cache {
     /// A copy of the last valid [State] on-disk.
     last_valid_state: Option<StateWithAddr>,

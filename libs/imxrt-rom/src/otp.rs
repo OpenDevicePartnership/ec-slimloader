@@ -2,7 +2,7 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::api::{api_table, KbStatus};
+use crate::api::{KbStatus, api_table};
 
 /// Whether the Otp driver has been initialized.
 ///

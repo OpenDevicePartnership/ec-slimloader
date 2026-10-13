@@ -7,23 +7,13 @@ use embassy_mcxa::{peripherals, Peri};
 
 // 384-bit Root Key Table Hash (SHA-384 digest of RoTK public key X||Y)
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(C, align(4))]
 pub struct Rkth([u8; 48]);
 
 impl Rkth {
-    pub fn as_be_words(&self) -> [u32; 12] {
-        let mut w = [0u32; 12];
-        for (i, chunk) in self.0.as_chunks::<4>().0.iter().enumerate() {
-            w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        }
-        w
-    }
-
-    pub fn as_le_words(&self) -> [u32; 12] {
-        let mut w = [0u32; 12];
-        for (i, chunk) in self.0.as_chunks::<4>().0.iter().enumerate() {
-            w[i] = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        }
-        w
+    pub fn as_words(self) -> [u32; 12] {
+        // Safety: Self has the proper align to be able to do this
+        unsafe { core::mem::transmute(self.0) }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -31,7 +21,7 @@ impl Rkth {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CertError {
     TooLarge,
     Magic,
@@ -49,10 +39,10 @@ pub enum CertError {
 
 /// Minimal parsed view to feed ROM authentication
 pub struct AhabParsed {
-    pub container: *const AhabContainerHeaderRaw,
+    pub container: AhabContainerHeaderRaw,
     pub images: *const AhabImageEntryRaw,
     pub images_count: usize,
-    pub sigblk: *const AhabSignatureBlockRaw,
+    pub sigblk: AhabSignatureBlockRaw,
     pub srk_array_ptr: *const u8,
     pub srk_array_len: usize,
     pub cert_ptr: *const u8,
@@ -96,6 +86,7 @@ fn sha512_rkth_48(peri: Peri<'_, peripherals::SGI0>, input: &[u8]) -> Option<[u8
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct AhabContainerHeaderRaw {
     // Word 0: Tag (31-24), Length (23-8), Version (7-0)
     pub word0: u32, // Tag(31-24) | Length(23-8) | Version(7-0)
@@ -217,6 +208,7 @@ impl AhabImageEntryRaw {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct AhabSignatureBlockRaw {
     // Word 0: Tag (31-24), Length (23-8), Version (7-0)
     pub word0: u32, // Tag(31-24) | Length(23-8) | Version(7-0)
@@ -306,6 +298,7 @@ impl AhabSignatureBlockRaw {
 // Keys must match signing key in algorithm and key length.
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct AhabSrkArrayHeaderRaw {
     // Word 0: Tag (31-24), Length (23-8), Version (7-0)
     pub word0: u32, // Tag(31-24) | Length(23-8) | Version(7-0)
@@ -550,6 +543,7 @@ impl AhabSrkDataHeaderRaw {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct AhabSignatureHeaderRaw {
     // Word 0: Tag (31-24), Length (23-8), Version (7-0)
     pub word0: u32, // Tag(31-24) | Length(23-8) | Version(7-0)
@@ -602,6 +596,7 @@ impl AhabSignatureHeaderRaw {
 
 // Certificate format per Tables 168-169
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct AhabCertificateHeaderRaw {
     // Word 0: Tag (31-24), Length (23-8), Version (7-0)
     pub word0: u32, // Tag(31-24) | Length(23-8) | Version(7-0)
@@ -690,22 +685,22 @@ pub unsafe fn parse_ahab_container(
     if header_end > image_len as usize {
         return Err(CertError::Bounds);
     }
-    let start = base.add(start_offset);
+    let start = unsafe { base.add(start_offset) };
 
     if !is_aligned_4(start) {
         return Err(CertError::Align);
     }
 
-    let ch = start as *const AhabContainerHeaderRaw;
+    let ch = unsafe { *start.cast::<AhabContainerHeaderRaw>() };
 
-    if (*ch).tag() != 0x87 {
+    if ch.tag() != 0x87 {
         return Err(CertError::Tag);
     }
 
-    if (*ch).version() != 0x02 {
+    if ch.version() != 0x02 {
         return Err(CertError::Version);
     }
-    let total = (*ch).length() as usize;
+    let total = ch.length() as usize;
 
     let container_end = checked_end(start_offset, total)?;
     if total == 0 || container_end > image_len as usize {
@@ -713,16 +708,16 @@ pub unsafe fn parse_ahab_container(
     }
 
     // Image array begins after header; calculate length from sigblk_offset
-    let image_array_start = start.add(size_of::<AhabContainerHeaderRaw>());
+    let image_array_start = unsafe { start.add(size_of::<AhabContainerHeaderRaw>()) };
     let image_entry_size = size_of::<AhabImageEntryRaw>();
-    let sigblk_offset = (*ch).signature_block_offset() as usize;
+    let sigblk_offset = ch.signature_block_offset() as usize;
     if sigblk_offset < size_of::<AhabContainerHeaderRaw>() {
         return Err(CertError::Bounds);
     }
     if checked_end(sigblk_offset, size_of::<AhabSignatureBlockRaw>())? > total {
         return Err(CertError::Bounds);
     }
-    let images_len = (*ch).image_count() as usize;
+    let images_len = ch.image_count() as usize;
     if images_len == 0 || images_len > 3 {
         return Err(CertError::Bounds); // We want at least one executable image, AHAB supports up to 3 images.
     }
@@ -738,36 +733,36 @@ pub unsafe fn parse_ahab_container(
     let images_ptr = image_array_start as *const AhabImageEntryRaw;
 
     // Signature block
-    let sigblk_ptr = start.add(sigblk_offset);
+    let sigblk_ptr = unsafe { start.add(sigblk_offset) };
 
     if !is_aligned_4(sigblk_ptr) {
         return Err(CertError::Align);
     }
-    let sigblk = sigblk_ptr as *const AhabSignatureBlockRaw;
+    let sigblk = unsafe { *sigblk_ptr.cast::<AhabSignatureBlockRaw>() };
 
-    if (*sigblk).tag() != 0x90 || (*sigblk).version() != 0x01 {
+    if sigblk.tag() != 0x90 || sigblk.version() != 0x01 {
         return Err(CertError::Tag);
     }
 
     // SRK array raw slice
-    let srk_array_offset = (*sigblk).srk_array_offset() as usize;
+    let srk_array_offset = sigblk.srk_array_offset() as usize;
     if checked_end(sigblk_offset, srk_array_offset)? > total {
         return Err(CertError::Bounds);
     }
     if checked_end(sigblk_offset + srk_array_offset, size_of::<AhabSrkArrayHeaderRaw>())? > total {
         return Err(CertError::Bounds);
     }
-    let srk_array_ptr = sigblk_ptr.add(srk_array_offset);
+    let srk_array_ptr = unsafe { sigblk_ptr.add(srk_array_offset) };
 
     if !is_aligned_4(srk_array_ptr) {
         return Err(CertError::Align);
     }
     // Method 1: Use SRK array header's own length field
-    let srk_hdr = srk_array_ptr as *const AhabSrkArrayHeaderRaw;
-    let srk_header_len = (*srk_hdr).length() as usize;
+    let srk_hdr = unsafe { *srk_array_ptr.cast::<AhabSrkArrayHeaderRaw>() };
+    let srk_header_len = srk_hdr.length() as usize;
 
     // Method 2: Calculate from offsets (signature_offset - srk_array_offset)
-    let sig_offset = (*sigblk).signature_offset() as usize;
+    let sig_offset = sigblk.signature_offset() as usize;
     if checked_end(sigblk_offset, sig_offset)? > total {
         return Err(CertError::Bounds);
     }
@@ -778,28 +773,28 @@ pub unsafe fn parse_ahab_container(
 
     // Certificate raw slice
     //Note that certificate may be absent (SRK-only mode), it is optional.
-    let (cert_ptr, cert_len) = if (*sigblk).cert_offset() == 0 {
+    let (cert_ptr, cert_len) = if sigblk.cert_offset() == 0 {
         // SRK-only mode: no certificate present
         (core::ptr::null(), 0)
     } else {
-        let cert_offset = (*sigblk).cert_offset() as usize;
+        let cert_offset = sigblk.cert_offset() as usize;
         if checked_end(sigblk_offset, cert_offset)? > total {
             return Err(CertError::Bounds);
         }
         if checked_end(sigblk_offset + cert_offset, size_of::<AhabCertificateHeaderRaw>())? > total {
             return Err(CertError::Bounds);
         }
-        let cert_ptr = sigblk_ptr.add(cert_offset);
+        let cert_ptr = unsafe { sigblk_ptr.add(cert_offset) };
         if !is_aligned_4(cert_ptr) {
             return Err(CertError::Align);
         }
         // Read certificate header to get its total length
-        let cert_hdr = cert_ptr as *const AhabCertificateHeaderRaw;
+        let cert_hdr = unsafe { *cert_ptr.cast::<AhabCertificateHeaderRaw>() };
 
-        if (*cert_hdr).tag() != 0xAF || (*cert_hdr).version() != 0x02 {
+        if cert_hdr.tag() != 0xAF || cert_hdr.version() != 0x02 {
             return Err(CertError::Tag);
         }
-        let cert_len = (*cert_hdr).length() as usize;
+        let cert_len = cert_hdr.length() as usize;
         if checked_end(sigblk_offset + cert_offset, cert_len)? > total {
             return Err(CertError::Bounds);
         }
@@ -809,17 +804,17 @@ pub unsafe fn parse_ahab_container(
     if checked_end(sigblk_offset + sig_offset, size_of::<AhabSignatureHeaderRaw>())? > total {
         return Err(CertError::Bounds);
     }
-    let sig_ptr = sigblk_ptr.add(sig_offset);
+    let sig_ptr = unsafe { sigblk_ptr.add(sig_offset) };
     if !is_aligned_4(sig_ptr) {
         return Err(CertError::Align);
     }
     // Read signature header to measure length
-    let sig_hdr = sig_ptr as *const AhabSignatureHeaderRaw;
+    let sig_hdr = unsafe { *sig_ptr.cast::<AhabSignatureHeaderRaw>() };
 
-    if (*sig_hdr).tag() != 0xD8 || (*sig_hdr).version() != 0x00 {
+    if sig_hdr.tag() != 0xD8 || sig_hdr.version() != 0x00 {
         return Err(CertError::Tag);
     }
-    let sig_len = (*sig_hdr).length() as usize;
+    let sig_len = sig_hdr.length() as usize;
     if checked_end(sigblk_offset + sig_offset, sig_len)? > total {
         return Err(CertError::Bounds);
     }
@@ -864,7 +859,7 @@ pub unsafe fn parse_srk_array<'a>(
         return Err(CertError::Align);
     }
 
-    let hdr = &*(base as *const AhabSrkArrayHeaderRaw);
+    let hdr = unsafe { &*(base as *const AhabSrkArrayHeaderRaw) };
 
     if hdr.tag() != 0x5A || hdr.version() != 0x00 {
         return Err(CertError::Tag);
@@ -876,11 +871,11 @@ pub unsafe fn parse_srk_array<'a>(
     } // Only hybrid mode supported (ECDSA + ML-DSA)
 
     // Sequential layout: ECDSA table starts immediately after header
-    let ecdsa_tbl_ptr = base.add(size_of::<AhabSrkArrayHeaderRaw>());
+    let ecdsa_tbl_ptr = unsafe { base.add(size_of::<AhabSrkArrayHeaderRaw>()) };
     if !is_aligned_4(ecdsa_tbl_ptr) {
         return Err(CertError::Align);
     }
-    let ecdsa_tbl_hdr = &*(ecdsa_tbl_ptr as *const AhabSrkTableHeaderRaw);
+    let ecdsa_tbl_hdr = unsafe { &*(ecdsa_tbl_ptr as *const AhabSrkTableHeaderRaw) };
 
     if ecdsa_tbl_hdr.tag() != 0xD7 || ecdsa_tbl_hdr.version() != 0x43 {
         return Err(CertError::Tag);
@@ -889,7 +884,7 @@ pub unsafe fn parse_srk_array<'a>(
     if ecdsa_rec_count > 4 {
         return Err(CertError::Bounds);
     }
-    let ecdsa_rec_base = ecdsa_tbl_ptr.add(size_of::<AhabSrkTableHeaderRaw>()) as *const AhabSrkRecordRaw;
+    let ecdsa_rec_base = unsafe { ecdsa_tbl_ptr.add(size_of::<AhabSrkTableHeaderRaw>()) as *const AhabSrkRecordRaw };
     if !is_aligned_4(ecdsa_rec_base as *const u8) {
         return Err(CertError::Align);
     }
@@ -907,12 +902,12 @@ pub unsafe fn parse_srk_array<'a>(
         return Err(CertError::Bounds);
     }
 
-    let ecdsa_records = core::slice::from_raw_parts(ecdsa_rec_base, ecdsa_rec_count);
-    let ecdsa_raw_table = core::slice::from_raw_parts(ecdsa_tbl_ptr, ecdsa_tbl_total_size);
+    let ecdsa_records = unsafe { core::slice::from_raw_parts(ecdsa_rec_base, ecdsa_rec_count) };
+    let ecdsa_raw_table = unsafe { core::slice::from_raw_parts(ecdsa_tbl_ptr, ecdsa_tbl_total_size) };
 
     // Parse ML-DSA table (table 1) - starts after ECDSA table + ECDSA data
     // Find ECDSA data size first
-    let ecdsa_data_ptr = ecdsa_tbl_ptr.add(ecdsa_tbl_total_size);
+    let ecdsa_data_ptr = unsafe { ecdsa_tbl_ptr.add(ecdsa_tbl_total_size) };
     let ecdsa_data_offset = checked_end(ecdsa_tbl_offset, ecdsa_tbl_total_size)?;
     if checked_end(ecdsa_data_offset, size_of::<AhabSrkDataHeaderRaw>())? > srk_array_len {
         return Err(CertError::Bounds);
@@ -920,7 +915,7 @@ pub unsafe fn parse_srk_array<'a>(
     if !is_aligned_4(ecdsa_data_ptr) {
         return Err(CertError::Align);
     }
-    let ecdsa_data_hdr = &*(ecdsa_data_ptr as *const AhabSrkDataHeaderRaw);
+    let ecdsa_data_hdr = unsafe { &*(ecdsa_data_ptr as *const AhabSrkDataHeaderRaw) };
     let ecdsa_data_total_size = ecdsa_data_hdr.length() as usize;
     if ecdsa_data_total_size < size_of::<AhabSrkDataHeaderRaw>() {
         return Err(CertError::Bounds);
@@ -929,7 +924,7 @@ pub unsafe fn parse_srk_array<'a>(
         return Err(CertError::Bounds);
     }
 
-    let mldsa_tbl_ptr = ecdsa_data_ptr.add(ecdsa_data_total_size);
+    let mldsa_tbl_ptr = unsafe { ecdsa_data_ptr.add(ecdsa_data_total_size) };
     let mldsa_tbl_offset = checked_end(ecdsa_data_offset, ecdsa_data_total_size)?;
     if checked_end(mldsa_tbl_offset, size_of::<AhabSrkTableHeaderRaw>())? > srk_array_len {
         return Err(CertError::Bounds);
@@ -937,7 +932,7 @@ pub unsafe fn parse_srk_array<'a>(
     if !is_aligned_4(mldsa_tbl_ptr) {
         return Err(CertError::Align);
     }
-    let mldsa_tbl_hdr = &*(mldsa_tbl_ptr as *const AhabSrkTableHeaderRaw);
+    let mldsa_tbl_hdr = unsafe { &*(mldsa_tbl_ptr as *const AhabSrkTableHeaderRaw) };
 
     if mldsa_tbl_hdr.tag() != 0xD7 || mldsa_tbl_hdr.version() != 0x43 {
         return Err(CertError::Tag);
@@ -947,7 +942,7 @@ pub unsafe fn parse_srk_array<'a>(
     if mldsa_rec_count > 4 {
         return Err(CertError::Bounds);
     }
-    let mldsa_rec_base = mldsa_tbl_ptr.add(size_of::<AhabSrkTableHeaderRaw>()) as *const AhabSrkRecordRaw;
+    let mldsa_rec_base = unsafe { mldsa_tbl_ptr.add(size_of::<AhabSrkTableHeaderRaw>()) as *const AhabSrkRecordRaw };
     if !is_aligned_4(mldsa_rec_base as *const u8) {
         return Err(CertError::Align);
     }
@@ -964,8 +959,8 @@ pub unsafe fn parse_srk_array<'a>(
         return Err(CertError::Bounds);
     }
 
-    let mldsa_records = core::slice::from_raw_parts(mldsa_rec_base, mldsa_rec_count);
-    let mldsa_raw_table = core::slice::from_raw_parts(mldsa_tbl_ptr, mldsa_tbl_total_size);
+    let mldsa_records = unsafe { core::slice::from_raw_parts(mldsa_rec_base, mldsa_rec_count) };
+    let mldsa_raw_table = unsafe { core::slice::from_raw_parts(mldsa_tbl_ptr, mldsa_tbl_total_size) };
     defmt_or_log::trace!(
         "Parsed SRK array: ECDSA records={}, ML-DSA records={}",
         ecdsa_rec_count,
@@ -993,46 +988,33 @@ pub fn derive_image_rkth_pair<'d>(
     image_base: *const u8,
     container_offset: u32,
     image_len: u32,
-) -> (Option<Rkth>, Option<Rkth>) {
-    // Parse AHAB container once and extract both ECDSA and ML-DSA RKTH values
-    unsafe {
-        if let Ok(ahab) = parse_ahab_container(image_base, container_offset, image_len) {
-            if let Ok(srk_parsed) = parse_srk_array(ahab.srk_array_ptr, ahab.srk_array_len) {
-                // Derive ECDSA RKTH from complete ECDSA table (header + records)
-                let ecdsa_rkth = {
-                    let table = &srk_parsed.ecdsa_table;
+) -> Result<(Rkth, Rkth), DeriveError> {
+    let srk_parsed = unsafe {
+        let ahab = parse_ahab_container(image_base, container_offset, image_len)?;
+        parse_srk_array(ahab.srk_array_ptr, ahab.srk_array_len)?
+    };
 
-                    // Use the complete SRK table for RKTH calculation
-                    let table_bytes = table.raw_table_bytes;
+    // Derive ECDSA RKTH from complete ECDSA table (header + records)
+    let ecdsa_rkth = sha512_rkth_48(peri.reborrow(), srk_parsed.ecdsa_table.raw_table_bytes)
+        .map(Rkth)
+        .ok_or(DeriveError::Hash)?;
 
-                    let result = sha512_rkth_48(peri.reborrow(), table_bytes).map(Rkth);
-                    if result.is_none() {
-                        defmt_or_log::error!("SHA-512 unavailable for ECDSA RKTH");
-                    }
-                    result
-                };
+    // Derive ML-DSA RKTH from complete ML-DSA table (header + records)
+    let mldsa_rkth = sha512_rkth_48(peri.reborrow(), srk_parsed.mldsa_table.raw_table_bytes)
+        .map(Rkth)
+        .ok_or(DeriveError::Hash)?;
 
-                // Derive ML-DSA RKTH from complete ML-DSA table (header + records)
-                let mldsa_rkth = {
-                    let table = &srk_parsed.mldsa_table;
+    Ok((ecdsa_rkth, mldsa_rkth))
+}
 
-                    // Use the complete SRK table for RKTH calculation
-                    let table_bytes = table.raw_table_bytes;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeriveError {
+    Cert(CertError),
+    Hash,
+}
 
-                    let result = sha512_rkth_48(peri.reborrow(), table_bytes).map(Rkth);
-                    if result.is_none() {
-                        defmt_or_log::error!("SHA-512 unavailable for PQC RKTH");
-                    }
-                    result
-                };
-                defmt_or_log::trace!("Derived both ECDSA and ML-DSA RKTH values");
-                return (ecdsa_rkth, mldsa_rkth);
-            } else {
-                defmt_or_log::error!("Failed to parse SRK array");
-            }
-        } else {
-            defmt_or_log::error!("Failed to parse AHAB container");
-        }
+impl From<CertError> for DeriveError {
+    fn from(v: CertError) -> Self {
+        Self::Cert(v)
     }
-    (None, None)
 }

@@ -210,7 +210,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        msrv: ["1.93"] # fixed 1.31.0 requires 1.93 or later
+        msrv: ["1.95"]
         target: [thumbv8m.main-none-eabihf]
     name: ubuntu / MSRV ${{ matrix.msrv }}
     steps:

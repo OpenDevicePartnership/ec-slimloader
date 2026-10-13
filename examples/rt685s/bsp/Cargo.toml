@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 partition-manager = { workspace = true, features = ["esa", "macros"] }
 embassy-sync = { workspace = true }

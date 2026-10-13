@@ -6,7 +6,14 @@ license = "MIT"
 
 [features]
 default = ["defmt", "mcxa"]
-defmt = ["dep:defmt", "dep:defmt-or-log", "dep:defmt-rtt", "defmt-or-log/defmt"]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-or-log",
+    "dep:defmt-rtt",
+    "defmt-or-log/defmt",
+    "mcxa-security-provisioning/defmt",
+    "ec-slimloader-mcxa/defmt",
+]
 log = ["dep:defmt-or-log", "defmt-or-log/log"]
 mcxa = ["ec-slimloader-mcxa/mcxa5xx"]
 mcxa5xxevk = ["ec-slimloader-mcxa/mcxa5xxevk"]
@@ -28,10 +35,11 @@ partition-manager = { workspace = true, features = ["macros"] }
 partition-manager-macros = { workspace = true }
 embassy-sync = { workspace = true }
 
-ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false, features = ["mcxa5xx", "defmt"] }
+ec-slimloader-mcxa = { path = "../../../libs/ec-slimloader-mcxa", default-features = false }
 ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
 ec-slimloader-state = { path = "../../../libs/ec-slimloader-state", default-features = false }
-mcxa-security-provisioning = { path = "../../../libs/mcxa-security-provisioning", default-features = false, features = ["defmt"] }
+mcxa-security-provisioning = { path = "../../../libs/mcxa-security-provisioning", default-features = false }
+mcxa-ifr = { path = "../../../libs/mcxa-ifr" }
 
 embassy-mcxa = { workspace = true, features = ["rt", "mcxa5xx"] }
 embassy-executor = { workspace = true, features = ["platform-cortex-m", "executor-thread"] }

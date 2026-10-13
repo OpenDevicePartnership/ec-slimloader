@@ -18,10 +18,12 @@ use ec_slimloader_state::state::Status;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
 use heapless::Vec;
+use mcxa_ifr::{LifeCycleState, SecBootEn};
+use mcxa_security_provisioning::Provisioner;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
 
-use crate::{header, jump, verification};
+use crate::{jump, verification};
 
 /// External flash total size (2 MB).
 const EXTERNAL_FLASH_SIZE: usize = 0x0020_0000;
@@ -52,11 +54,11 @@ fn in_emulation_window(offset: usize, len: usize) -> bool {
 
 // ─── FlexSPI NOR backend (MCXA hardware only) ─────────────────────────────
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+use embassy_mcxa::clocks::PoweredClock;
+#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::clocks::config::{
     CoreSleep, Div8, FircConfig, FircFreqSel, MainClockConfig, MainClockSource, VddDriveStrength, VddLevel,
 };
-#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::clocks::PoweredClock;
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::flexspi::lookup::opcodes::sdr::{CMD, RADDR, READ, WRITE};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
@@ -64,7 +66,7 @@ use embassy_mcxa::flexspi::lookup::{Command, Instr, LookupTable, Pads, SequenceB
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::flexspi::{Blocking, ClockConfig, FlashConfig, Flexspi, NorFlash as FlexspiNor};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::{peripherals, Peri};
+use embassy_mcxa::{Peri, peripherals};
 
 /// Single-lane (1-bit SPI) LUT + geometry for the Macronix MX25U.
 /// Port A (EVK, `mcxa5xxevk` feature): flash starts at SFAR=0, use actual size.
@@ -350,6 +352,15 @@ fn vector_table_looks_valid(initial_sp: u32, reset_handler: u32) -> bool {
 
     let sp_ok = (SRAM_START..=SRAM_END).contains(&initial_sp);
     let reset_ok = (reset_handler & 1) == 1 && reset_handler < FLASH_END;
+
+    defmt_or_log::trace!(
+        "initial_sp: {:X} (ok: {}), reset_handler: {:X} (ok: {})",
+        initial_sp,
+        sp_ok,
+        reset_handler,
+        reset_ok
+    );
+
     sp_ok && reset_ok
 }
 
@@ -505,26 +516,32 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
         // 0xFF'ing the journal). If the bytes change, that tool really wrote to
         // external flash; if they don't, it didn't.
         #[cfg(all(target_os = "none", feature = "mcxa5xx", feature = "flexspi-selftest"))]
-        let external =
-            {
-                let mut external = external;
-                use embassy_mcxa::pac;
-                // JEDEC/vendor id: proves the MCU can actually reach the external NOR.
-                flexspi_ip_command(0, Command::ReadId as u8, 3);
-                let jedec = pac::FLEXSPI0.rfdr(0).read().rxdata();
-                defmt_or_log::info!(
-                    "flexspi-probe: JEDEC id = {:#010x} (MX25U low byte should be 0xc2)",
-                    jedec
-                );
-                // Boot-journal bytes at external offset 0x1000 (read-only).
-                let mut j = [0u8; 16];
-                let _ = external.read(0x1000, &mut j).await;
-                defmt_or_log::info!(
-                "flexspi-probe: journal @0x1000 = [{:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}]",
-                j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7]
+        let external = {
+            let mut external = external;
+            use embassy_mcxa::pac;
+            // JEDEC/vendor id: proves the MCU can actually reach the external NOR.
+            flexspi_ip_command(0, Command::ReadId as u8, 3);
+            let jedec = pac::FLEXSPI0.rfdr(0).read().rxdata();
+            defmt_or_log::info!(
+                "flexspi-probe: JEDEC id = {:#010x} (MX25U low byte should be 0xc2)",
+                jedec
             );
-                external
-            };
+            // Boot-journal bytes at external offset 0x1000 (read-only).
+            let mut j = [0u8; 16];
+            let _ = external.read(0x1000, &mut j).await;
+            defmt_or_log::info!(
+                "flexspi-probe: journal @0x1000 = [{:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}]",
+                j[0],
+                j[1],
+                j[2],
+                j[3],
+                j[4],
+                j[5],
+                j[6],
+                j[7]
+            );
+            external
+        };
 
         let ext_flash_manager = EXT_FLASH.init_with(|| PartitionManager::new(external));
 
@@ -597,18 +614,27 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             const SLOT_SIZE: u32 = 0x000F_8000; // 992 KB
             let image_base = app_base as *const u8;
             let jump_address = image_base as *const u32;
-            let image_header = match unsafe { header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
-                Ok(header) => header,
-                Err(_) => return ec_slimloader::BootError::Markers,
-            };
+            let image_header =
+                match unsafe { mcxa_security_provisioning::header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
+                    Ok(val) => val,
+                    Err(e) => {
+                        defmt_or_log::error!("Image header not ok: {:?}", e);
+                        return ec_slimloader::BootError::Markers;
+                    }
+                };
 
             let image_len = image_header.image_length();
             let cert_offset = image_header.cert_block_offset();
             if !(0x40..=SLOT_SIZE).contains(&image_len) || (cert_offset & 0x3) != 0 || cert_offset >= image_len {
+                defmt_or_log::error!("Image len or cert offset not ok");
                 return ec_slimloader::BootError::Markers;
             }
 
-            match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
+            if !Self::follows_policy() {
+                return BootError::Integrity;
+            }
+
+            match verification::verify_authenticity(self.sgi.reborrow(), image_base, Self::dev_mode()) {
                 Ok(true) => unsafe { jump::jump_to_image(jump_address) },
                 Ok(false) => ec_slimloader::BootError::Authenticate,
                 Err(e) => e,
@@ -617,12 +643,6 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
     }
 
     fn abort(&mut self) -> ! {
-        #[cfg(target_os = "none")]
-        loop {
-            cortex_m::asm::wfi();
-        }
-
-        #[cfg(not(target_os = "none"))]
         loop {
             core::hint::spin_loop();
         }
@@ -632,6 +652,26 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 impl<C: McxaConfig + BootStatePolicy> Mcxa<C> {
     pub async fn start<const JOURNAL_BUFFER_SIZE: usize>(config: C) -> ! {
         ec_slimloader::start::<Self, JOURNAL_BUFFER_SIZE>(config).await
+    }
+
+    /// Check if the device authenticity should be checked in dev mode (where the keys are self-generated instead of taken from the programmed value)
+    fn dev_mode() -> bool {
+        let ifr = unsafe { mcxa_ifr::IFR::current() };
+        let secure_boot_enabled = ifr.cmpa.secure_boot_cfg.sec_boot_en() != SecBootEn::OnlyPki;
+        let develop_lifecycle = ifr.cfpa.header.cfpa_lc_state() == Ok(LifeCycleState::Develop);
+        // Don't enable dev mode if secure boot is active. That way a flashed key can be tested
+        develop_lifecycle && !secure_boot_enabled
+    }
+
+    /// Check if the secure boot settings are good
+    fn follows_policy() -> bool {
+        if Self::dev_mode() {
+            true
+        } else {
+            unsafe { Provisioner::new_from_page(true) }
+                .check_production_settings()
+                .is_ok()
+        }
     }
 }
 

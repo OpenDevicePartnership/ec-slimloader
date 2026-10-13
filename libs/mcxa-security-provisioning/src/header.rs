@@ -1,4 +1,5 @@
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct VectorAndHeaderRaw {
     // ARM CortexM vector table interleaved with NXP bootloader fields
     pub initial_sp: u32,             // 0x00 Stack pointer
@@ -23,32 +24,25 @@ impl VectorAndHeaderRaw {
     pub const SIZE: usize = core::mem::size_of::<Self>(); // 0x40 bytes (16 x u32)
 }
 
-pub struct ImageHeader<'a> {
-    pub raw: &'a VectorAndHeaderRaw,
+pub struct ImageHeader {
+    pub raw: VectorAndHeaderRaw,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum HeaderError {
-    LengthZero,
-    LengthTooSmall,
-    LengthTooLarge,
-    CertOffset,
-    Alignment,
-    Type,
-}
-
-impl<'a> ImageHeader<'a> {
-    /// # Safety
+impl ImageHeader {
+    /// Read the image header from the pointer location
     ///
-    /// `ptr` must be a valid pointer to a readable, 4-byte-aligned region of at least `slot_size` bytes.
+    /// # Safety
+    /// `ptr` must point to initialized, readable memory
     pub unsafe fn from_ptr(ptr: *const u8, slot_size: u32) -> Result<Self, HeaderError> {
-        if !(ptr as usize).is_multiple_of(4) {
+        let ptr = ptr.cast::<VectorAndHeaderRaw>();
+
+        if !(ptr.is_aligned()) {
             return Err(HeaderError::Alignment);
         }
         if (slot_size as usize) < (core::mem::size_of::<VectorAndHeaderRaw>()) {
             return Err(HeaderError::LengthTooSmall);
         }
-        let raw = &*(ptr as *const VectorAndHeaderRaw);
+        let raw = unsafe { *ptr };
         if raw.image_length == 0 {
             return Err(HeaderError::LengthZero);
         }
@@ -90,5 +84,13 @@ impl<'a> ImageHeader<'a> {
     }
 }
 
-// TODO: Active image protection (GLBAC/XOM): determine start/end addresses to protect
-//       after successful verification. Likely protect Slot A region or [image_base .. image_base+image_length].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum HeaderError {
+    LengthZero,
+    LengthTooSmall,
+    LengthTooLarge,
+    CertOffset,
+    Alignment,
+    Type,
+}

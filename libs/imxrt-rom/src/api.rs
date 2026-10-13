@@ -128,7 +128,7 @@ pub struct ApiTable {
     pub skboot: &'static SKBoot,
 }
 
-extern "C" {
+unsafe extern "C" {
     static API_TABLE: ApiTable;
 }
 

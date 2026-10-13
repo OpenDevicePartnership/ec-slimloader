@@ -2,7 +2,7 @@
 
 use mimxrt600_fcb::FlexSpiLutOpcode::{CMD_SDR, READ_SDR, STOP};
 use mimxrt600_fcb::FlexSpiNumPads::Single;
-use mimxrt600_fcb::{flexspi_lut_seq, FlexSPIFlashConfigurationBlock};
+use mimxrt600_fcb::{FlexSPIFlashConfigurationBlock, flexspi_lut_seq};
 
 #[cfg(all(feature = "imxrt-fcb-1spi-nor", feature = "imxrt-fcb-rt685evk"))]
 compile_error!("Cannot allocate more than one FCB at a time!");
@@ -20,12 +20,12 @@ use mimxrt600_fcb::FlexSpiNumPads::Octal;
 use mimxrt600_fcb::{ControllerMiscOption, SFlashPadType, SerialClkFreq, SerialNORType};
 
 #[cfg(feature = "imxrt-fcb-rt685evk")]
-#[link_section = ".fcb"]
+#[unsafe(link_section = ".fcb")]
 #[used]
 static FCB_685EVK: FlexSPIFlashConfigurationBlock = FlexSPIFlashConfigurationBlock::build();
 
 #[cfg(feature = "imxrt-fcb-1spi-a1-nor")]
-#[link_section = ".fcb"]
+#[unsafe(link_section = ".fcb")]
 #[used]
 static FCB_A1NOR: FlexSPIFlashConfigurationBlock = FlexSPIFlashConfigurationBlock::build()
     .device_mode_cfg_enable(0)

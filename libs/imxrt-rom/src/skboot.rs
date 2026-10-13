@@ -6,7 +6,7 @@ use defmt_or_log::error;
 #[cfg(feature = "rt")]
 use embassy_imxrt::pac::interrupt;
 
-use crate::api::{api_table, BootStatus, KbAuthenticate, KbOperation, KbOptions, KbSettings, KbStatus, SecureBool};
+use crate::api::{BootStatus, KbAuthenticate, KbOperation, KbOptions, KbSettings, KbStatus, SecureBool, api_table};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

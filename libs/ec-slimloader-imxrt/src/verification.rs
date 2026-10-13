@@ -1,8 +1,8 @@
 use defmt_or_log::{error, info, unwrap, warn};
 use ec_slimloader::BootError;
+use embassy_imxrt::Peri;
 use embassy_imxrt::hashcrypt::Hashcrypt;
 use embassy_imxrt::peripherals::HASHCRYPT;
-use embassy_imxrt::Peri;
 use imxrt_rom::otp::Otp;
 use imxrt_rom::registers::field_sets::Rkth;
 use imxrt_rom::registers::{OtpFuses, SecureBoot, ShadowRegisters};
