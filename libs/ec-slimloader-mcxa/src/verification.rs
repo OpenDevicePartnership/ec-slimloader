@@ -5,9 +5,9 @@ use embassy_mcxa::rom::{
     NbootBoolValue, NbootImgAuthParms, NbootRootKeyRevocation, NbootRootKeyType, NbootRootKeyUsage, NbootRotAuthParms,
 };
 use embassy_mcxa::{Peri, peripherals};
+use fault_rejection::protected_if;
 use mcxa_ifr::{IFR, RotkEn, RotkUsageVal};
 use mcxa_security_provisioning::certificate::derive_image_rkth_pair;
-use fault_rejection::protected_if;
 
 use crate::error::map_nboot_status_to_boot_error;
 
@@ -83,8 +83,8 @@ pub fn verify_authenticity<'d>(
     defmt_or_log::trace!("Initializing NBOOT context");
     let mut n_boot_api = embassy_mcxa::rom::get().nboot().map_err(|_| BootError::Authenticate)?;
 
-    let result = protected_if::<{ LifeCycleState::Develop as u32 }, Result<(), BootError>, _, _>(
-        || ifr.cfpa.header.cfpa_lc_state().map(|lc| lc as u32).unwrap_or_default(),
+    let result = protected_if::<{ true as u32 }, Result<(), BootError>, _, _>(
+        || dev_mode as u32,
         || {
             // In dev mode, we're going to lie to nboot and derive the rkth's ourselves so they're always correct
             // This makes the provisioning process easier. Once no longer in dev mode, this branch is not taken and
