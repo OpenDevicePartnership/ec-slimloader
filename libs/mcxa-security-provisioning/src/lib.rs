@@ -43,7 +43,7 @@ impl Provisioner {
     }
 
     pub fn is_erased(&self) -> bool {
-        self.ifr.cfpa.is_erased()
+        self.ifr.cfpa.is_erased() || self.ifr.cmpa.is_erased()
     }
 
     pub fn commit_and_reboot(&mut self) -> Result<Infallible, FlashError> {
@@ -189,7 +189,7 @@ impl Provisioner {
     /// First boot IFR (CMPA / CFPA) provisioning for DEV and/or factory floor, non-security critical.
     /// Keeps secure boot, DICE and TZM disabled, and sets a safe default for other fields.
     pub fn with_initial_config(&mut self) -> &mut Self {
-        if self.ifr.cfpa.is_erased() {
+        if self.is_erased() {
             let err_auth_fail_count = self.ifr.cfpa.err_auth_fail_count;
             let err_itrc_count = self.ifr.cfpa.err_itrc_count;
 
@@ -279,7 +279,7 @@ impl Provisioner {
     }
 
     pub fn check_production_settings(&mut self) -> Result<&mut Self, ProvisionError> {
-        if self.ifr.cfpa.is_erased()
+        if self.is_erased()
             || !matches!(
                 self.ifr.cmpa.secure_boot_cfg.sec_boot_en(),
                 mcxa_ifr::SecBootEn::OnlyPki

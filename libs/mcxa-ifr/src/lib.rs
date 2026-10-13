@@ -536,6 +536,10 @@ impl CMPA {
         // Safety: We're a repr(C) struct with no padding bytes
         unsafe { core::mem::transmute(self) }
     }
+
+    pub fn is_erased(&self) -> bool {
+        self.boot_cfg0.marker() == u16::MAX
+    }
 }
 
 #[bitfield(u32, debug, default = 0)]
