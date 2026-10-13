@@ -47,6 +47,14 @@ impl Provisioner {
     }
 
     pub fn commit_and_reboot(&mut self) -> Result<Infallible, FlashError> {
+        if self.cfpa_updated {
+            if self.ifr.cfpa.cfpa_page_version == u32::MAX {
+                self.ifr.cfpa.cfpa_page_version = 1;
+            } else {
+                self.ifr.cfpa.cfpa_page_version += 1;
+            }
+        }
+
         match (self.cfpa_updated, self.cmpa_updated) {
             (false, false) => {
                 // Nothing to commit
