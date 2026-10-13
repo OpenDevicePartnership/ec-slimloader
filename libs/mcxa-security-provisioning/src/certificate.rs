@@ -3,7 +3,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use core::mem::size_of;
 
-use embassy_mcxa::{Peri, peripherals};
+use embassy_mcxa::{peripherals, Peri};
 
 // 384-bit Root Key Table Hash (SHA-384 digest of RoTK public key X||Y)
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

@@ -1,9 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod board;
-pub mod certificate;
 pub mod error;
-pub mod header;
 pub mod jump;
 pub mod verification;
 

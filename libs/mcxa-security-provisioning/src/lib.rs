@@ -2,14 +2,17 @@
 
 use core::convert::Infallible;
 
-use ec_slimloader_mcxa::certificate::{derive_image_rkth_pair, DeriveError};
-use ec_slimloader_mcxa::header::{HeaderError, ImageHeader};
+use certificate::{derive_image_rkth_pair, DeriveError};
 use embassy_mcxa::rom::FlashError;
 use embassy_mcxa::{peripherals, Peri};
+use header::{HeaderError, ImageHeader};
 use mcxa_ifr::{
     u3, u4, u5, BootCfg0, BootCfg1, DiceCsrKeyType, Header, InverseBigBool, LifeCycleState, LspiQflashCfg0, QspiPort,
     ReverseArray, RotkRevoke, RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
 };
+
+pub mod certificate;
+pub mod header;
 
 pub struct Provisioner {
     ifr: IFR,

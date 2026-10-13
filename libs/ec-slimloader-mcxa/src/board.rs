@@ -18,10 +18,12 @@ use ec_slimloader_state::state::Status;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
 use heapless::Vec;
+use mcxa_ifr::{LifeCycleState, SecBootEn};
+use mcxa_security_provisioning::Provisioner;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
 
-use crate::{header, jump, verification};
+use crate::{jump, verification};
 
 /// External flash total size (2 MB).
 const EXTERNAL_FLASH_SIZE: usize = 0x0020_0000;
@@ -612,13 +614,14 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             const SLOT_SIZE: u32 = 0x000F_8000; // 992 KB
             let image_base = app_base as *const u8;
             let jump_address = image_base as *const u32;
-            let image_header = match unsafe { header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
-                Ok(val) => val,
-                Err(e) => {
-                    defmt_or_log::error!("Image header not ok: {:?}", e);
-                    return ec_slimloader::BootError::Markers;
-                }
-            };
+            let image_header =
+                match unsafe { mcxa_security_provisioning::header::ImageHeader::from_ptr(image_base, SLOT_SIZE) } {
+                    Ok(val) => val,
+                    Err(e) => {
+                        defmt_or_log::error!("Image header not ok: {:?}", e);
+                        return ec_slimloader::BootError::Markers;
+                    }
+                };
 
             let image_len = image_header.image_length();
             let cert_offset = image_header.cert_block_offset();
@@ -627,7 +630,11 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
                 return ec_slimloader::BootError::Markers;
             }
 
-            match verification::verify_authenticity(self.sgi.reborrow(), image_base) {
+            if !Self::follows_policy() {
+                return BootError::Integrity;
+            }
+
+            match verification::verify_authenticity(self.sgi.reborrow(), image_base, Self::dev_mode()) {
                 Ok(true) => unsafe { jump::jump_to_image(jump_address) },
                 Ok(false) => ec_slimloader::BootError::Authenticate,
                 Err(e) => e,
@@ -645,6 +652,26 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 impl<C: McxaConfig + BootStatePolicy> Mcxa<C> {
     pub async fn start<const JOURNAL_BUFFER_SIZE: usize>(config: C) -> ! {
         ec_slimloader::start::<Self, JOURNAL_BUFFER_SIZE>(config).await
+    }
+
+    /// Check if the device authenticity should be checked in dev mode (where the keys are self-generated instead of taken from the programmed value)
+    fn dev_mode() -> bool {
+        let ifr = unsafe { mcxa_ifr::IFR::current() };
+        let secure_boot_enabled = ifr.cmpa.secure_boot_cfg.sec_boot_en() != SecBootEn::OnlyPki;
+        let develop_lifecycle = ifr.cfpa.header.cfpa_lc_state() == Ok(LifeCycleState::Develop);
+        // Don't enable dev mode if secure boot is active. That way a flashed key can be tested
+        develop_lifecycle && !secure_boot_enabled
+    }
+
+    /// Check if the secure boot settings are good
+    fn follows_policy() -> bool {
+        if Self::dev_mode() {
+            true
+        } else {
+            unsafe { Provisioner::new_from_page(true) }
+                .check_production_settings()
+                .is_ok()
+        }
     }
 }
 

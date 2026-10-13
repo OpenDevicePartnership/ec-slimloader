@@ -5,9 +5,9 @@ use embassy_mcxa::rom::{
     NbootBoolValue, NbootImgAuthParms, NbootRootKeyRevocation, NbootRootKeyType, NbootRootKeyUsage, NbootRotAuthParms,
 };
 use embassy_mcxa::{Peri, peripherals};
-use mcxa_ifr::{EnfCnsa, IFR, InverseBigBool, LifeCycleState, LpSecBoot, RotkEn, RotkUsageVal, SecBootEn};
+use mcxa_ifr::{IFR, RotkEn, RotkUsageVal};
+use mcxa_security_provisioning::certificate::derive_image_rkth_pair;
 
-use crate::certificate::derive_image_rkth_pair;
 use crate::error::map_nboot_status_to_boot_error;
 
 fn load_nboot_auth_parms_from_ifr(ifr: &IFR) -> Result<NbootImgAuthParms, BootError> {
@@ -73,25 +73,11 @@ fn load_nboot_auth_parms_from_ifr(ifr: &IFR) -> Result<NbootImgAuthParms, BootEr
 pub fn verify_authenticity<'d>(
     mut peri: Peri<'d, peripherals::SGI0>,
     image_base: *const u8,
+    dev_mode: bool,
 ) -> Result<bool, BootError> {
     let ifr = unsafe { mcxa_ifr::IFR::current() };
 
     let mut parms = load_nboot_auth_parms_from_ifr(ifr)?;
-
-    let secure_boot_enabled = ifr.cmpa.secure_boot_cfg.sec_boot_en() != SecBootEn::AllAllowed;
-    let develop_lifecycle = ifr.cfpa.header.cfpa_lc_state() == Ok(LifeCycleState::Develop);
-    // Don't enable dev mode if secure boot is active. That way a flashed key can be tested
-    let dev_mode = develop_lifecycle && !secure_boot_enabled;
-
-    let follows_policy = ifr.cmpa.secure_boot_cfg.sec_boot_en() == SecBootEn::OnlyPki
-        && matches!(ifr.cmpa.secure_boot_cfg.enf_cnsa(), EnfCnsa::CNSA2 | EnfCnsa::CNSA2Dup)
-        && ifr.cmpa.secure_boot_cfg.fast_boot_en() != InverseBigBool::True
-        && ifr.cmpa.secure_boot_cfg.lp_sec_boot() == LpSecBoot::Cold
-        || dev_mode;
-
-    if !follows_policy {
-        return Err(BootError::Integrity);
-    }
 
     defmt_or_log::trace!("Initializing NBOOT context");
     let mut n_boot_api = embassy_mcxa::rom::get().nboot().map_err(|_| BootError::Authenticate)?;
@@ -102,8 +88,9 @@ pub fn verify_authenticity<'d>(
         // only the flashed keys are used
 
         const MAX_FLASH_SLOT_SIZE: u32 = 2 * 1024 * 1024; // 2MB
-        let image_header = unsafe { crate::header::ImageHeader::from_ptr(image_base, MAX_FLASH_SLOT_SIZE) }
-            .map_err(|_| BootError::Integrity)?;
+        let image_header =
+            unsafe { mcxa_security_provisioning::header::ImageHeader::from_ptr(image_base, MAX_FLASH_SLOT_SIZE) }
+                .map_err(|_| BootError::Integrity)?;
 
         // Parse AHAB container once and derive both RKTH values
         let (image_rkth, pqc_rkth) = derive_image_rkth_pair(
