@@ -112,7 +112,7 @@ pub struct CFPA {
     /// Image signing key revocation counter.
     /// This monotonically increasing unary encode counter (e.g., 0x0, 0x1, 0x3, 0x7, 0xF...) field is used by boot ROM to enforce image signing key (ISK) certificate revocation policy.
     /// Boot ROM accepts an ISK certificate as valid only if the "constraint" field in ISK certificate is the same or greater than the ISK revocation counter.
-    /// The 32-bit ISK revocation counter is formed using 8 bits of IMAGE_KEY_REVOKE[7:0] field in OTP as MSB bits and lower 24 bits from this field.
+    /// The 32-bit ISK revocation counter is formed using 8 bits of `IMAGE_KEY_REVOKE[7:0]` field in OTP as MSB bits and lower 24 bits from this field.
     /// ISK certificate validation is done as part of boot, FW update (SB3) and recovery (SB3) image authentication.
     pub image_key_revoke: u32,
     pub dbg_revoke_vu: DbgRevokeVu,
@@ -278,8 +278,8 @@ pub struct Header {
     /// CFPA Header marker should be set to 0x9635. After this header is set, all non-zero values will take effect; leaving all values set to 0xff will cause undefined behavior. It is recommended to set all values to 0x00 before setting the CFPA header.
     #[bits(16..=31, rw)]
     pub marker: u16,
-    /// Inverted value of CFPA_LC_STATE.
-    /// This INV_CPFA_LC_STATE ^ CFPA_LC_STATE[7:0] should be 0xFF, otherwise the CPFA_LC_STATE will not be valid.
+    /// Inverted value of `CFPA_LC_STATE`.
+    /// This `INV_CPFA_LC_STATE` ^ `CFPA_LC_STATE[7:0]` should be 0xFF, otherwise the `CPFA_LC_STATE` will not be valid.
     #[bits(8..=15, rw)]
     pub inv_cfpa_lc_state: Option<InvLifeCycleState>,
     /// Life cycle state.
@@ -877,22 +877,22 @@ pub struct SecureBootCfg {
     /// Block NXP signed SB3 loading.
     #[bits(30..=31, rw)]
     pub dis_nxp_fw: DisNxpFw,
-    /// Enable self-test for KDF block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in SYSCON->ELS_AS_BOOT_LOG1[FIPS].
+    /// Enable self-test for KDF block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in `SYSCON->ELS_AS_BOOT_LOG1[FIPS]`.
     #[bits(26..=27, rw)]
     pub fips_kdf_sten: SelfTestEnable,
-    /// Enable self-test for CMAC block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in SYSCON->ELS_AS_BOOT_LOG1[FIPS].
+    /// Enable self-test for CMAC block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in `SYSCON->ELS_AS_BOOT_LOG1[FIPS]`.
     #[bits(24..=25, rw)]
     pub fips_cmac_sten: SelfTestEnable,
-    /// Enable self-test for DRBG block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in SYSCON->ELS_AS_BOOT_LOG1[FIPS].
+    /// Enable self-test for DRBG block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in `SYSCON->ELS_AS_BOOT_LOG1[FIPS]`.
     #[bits(22..=23, rw)]
     pub fips_drbg_sten: SelfTestEnable,
-    /// Enable self-test for ECDSA block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in SYSCON->ELS_AS_BOOT_LOG1[FIPS].
+    /// Enable self-test for ECDSA block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in `SYSCON->ELS_AS_BOOT_LOG1[FIPS]`.
     #[bits(20..=21, rw)]
     pub fips_ecdsa_sten: SelfTestEnable,
-    /// Enable self-test for AES block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in SYSCON->ELS_AS_BOOT_LOG1[FIPS].
+    /// Enable self-test for AES block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in `SYSCON->ELS_AS_BOOT_LOG1[FIPS]`.
     #[bits(18..=19, rw)]
     pub fips_aes_sten: SelfTestEnable,
-    /// Enable self-test for SHA2 block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in SYSCON->ELS_AS_BOOT_LOG1[FIPS].
+    /// Enable self-test for SHA2 block on power-up. Needed for FIPS certification. If this field is non-zero  run self-test and log result in `SYSCON->ELS_AS_BOOT_LOG1[FIPS]`.
     #[bits(16..=17, rw)]
     pub fips_sha_sten: SelfTestEnable,
     /// Protection of active image.
