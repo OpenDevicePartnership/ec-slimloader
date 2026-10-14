@@ -46,7 +46,8 @@ impl Provisioner {
         self.ifr.cfpa.is_erased() || self.ifr.cmpa.is_erased()
     }
 
-    pub fn commit_and_reboot(&mut self) -> Result<Infallible, FlashError> {
+    /// Commit the changes to flash. Only goes into effect after reboot, so prefer using [Self::commit_and_reboot]
+    pub fn commit(&mut self) -> Result<(), FlashError> {
         if self.cfpa_updated {
             if self.ifr.cfpa.cfpa_page_version == u32::MAX {
                 self.ifr.cfpa.cfpa_page_version = 1;
@@ -69,6 +70,12 @@ impl Provisioner {
             }
         }
 
+        Ok(())
+    }
+
+    /// Commit the changes to flash and reboot so it takes effect immediately
+    pub fn commit_and_reboot(&mut self) -> Result<Infallible, FlashError> {
+        self.commit()?;
         cortex_m::peripheral::SCB::sys_reset()
     }
 
