@@ -43,10 +43,11 @@ const MAX_SLOT_COUNT: usize = 7;
 pub type ExternalStorage = BlockingAsync<FlexSpiNorStorage<'static, READ_ALIGNMENT, WRITE_ALIGNMENT, ERASE_SIZE>>;
 
 pub struct Partitions {
-    pub state: Partition<'static, ExternalStorage, RW, NoopRawMutex>,
+    pub journal: FlashJournal<Partition<'static, ExternalStorage, RW>>,
     pub slots: Vec<Partition<'static, ExternalStorage, RO, NoopRawMutex>, MAX_SLOT_COUNT>,
 }
 
+#[allow(async_fn_in_trait)]
 pub trait ImxrtConfig {
     /// Minimum and maximum image size contained within a slot.
     const SLOT_SIZE_RANGE: Range<usize>;
@@ -54,7 +55,7 @@ pub trait ImxrtConfig {
     /// The memory range an image is allowed to be copied to.
     const LOAD_RANGE: Range<*mut u32>;
 
-    fn partitions(&self, flash: &'static mut PartitionManager<ExternalStorage, NoopRawMutex>) -> Partitions;
+    async fn partitions(&self, flash: &'static mut PartitionManager<ExternalStorage, NoopRawMutex>) -> Partitions;
 }
 
 #[allow(dead_code)]
@@ -105,12 +106,7 @@ impl<C: ImxrtConfig + BootStatePolicy> Board for Imxrt<C> {
         let ext_flash_manager =
             EXT_FLASH.init_with(|| PartitionManager::<_, NoopRawMutex>::new(BlockingAsync::new(ext_flash)));
 
-        let Partitions { state, slots } = config.partitions(ext_flash_manager);
-
-        let journal = match FlashJournal::new::<JOURNAL_BUFFER_SIZE>(state).await {
-            Ok(journal) => journal,
-            Err(e) => panic!("Failed to initialize the flash state journal: {:?}", e),
-        };
+        let Partitions { journal, slots } = config.partitions(ext_flash_manager).await;
 
         Self {
             journal,
