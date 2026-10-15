@@ -15,6 +15,7 @@ use ec_slimloader_state::flash::FlashJournal;
 use ec_slimloader_state::state::Slot;
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use ec_slimloader_state::state::Status;
+use embassy_mcxa::rom::NbootBoolValue;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
 use heapless::Vec;
@@ -607,6 +608,8 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
+            use fault_rejection::protected_if;
+
             if !slot_has_valid_app(app_base) {
                 return BootError::Markers;
             }
@@ -634,10 +637,18 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
                 return BootError::Integrity;
             }
 
-            match verification::verify_authenticity(self.sgi.reborrow(), image_base, Self::dev_mode()) {
-                Ok(true) => unsafe { jump::jump_to_image(jump_address) },
-                Ok(false) => ec_slimloader::BootError::Authenticate,
-                Err(e) => e,
+            let Err(if_result) = protected_if::<{ NbootBoolValue::True as u32 }, _, _, _>(
+                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, || Self::dev_mode() as u32)
+                {
+                    Ok(result) => result as u32,
+                    Err(error) => error as u32, // Error has no overlap in value with Nboot bool, so this is safe to do
+                },
+                || unsafe { jump::jump_to_image(jump_address) },
+            );
+
+            match BootError::try_from(if_result) {
+                Ok(err) => err,
+                Err(_) => BootError::Authenticate,
             }
         }
     }

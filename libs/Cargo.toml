@@ -8,6 +8,7 @@ members = [
     "imxrt-rom",
     "mcxa-security-provisioning",
     "mcxa-ifr",
+    "fault-rejection",
 ]
 
 [workspace.package]

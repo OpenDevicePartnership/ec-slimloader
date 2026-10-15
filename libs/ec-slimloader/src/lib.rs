@@ -45,8 +45,9 @@ pub trait Board {
     fn abort(&mut self) -> !;
 }
 
-#[derive(Debug)]
+#[derive(Debug, num_enum::TryFromPrimitive)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u32)]
 pub enum BootError {
     /// Slot is not defined.
     SlotUnknown,
