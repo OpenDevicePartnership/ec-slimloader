@@ -1,0 +1,52 @@
+[package]
+name = "example-bootloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "defmt-or-log/defmt",
+    "ec-slimloader/defmt",
+    "ec-slimloader-imxrt/defmt",
+    "embassy-imxrt/defmt",
+    "embassy-executor/defmt",
+    "partition-manager/defmt",
+]
+
+non-secure = ["ec-slimloader-imxrt/non-secure"]
+
+[dependencies]
+ec-slimloader = { path = "../../../libs/ec-slimloader", default-features = false }
+ec-slimloader-imxrt = { path = "../../../libs/ec-slimloader-imxrt", features = [
+    "mimxrt685s-evk",
+], default-features = false }
+
+example-bsp = { path = "../bsp", features = ["bootloader"] }
+
+heapless = "0.8.0"
+
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+cortex-m-rt = { version = "0.7.3" }
+
+embassy-imxrt = { workspace = true, features = ["mimxrt685s", "unstable-pac"] }
+
+embassy-executor = { workspace = true, features = [
+    "arch-cortex-m",
+    "executor-thread",
+] }
+
+embassy-sync = { workspace = true }
+partition-manager = { workspace = true, features = ["esa", "macros"] }
+
+defmt = { workspace = true, optional = true }
+defmt-or-log = { workspace = true }
+defmt-rtt = { workspace = true, optional = true }
+
+panic-probe = "*"
