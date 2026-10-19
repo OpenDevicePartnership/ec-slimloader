@@ -24,6 +24,7 @@ default = []
 [dependencies]
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 
+num_enum = { workspace = true, default-features = false }
 defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 embedded-storage-async = { workspace = true }

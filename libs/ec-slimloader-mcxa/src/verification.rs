@@ -5,6 +5,7 @@ use embassy_mcxa::rom::{
     NbootBoolValue, NbootImgAuthParms, NbootRootKeyRevocation, NbootRootKeyType, NbootRootKeyUsage, NbootRotAuthParms,
 };
 use embassy_mcxa::{Peri, peripherals};
+use fault_rejection::protected_if;
 use mcxa_ifr::{IFR, RotkEn, RotkUsageVal};
 use mcxa_security_provisioning::certificate::derive_image_rkth_pair;
 
@@ -73,8 +74,8 @@ fn load_nboot_auth_parms_from_ifr(ifr: &IFR) -> Result<NbootImgAuthParms, BootEr
 pub fn verify_authenticity<'d>(
     mut peri: Peri<'d, peripherals::SGI0>,
     image_base: *const u8,
-    dev_mode: bool,
-) -> Result<bool, BootError> {
+    dev_mode: impl FnOnce() -> u32,
+) -> Result<NbootBoolValue, BootError> {
     let ifr = unsafe { mcxa_ifr::IFR::current() };
 
     let mut parms = load_nboot_auth_parms_from_ifr(ifr)?;
@@ -82,7 +83,7 @@ pub fn verify_authenticity<'d>(
     defmt_or_log::trace!("Initializing NBOOT context");
     let mut n_boot_api = embassy_mcxa::rom::get().nboot().map_err(|_| BootError::Authenticate)?;
 
-    if dev_mode {
+    let result = protected_if::<{ true as u32 }, Result<(), BootError>, _, _>(dev_mode, || {
         // In dev mode, we're going to lie to nboot and derive the rkth's ourselves so they're always correct
         // This makes the provisioning process easier. Once no longer in dev mode, this branch is not taken and
         // only the flashed keys are used
@@ -103,6 +104,15 @@ pub fn verify_authenticity<'d>(
 
         parms.soc_rot_nvm.soc_rkh.copy_from_slice(&image_rkth.as_words());
         parms.soc_rot_nvm.soc_rkh_1.copy_from_slice(&pqc_rkth.as_words());
+
+        Ok(())
+    });
+
+    match result {
+        Ok(if_result) => if_result?,
+        Err(_) => {
+            // We did not take the if branch. Nothing to do
+        }
     }
 
     defmt_or_log::trace!("begin auth");
@@ -113,8 +123,8 @@ pub fn verify_authenticity<'d>(
     match status {
         NbootBoolValue::True => {
             defmt_or_log::info!("Hybrid Auth OK");
-            Ok(true)
+            Ok(status)
         }
-        _ => Ok(false),
+        _ => Ok(status),
     }
 }

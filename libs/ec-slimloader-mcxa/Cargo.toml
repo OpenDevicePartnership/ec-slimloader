@@ -25,6 +25,7 @@ ec-slimloader = { path = "../ec-slimloader", default-features = false }
 ec-slimloader-state = { path = "../ec-slimloader-state", default-features = false }
 mcxa-ifr = { path = "../mcxa-ifr" }
 mcxa-security-provisioning = { path = "../mcxa-security-provisioning", default-features = false }
+fault-rejection = { path = "../fault-rejection" }
 
 [features]
 default = ["mcxa5xx", "defmt"]
