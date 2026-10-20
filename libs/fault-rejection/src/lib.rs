@@ -20,11 +20,15 @@ cfg_select! {
 }
 
 pub fn test_implementations() {
-    assert_eq!(protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAA, || {}), Ok(()));
+    let mut a = 0;
+
+    assert_eq!(protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAA, || { a = 1 }), Ok(()));
+    assert_eq!(a, 1);
     assert_eq!(
-        protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAB, || {}),
+        protected_if::<0xAAAAAAAA, _, _, _>(|| 0xAAAAAAAB, || { a = 2 }),
         Err(0xAAAAAAAB)
     );
+    assert_eq!(a, 1);
 }
 
 #[cfg(test)]
