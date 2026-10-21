@@ -668,7 +668,7 @@ impl<C: McxaConfig + BootStatePolicy> Mcxa<C> {
     /// Check if the device authenticity should be checked in dev mode (where the keys are self-generated instead of taken from the programmed value)
     fn dev_mode() -> bool {
         let ifr = unsafe { mcxa_ifr::IFR::current() };
-        let secure_boot_enabled = ifr.cmpa.secure_boot_cfg.sec_boot_en() != SecBootEn::OnlyPki;
+        let secure_boot_enabled = ifr.cmpa.secure_boot_cfg.sec_boot_en() == SecBootEn::OnlyPki;
         let develop_lifecycle = ifr.cfpa.header.cfpa_lc_state() == Ok(LifeCycleState::Develop);
         // Don't enable dev mode if secure boot is active. That way a flashed key can be tested
         develop_lifecycle && !secure_boot_enabled
