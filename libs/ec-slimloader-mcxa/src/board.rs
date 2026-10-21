@@ -19,7 +19,6 @@ use embassy_mcxa::rom::NbootBoolValue;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
 use heapless::Vec;
-use mcxa_ifr::{LifeCycleState, SecBootEn};
 use mcxa_security_provisioning::Provisioner;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
@@ -638,8 +637,7 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             }
 
             let Err(if_result) = protected_if::<{ NbootBoolValue::True as u32 }, _, _, _>(
-                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, || Self::dev_mode() as u32)
-                {
+                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, || Self::dev_mode()) {
                     Ok(result) => result as u32,
                     Err(error) => error as u32, // Error has no overlap in value with Nboot bool, so this is safe to do
                 },
@@ -666,17 +664,37 @@ impl<C: McxaConfig + BootStatePolicy> Mcxa<C> {
     }
 
     /// Check if the device authenticity should be checked in dev mode (where the keys are self-generated instead of taken from the programmed value)
-    fn dev_mode() -> bool {
+    /// Dev mode is active when the returned value is [DEV_VAL]
+    fn dev_mode() -> u32 {
         let ifr = unsafe { mcxa_ifr::IFR::current() };
-        let secure_boot_enabled = ifr.cmpa.secure_boot_cfg.sec_boot_en() != SecBootEn::OnlyPki;
-        let develop_lifecycle = ifr.cfpa.header.cfpa_lc_state() == Ok(LifeCycleState::Develop);
-        // Don't enable dev mode if secure boot is active. That way a flashed key can be tested
-        develop_lifecycle && !secure_boot_enabled
+
+        let secure_boot_cfg_ptr = &raw const ifr.cmpa.secure_boot_cfg;
+
+        // Read secure boot twice to harden against fault injection where they saturate a register
+        let secure_boot1 = unsafe { secure_boot_cfg_ptr.read_volatile() }
+            .sec_boot_en()
+            .raw_value()
+            .value() as u32;
+        let secure_boot2 = unsafe { secure_boot_cfg_ptr.read_volatile() }
+            .sec_boot_en()
+            .raw_value()
+            .value() as u32;
+
+        let lifecycle = match ifr.cfpa.header.cfpa_lc_state() {
+            Ok(val) => val.raw_value(),
+            Err(e) => e,
+        } as u32;
+        let inv_lifecycle = match ifr.cfpa.header.inv_cfpa_lc_state() {
+            Ok(val) => val.raw_value(),
+            Err(e) => e,
+        } as u32;
+
+        (secure_boot1 << 24) | (secure_boot2 << 16) | (lifecycle << 8) | (inv_lifecycle)
     }
 
     /// Check if the secure boot settings are good
     fn follows_policy() -> bool {
-        if Self::dev_mode() {
+        if Self::dev_mode() == DEV_VAL {
             true
         } else {
             unsafe { Provisioner::new_from_page(true) }
@@ -685,6 +703,12 @@ impl<C: McxaConfig + BootStatePolicy> Mcxa<C> {
         }
     }
 }
+
+pub const DEV_VAL: u32 = 0b00000011_00000011_00000011_11111100;
+// SecSecBootEn::OnlyPki ------- ^^
+// SecSecBootEn::OnlyPki ---------------- ^^
+// LifeCycleState::Develop ----------------- ^^^^^^^^
+// InvLifeCycleState::Develop ----------------------- ^^^^^^^^
 
 #[cfg(test)]
 mod tests {
