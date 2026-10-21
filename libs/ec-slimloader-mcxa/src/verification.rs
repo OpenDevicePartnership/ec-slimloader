@@ -9,6 +9,7 @@ use fault_rejection::protected_if;
 use mcxa_ifr::{IFR, RotkEn, RotkUsageVal};
 use mcxa_security_provisioning::certificate::derive_image_rkth_pair;
 
+use crate::board::DEV_VAL;
 use crate::error::map_nboot_status_to_boot_error;
 
 fn load_nboot_auth_parms_from_ifr(ifr: &IFR) -> Result<NbootImgAuthParms, BootError> {
@@ -83,7 +84,7 @@ pub fn verify_authenticity<'d>(
     defmt_or_log::trace!("Initializing NBOOT context");
     let mut n_boot_api = embassy_mcxa::rom::get().nboot().map_err(|_| BootError::Authenticate)?;
 
-    let result = protected_if::<{ true as u32 }, Result<(), BootError>, _, _>(dev_mode, || {
+    let result = protected_if::<DEV_VAL, Result<(), BootError>, _, _>(dev_mode, || {
         // In dev mode, we're going to lie to nboot and derive the rkth's ourselves so they're always correct
         // This makes the provisioning process easier. Once no longer in dev mode, this branch is not taken and
         // only the flashed keys are used
