@@ -1151,3 +1151,65 @@ impl<T, const N: usize> FromIterator<T> for ReverseArray<T, N> {
         Self::new(core::array::from_fn(|_| iter.next().unwrap()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// DEV test keys: ECDSA (secp384r1) RKTH as derived by the SBL (`Rkth::as_words()`).
+    const DEV_SRK3_RKTH_WORDS: [u32; 12] = [
+        0x213F846E, 0x875F7BEB, 0x00D057FA, 0xDD020589, 0xC5E2504F, 0x634ECBBA, 0xF1251DDD, 0x0CE93B9B, 0x83DF684B,
+        0xD14BF7C3, 0x9749A8A1, 0x7A5010CB,
+    ];
+
+    /// DEV test keys: ML-DSA RKTH as derived by the SBL (`Rkth::as_words()`).
+    const DEV_PQC_SIGNER0_RKTH_WORDS: [u32; 12] = [
+        0x63E98DEE, 0xDCEBB61F, 0xFA40B6A0, 0x99F262F7, 0xB5EF3CD5, 0xE3B616E7, 0xC8BB464C, 0xC2BF3B42, 0x742EFF88,
+        0xE9042CB5, 0x5D92EE7E, 0x8E8C480A,
+    ];
+
+    /// Golden vector: SHA-384 digest of the development ECDSA SRK table, in the
+    /// byte order the ROM expects at CMPA.ROTKH (generated from NXP's blhost nxpcrypto command).
+    const DEV_SRK3_RKTH_BYTES: [u8; 48] = [
+        0x6e, 0x84, 0x3f, 0x21, 0xeb, 0x7b, 0x5f, 0x87, 0xfa, 0x57, 0xd0, 0x00, //
+        0x89, 0x05, 0x02, 0xdd, 0x4f, 0x50, 0xe2, 0xc5, 0xba, 0xcb, 0x4e, 0x63, //
+        0xdd, 0x1d, 0x25, 0xf1, 0x9b, 0x3b, 0xe9, 0x0c, 0x4b, 0x68, 0xdf, 0x83, //
+        0xc3, 0xf7, 0x4b, 0xd1, 0xa1, 0xa8, 0x49, 0x97, 0xcb, 0x10, 0x50, 0x7a, //
+    ];
+
+    /// Golden vector: SHA-384 digest of the development ML-DSA SRK table (`pqc_rkth.bin`), in the
+    /// byte order the ROM expects at CMPA.PQC_ROTKH (generated from NXP's blhost nxpcrypto command).
+    const DEV_PQC_SIGNER0_RKTH_BYTES: [u8; 48] = [
+        0xee, 0x8d, 0xe9, 0x63, 0x1f, 0xb6, 0xeb, 0xdc, 0xa0, 0xb6, 0x40, 0xfa, //
+        0xf7, 0x62, 0xf2, 0x99, 0xd5, 0x3c, 0xef, 0xb5, 0xe7, 0x16, 0xb6, 0xe3, //
+        0x4c, 0x46, 0xbb, 0xc8, 0x42, 0x3b, 0xbf, 0xc2, 0x88, 0xff, 0x2e, 0x74, //
+        0xb5, 0x2c, 0x04, 0xe9, 0x7e, 0xee, 0x92, 0x5d, 0x0a, 0x48, 0x8c, 0x8e, //
+    ];
+
+    const ROTKH_OFFSET: usize = 0x60;
+    const PQC_ROTKH_OFFSET: usize = 0xC0;
+    const RKTH_LEN: usize = 48;
+
+    fn cmpa_with_dev_rkth() -> CMPA {
+        let mut cmpa = CMPA::ZERO;
+        cmpa.rotkh = DEV_SRK3_RKTH_WORDS;
+        cmpa.pqc_rotkh = DEV_PQC_SIGNER0_RKTH_WORDS;
+        cmpa
+    }
+
+    /// CMPA.ROTKH must hold the development ECDSA RKTH in digest order, not word-reversed.
+    #[test]
+    fn rotkh_matches_dev_srk3_golden_vector() {
+        let cmpa = cmpa_with_dev_rkth();
+        let bytes = cmpa.as_array().get(ROTKH_OFFSET..ROTKH_OFFSET + RKTH_LEN);
+        assert_eq!(bytes, Some(DEV_SRK3_RKTH_BYTES.as_slice()));
+    }
+
+    /// CMPA.PQC_ROTKH must hold the development ML-DSA RKTH in digest order, not word-reversed.
+    #[test]
+    fn pqc_rotkh_matches_dev_pqc_signer0_golden_vector() {
+        let cmpa = cmpa_with_dev_rkth();
+        let bytes = cmpa.as_array().get(PQC_ROTKH_OFFSET..PQC_ROTKH_OFFSET + RKTH_LEN);
+        assert_eq!(bytes, Some(DEV_PQC_SIGNER0_RKTH_BYTES.as_slice()));
+    }
+}
