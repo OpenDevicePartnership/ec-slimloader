@@ -461,14 +461,14 @@ pub struct CMPA {
     /// Same RoTKs and RoTKTH values are shared between debug authentication, SB3.1 firmware updates container and signed boot image based on CMPA.RoTKx_Usage .
     ///
     /// For SHA256 the bytes padded with 4 zero bytes at the start.
-    pub rotkh: ReverseArray<u32, 12>,
+    pub rotkh: [u32; 12],
     /// CUST_MK_SK is stored in form of RFC3394 blob and it is used by bootloader to decrypt SB3.1 encryption key during processing of SB file by bootloader.
     /// CUST_MK_SK is generated during device provisioning process by HSM_KEY_GEN (random key) or by HSM_STORE_KEY (user defined key) commands.
     /// To store this key into CMPA, SB_STORE_KEY command should be used.
     pub cust_mk_sk_key_blob: [u32; 12],
     /// Root of Trust Key Hash is SHA256 or SHA384 of RoTKpublic. Hash algorithm is selected based on RoTK EC type (secp256r1 -> SHA256 or secp384r1 -> SHA384).
     /// Same RoTKs and RoTKTH values are shared between debug authentication, SB3.1 firmware updates container and signed boot image based on CMPA.RoTKx_Usage.
-    pub pqc_rotkh: ReverseArray<u32, 12>,
+    pub pqc_rotkh: [u32; 12],
     pub quick_gpio: [QuickGpio; 6],
     pub _reserved1: [u32; 4],
     pub iped: [Iped; 8],
@@ -517,9 +517,9 @@ impl CMPA {
         rotk_usage: RotkUsage::ZERO,
         sbl_start_addr: 0,
         err_log_addr: 0,
-        rotkh: ReverseArray::new([0; _]),
+        rotkh: [0; _],
         cust_mk_sk_key_blob: [0; _],
-        pqc_rotkh: ReverseArray::new([0; _]),
+        pqc_rotkh: [0; _],
         quick_gpio: [QuickGpio::ZERO; _],
         _reserved1: [0; _],
         iped: [Iped::ZERO; _],

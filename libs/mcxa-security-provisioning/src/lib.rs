@@ -8,7 +8,7 @@ use embassy_mcxa::{peripherals, Peri};
 use header::{HeaderError, ImageHeader};
 use mcxa_ifr::{
     u3, u4, u5, BootCfg0, BootCfg1, DiceCsrKeyType, Header, InverseBigBool, LifeCycleState, LspiQflashCfg0, QspiPort,
-    ReverseArray, RotkRevoke, RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
+    RotkRevoke, RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
 };
 
 pub mod certificate;
@@ -313,8 +313,8 @@ impl Provisioner {
     }
 
     pub fn with_rotkh(&mut self, rotkh: [u32; 12], pqc_rotkh: [u32; 12]) -> &mut Self {
-        self.ifr.cmpa.rotkh = ReverseArray::new(rotkh);
-        self.ifr.cmpa.pqc_rotkh = ReverseArray::new(pqc_rotkh);
+        self.ifr.cmpa.rotkh = rotkh;
+        self.ifr.cmpa.pqc_rotkh = pqc_rotkh;
         self.cmpa_updated = true;
         self
     }
@@ -346,10 +346,10 @@ impl Provisioner {
                 image_header.image_length(),
             )?;
 
-            if ReverseArray::new(image_ecdsa_rkth.as_words()) != self.ifr.cmpa.rotkh {
+            if image_ecdsa_rkth.as_words() != self.ifr.cmpa.rotkh {
                 return Err(ProvisionError::RotkhMismatch);
             }
-            if ReverseArray::new(image_pqc_rkth.as_words()) != self.ifr.cmpa.pqc_rotkh {
+            if image_pqc_rkth.as_words() != self.ifr.cmpa.pqc_rotkh {
                 return Err(ProvisionError::RotkhMismatch);
             }
         }

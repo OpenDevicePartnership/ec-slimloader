@@ -41,8 +41,8 @@ fn load_nboot_auth_parms_from_ifr(ifr: &IFR) -> Result<NbootImgAuthParms, BootEr
                 from_rotk_en(ifr.cfpa.rotk_revoke.rotk_en(3)),
             ],
             soc_image_key_revocation: ifr.cfpa.image_key_revoke,
-            soc_rkh: ifr.cmpa.rotkh.degrade_original(),
-            soc_rkh_1: ifr.cmpa.pqc_rotkh.degrade_original(),
+            soc_rkh: ifr.cmpa.rotkh,
+            soc_rkh_1: ifr.cmpa.pqc_rotkh,
             soc_number_of_root_keys: 4,
             soc_root_key_usage: [
                 from_rotk_usage_val(ifr.cmpa.rotk_usage.rotk_usage(0)),
