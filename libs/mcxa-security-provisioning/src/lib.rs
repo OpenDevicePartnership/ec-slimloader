@@ -361,8 +361,20 @@ impl Provisioner {
         }
     }
 
-    /// Enables secure boot policies in CMPA
-    pub fn with_secure_boot_policies(&mut self) -> &mut Self {
+    /// Enables secure boot policies in CMPA.
+    /// Note that this function is a specific policy setup for production and is not intended for DEV or factory use.
+    /// Use [Self::with_default_secure_cmpa_config] for standard use.
+    ///
+    /// Errors with [ProvisionError::TzmPresetEnforced] if TZM preset enforcement is already enabled,
+    /// rather than silently disabling it. Sets strict security policies (apart from TZM enforcement)
+    pub fn with_secure_boot_policies(&mut self) -> Result<&mut Self, ProvisionError> {
+        if !matches!(
+            self.ifr.cmpa.secure_boot_cfg.enf_tzm_preset(),
+            mcxa_ifr::BigBool::False
+        ) {
+            return Err(ProvisionError::TzmPresetEnforced);
+        }
+
         self.ifr.cmpa.secure_boot_cfg = SecureBootCfg::builder()
             .with_sec_boot_en(mcxa_ifr::SecBootEn::OnlyPki)
             .with_lp_sec_boot(mcxa_ifr::LpSecBoot::Cold)
@@ -382,7 +394,7 @@ impl Provisioner {
 
         self.cmpa_updated = true;
 
-        self
+        Ok(self)
     }
 
     pub fn ifr(&self) -> &IFR {
@@ -399,6 +411,7 @@ pub enum ProvisionError {
     RotkhDeriveError(DeriveError),
     RotkhMismatch,
     NoImages,
+    TzmPresetEnforced,
 }
 
 impl From<DeriveError> for ProvisionError {
