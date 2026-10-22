@@ -368,7 +368,7 @@ impl Provisioner {
             .with_lp_sec_boot(mcxa_ifr::LpSecBoot::Cold)
             .with_dice_csr_key_type(DiceCsrKeyType::Sha384AndMLDSA)
             .with_enf_cnsa(mcxa_ifr::EnfCnsa::CNSA2)
-            .with_enf_tzm_preset(true.into())
+            .with_enf_tzm_preset(false.into())
             .with_fast_boot_en(mcxa_ifr::InverseBigBool::False)
             .with_active_img_prot(mcxa_ifr::ActiveImgProt::GLBAC4)
             .with_fips_sha_sten(mcxa_ifr::SelfTestEnable::NotIncluded)
