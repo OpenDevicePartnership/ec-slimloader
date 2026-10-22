@@ -368,10 +368,7 @@ impl Provisioner {
     /// Errors with [ProvisionError::TzmPresetEnforced] if TZM preset enforcement is already enabled,
     /// rather than silently disabling it. Sets strict security policies (apart from TZM enforcement)
     pub fn with_secure_boot_policies(&mut self) -> Result<&mut Self, ProvisionError> {
-        if !matches!(
-            self.ifr.cmpa.secure_boot_cfg.enf_tzm_preset(),
-            mcxa_ifr::BigBool::False
-        ) {
+        if !matches!(self.ifr.cmpa.secure_boot_cfg.enf_tzm_preset(), mcxa_ifr::BigBool::False) {
             return Err(ProvisionError::TzmPresetEnforced);
         }
 
