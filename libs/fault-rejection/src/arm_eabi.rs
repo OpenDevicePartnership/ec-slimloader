@@ -19,11 +19,11 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(
             // Make sure our expression value is false
             "movw r0, #:lower16:{false}", // Clear the r0 value, so it cannot yet contain the true value
             "movt r0, #:upper16:{false}",
-            "str r0, [{expv}]",
+            "str r0, [r5]",
 
             // We need to evaluate `exp_tramp`, prepare the function call
-            "mov r0, {exp}", // Load arg 0, pointer to the fnonce
-            "mov r1, {expv}", // Load arg 1, pointer to the out parameter
+            "mov r0, r4", // Load arg 0, pointer to the fnonce
+            "mov r1, r5", // Load arg 1, pointer to the out parameter
             "bl {exp_tramp}", // Call the trampoline, which will execute th fnonce
 
             // The returned value is now in [expv]. We must test if it's not 0
@@ -31,34 +31,29 @@ pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(
             "movs r0, 1", // Clear the zero flag, so a skipped cmp cannot trigger the beq
             "movw r0, #:lower16:{false}", // Clear the r0 value, so it cannot yet contain the true value
             "movt r0, #:upper16:{false}",
-            "ldr r0, [{expv}]", // Get the expression value into r0
+            "ldr r0, [r5]", // Get the expression value into r0
 
-            "movw r3, #:lower16:{true}", // Load the true value
-            "movt r3, #:upper16:{true}",
-            "cmp r0, r3", // Compare the loaded value with the loaded 'true' value
+            "movw r1, #:lower16:{true}", // Load the true value
+            "movt r1, #:upper16:{true}",
+            "cmp r0, r1", // Compare the loaded value with the loaded 'true' value
 
             "beq 2f", // If the compare set the Z flag, we jump to the body. If the compare was skipped, Z is not set and we don't take the branch
             "b 3f", // If the beq was not taken or skipped, we branch to the exit
             "udf 0", // If the b was skipped, we crash the CPU
 
             "2:", // Execute the body
-            "mov r0, {body}", // Load arg 0, pointer to the fnonce
-            "mov r1, {res}", // Load arg 1, pointer to the out parameter
+            "mov r0, r10", // Load arg 0, pointer to the fnonce
+            "mov r1, r11", // Load arg 1, pointer to the out parameter
             "bl {body_tramp}", // Call the trampoline, which will execute th fnonce
 
             "3:", // Exit the asm block
 
-            exp = in(reg) &mut expression as *mut _,
-            expv = in(reg) &mut expression_value as *mut _,
-            body = in(reg) &mut body as *mut _,
-            res = in(reg) &mut result as *mut _,
+            in("r4") &mut expression,
+            in("r5") &mut expression_value,
+            in("r10") &mut body,
+            in("r11") &mut result,
             true = const TRUE,
             false = const !TRUE,
-            in("r0") 0, // Reserve so we don't have to manually save named registers
-            in("r1") 0, // Reserve so we don't have to manually save named registers
-            in("r3") 0, // Reserve so we don't have to manually save named registers
-            in("r4") 0, // Reserve so we don't have to manually save named registers
-            in("r12") 0, // Reserve so we don't have to manually save named registers
             exp_tramp = sym fn_once_trampoline::<E, u32>,
             body_tramp = sym fn_once_trampoline::<B, R>,
             clobber_abi("C"),
