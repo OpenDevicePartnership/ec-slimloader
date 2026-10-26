@@ -57,9 +57,7 @@ fn in_emulation_window(offset: usize, len: usize) -> bool {
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::clocks::PoweredClock;
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::clocks::config::{
-    CoreSleep, Div8, FircConfig, FircFreqSel, MainClockConfig, MainClockSource, VddDriveStrength, VddLevel,
-};
+use embassy_mcxa::clocks::config::{FircConfig, FircFreqSel, VddDriveStrength, VddLevel};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::flexspi::lookup::opcodes::sdr::{CMD, RADDR, READ, WRITE};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
@@ -328,8 +326,6 @@ impl NorFlash for ExternalStorage {
     }
 }
 
-/// MCXA slimloader runtime — orchestrates boot sequence with MCXA HAL.
-///
 /// Entry point called from bootloader main(). Handles:
 /// 1. External-flash (FlexSPI) journal read
 /// 2. Boot state validation
@@ -387,50 +383,16 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
         let p = {
             let mut bl_cfg = embassy_mcxa::config::Config::default();
 
-            // Enable 192M FIRC, NOTE that this following configuration is intended for MCXA5xx family of MCUs.
-            // Feature-gate as needed for other family of MCXA MCUs.
-
+            // Enable 96Mhz FIRC.
             let mut fcfg = FircConfig::default();
-            fcfg.frequency = FircFreqSel::Mhz192;
-            fcfg.power = PoweredClock::NormalEnabledDeepSleepDisabled;
-            fcfg.fro_hf_enabled = true;
-            fcfg.clk_hf_fundamental_enabled = false;
-            fcfg.fro_hf_div = None; // Not sure what we would need the hf_div clock for here.
+            fcfg.frequency = FircFreqSel::Mhz96;
             bl_cfg.clock_cfg.firc = Some(fcfg);
 
-            // Enable 12M osc to use as ostimer clock
-            bl_cfg.clock_cfg.sirc.fro_12m_enabled = true;
-            bl_cfg.clock_cfg.sirc.fro_lf_div = None;
-            bl_cfg.clock_cfg.sirc.power = PoweredClock::AlwaysEnabled;
-
-            // Disable 16K osc
-            bl_cfg.clock_cfg.fro16k = None;
-
-            // Disable external osc
-            bl_cfg.clock_cfg.sosc = None;
-
-            // Disable PLL
-            bl_cfg.clock_cfg.spll = None;
-
-            // Feed core from 192M osc
-            bl_cfg.clock_cfg.main_clock = MainClockConfig {
-                source: MainClockSource::FircHfRoot,
-                power: PoweredClock::NormalEnabledDeepSleepDisabled,
-                ahb_clk_div: Div8::no_div(),
-            };
-
-            // Set the core in high power active mode
-            bl_cfg.clock_cfg.vdd_power.active_mode.level = VddLevel::OverDriveMode;
+            // 96 MHz exceeds the MidDrive clock limit; use NormalMode.
+            bl_cfg.clock_cfg.vdd_power.active_mode.level = VddLevel::NormalMode;
             bl_cfg.clock_cfg.vdd_power.active_mode.drive = VddDriveStrength::Normal;
-            // Set the core in low power sleep mode
-            bl_cfg.clock_cfg.vdd_power.low_power_mode.level = VddLevel::MidDriveMode;
-            bl_cfg.clock_cfg.vdd_power.low_power_mode.drive = VddDriveStrength::Low { enable_bandgap: false };
-
-            // Do NOT use DeepSleep: the bootloader has no custom executor capable of
-            // handling deep sleep wakeup, and DeepSleep gates peripheral clocks (including
-            // FlexSPI) on WFE, which crashes the async journal read. WfeGated (the
-            // default) only gates the CPU clock domain, leaving FlexSPI alive.
-            bl_cfg.clock_cfg.vdd_power.core_sleep = CoreSleep::WfeGated;
+            bl_cfg.clock_cfg.vdd_power.low_power_mode.level = VddLevel::NormalMode;
+            bl_cfg.clock_cfg.vdd_power.low_power_mode.drive = VddDriveStrength::Normal;
 
             embassy_mcxa::init(bl_cfg)
         };
