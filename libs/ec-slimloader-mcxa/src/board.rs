@@ -29,8 +29,8 @@ use crate::{jump, verification};
 /// External flash total size (2 MB).
 const EXTERNAL_FLASH_SIZE: usize = 0x0020_0000;
 const READ_ALIGNMENT: usize = 1;
-// 1-byte logical writes; write bridges to FlexSPI's 8-byte-aligned
-// `page_program` with a read-modify-write.
+// 1-byte logical writes; write bridges to the ROM `partial_program`, split on
+// page boundaries.
 const WRITE_ALIGNMENT: usize = 1;
 const ERASE_ALIGNMENT: usize = 4096;
 const MAX_SLOT_COUNT: usize = 2;
@@ -55,78 +55,19 @@ fn in_emulation_window(offset: usize, len: usize) -> bool {
 
 // ─── FlexSPI NOR backend (MCXA hardware only) ─────────────────────────────
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::clocks::PoweredClock;
-#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::clocks::config::{FircConfig, FircFreqSel, VddDriveStrength, VddLevel};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::flexspi::lookup::opcodes::sdr::{CMD, RADDR, READ, WRITE};
-#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::flexspi::lookup::{Command, Instr, LookupTable, Pads, SequenceBuilder};
-#[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-use embassy_mcxa::flexspi::{Blocking, ClockConfig, FlashConfig, Flexspi, NorFlash as FlexspiNor};
+use embassy_mcxa::rom::{
+    FlexspiNor, FlexspiNorPins, FlexspiSerialClockFrequency, SerialNorConfigOption, SerialNorDeviceType,
+    SerialNorFlashConnection, SerialNorMiscMode, SerialNorOptionPadEncoding, SerialNorOptionSize,
+    SerialNorQuadModeSetting, pack_serial_nor_option0, pack_serial_nor_option1,
+};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::{Peri, peripherals};
 
-/// Single-lane (1-bit SPI) LUT + geometry for the Macronix MX25U.
-/// Port A (EVK, `mcxa5xxevk` feature): flash starts at SFAR=0, use actual size.
-/// Port B (custom board, default): A1 is disabled in post-init so B1 starts at SFAR=0.
+/// External NOR page size; ROM reads/programs are chunked to at most one page.
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-const MX25U_FLASH_CONFIG: FlashConfig = FlashConfig {
-    flash_size_kbytes: EXTERNAL_FLASH_SIZE as u32 / 1024,
-    page_size: 256,
-    busy_status_polarity: true,
-    busy_status_offset: 0,
-    lookup_table: LookupTable::new()
-        .command(
-            Command::Read,
-            SequenceBuilder::new()
-                .instr(Instr::new(CMD, Pads::One, 0x03))
-                .instr(Instr::new(RADDR, Pads::One, 0x18))
-                .instr(Instr::new(READ, Pads::One, 0x00))
-                .build(),
-        )
-        .command(
-            Command::ReadStatus,
-            SequenceBuilder::new()
-                .instr(Instr::new(CMD, Pads::One, 0x05))
-                .instr(Instr::new(READ, Pads::One, 0x00))
-                .build(),
-        )
-        .command(
-            Command::WriteEnable,
-            SequenceBuilder::new().instr(Instr::new(CMD, Pads::One, 0x06)).build(),
-        )
-        .command(
-            Command::ReadId,
-            SequenceBuilder::new()
-                .instr(Instr::new(CMD, Pads::One, 0x9F))
-                .instr(Instr::new(READ, Pads::One, 0x00))
-                .build(),
-        )
-        .command(
-            Command::EraseSector,
-            SequenceBuilder::new()
-                .instr(Instr::new(CMD, Pads::One, 0x20))
-                .instr(Instr::new(RADDR, Pads::One, 0x18))
-                .build(),
-        )
-        .command(
-            Command::PageProgram,
-            SequenceBuilder::new()
-                .instr(Instr::new(CMD, Pads::One, 0x02))
-                .instr(Instr::new(RADDR, Pads::One, 0x18))
-                .instr(Instr::new(WRITE, Pads::One, 0x00))
-                .build(),
-        ),
-    read_seq: Command::Read as u8,
-    read_status_seq: Command::ReadStatus as u8,
-    write_enable_seq: Command::WriteEnable as u8,
-    read_id_seq: Command::ReadId as u8,
-    erase_sector_seq: Command::EraseSector as u8,
-    page_program_seq: Command::PageProgram as u8,
-    reset_sequence: None,
-    device_mode_command: None,
-};
+const FLASH_PAGE_SIZE: usize = 256;
 
 pub type StatePartition = Partition<'static, ExternalStorage, RW, NoopRawMutex>;
 pub type SlotPartition = Partition<'static, ExternalStorage, RO, NoopRawMutex>;
@@ -152,20 +93,20 @@ pub struct Partitions {
 
 /// MCXA external flash storage backend.
 ///
-/// On MCXA hardware (`mcxa5xx`) this drives the external MX25U QSPI NOR through
-/// the FlexSPI controller (Port B) with single-lane IP commands (read /
-/// sector-erase / page-program), so the boot journal is really persisted in
+/// On MCXA hardware (`mcxa5xx`) this drives the external QSPI NOR through the
+/// FlexSPI controller using the MCXA ROM FlexSPI NOR driver (read /
+/// sector-erase / partial-program), so the boot journal is really persisted in
 /// external flash. On host builds it falls back to a RAM shadow so the boot
 /// state machine can be unit-tested without hardware.
 pub struct ExternalStorage {
     #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-    nor: FlexspiNor<'static, Blocking>,
+    nor: FlexspiNor<'static>,
 }
 
 impl ExternalStorage {
-    /// Wrap an initialized FlexSPI NOR driver (real external flash).
+    /// Wrap an initialized ROM FlexSPI NOR handle (real external flash).
     #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-    pub fn new(nor: FlexspiNor<'static, Blocking>) -> Self {
+    pub fn new(nor: FlexspiNor<'static>) -> Self {
         Self { nor }
     }
 
@@ -199,12 +140,26 @@ impl ReadNorFlash for ExternalStorage {
             return Err(NorFlashErrorKind::OutOfBounds);
         }
 
-        // Real FlexSPI IP read from external NOR.
+        // ROM read needs a 32-bit aligned destination; bounce through a word
+        // buffer one page at a time.
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
-            self.nor
-                .blocking_read(offset, bytes)
-                .map_err(|_| NorFlashErrorKind::Other)?;
+            let mut start: u32 = offset;
+            let mut curr: usize = 0;
+            let mut words = [0u32; FLASH_PAGE_SIZE / 4];
+            while curr < bytes.len() {
+                let read_len = core::cmp::min(FLASH_PAGE_SIZE, bytes.len() - curr);
+
+                self.nor
+                    .read(&mut words, start, read_len as u32)
+                    .map_err(|_| NorFlashErrorKind::Other)?;
+                for (dst, word) in bytes[curr..curr + read_len].chunks_mut(4).zip(words.iter()) {
+                    dst.copy_from_slice(&word.to_le_bytes()[..dst.len()]);
+                }
+
+                start += read_len as u32;
+                curr += read_len;
+            }
         }
 
         // Host / non-hardware: RAM-shadow emulation.
@@ -249,9 +204,7 @@ impl NorFlash for ExternalStorage {
         {
             let mut addr = from;
             while addr < to {
-                self.nor
-                    .blocking_erase_sector(addr)
-                    .map_err(|_| NorFlashErrorKind::Other)?;
+                self.nor.erase_sector(addr).map_err(|_| NorFlashErrorKind::Other)?;
                 addr += Self::ERASE_SIZE as u32;
             }
         }
@@ -272,7 +225,7 @@ impl NorFlash for ExternalStorage {
         Ok(())
     }
 
-    // Slicing in the RMW and host RAM-shadow paths is bounds-guaranteed.
+    // Slicing in the page-split and host RAM-shadow paths is bounds-guaranteed.
     #[allow(clippy::indexing_slicing)]
     async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
         let offset_usize = offset as usize;
@@ -282,28 +235,29 @@ impl NorFlash for ExternalStorage {
         }
         // WRITE_SIZE is 1, so every offset/length is aligned (no check needed).
 
-        // page_program needs 8-byte-aligned address+length
+        // ROM `partial_program` programs an arbitrary byte span from a 32-bit
+        // aligned source. Bounce through a word buffer and never cross a page
+        // boundary in a single program operation.
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
-            const UNIT: usize = 8;
-            let mut pos = offset_usize;
-            let mut src = bytes;
-            while !src.is_empty() {
-                let block = pos & !(UNIT - 1);
-                let in_block = pos - block;
-                let n = core::cmp::min(UNIT - in_block, src.len());
+            let mut start: u32 = offset;
+            let mut curr: usize = 0;
+            let mut words = [u32::MAX; FLASH_PAGE_SIZE / 4];
+            while curr < bytes.len() {
+                let page_remaining = FLASH_PAGE_SIZE - start as usize % FLASH_PAGE_SIZE;
+                let write_len = core::cmp::min(page_remaining, bytes.len() - curr);
 
-                let mut buf = [0u8; UNIT];
+                for (word, chunk) in words.iter_mut().zip(bytes[curr..curr + write_len].chunks(4)) {
+                    let mut bounce = [0xFF; 4];
+                    bounce[..chunk.len()].copy_from_slice(chunk);
+                    *word = u32::from_le_bytes(bounce);
+                }
                 self.nor
-                    .blocking_read(block as u32, &mut buf)
-                    .map_err(|_| NorFlashErrorKind::Other)?;
-                buf[in_block..in_block + n].copy_from_slice(&src[..n]);
-                self.nor
-                    .blocking_page_program(block as u32, &buf)
+                    .partial_program(start, &words, write_len as u32)
                     .map_err(|_| NorFlashErrorKind::Other)?;
 
-                pos += n;
-                src = &src[n..];
+                start += write_len as u32;
+                curr += write_len;
             }
         }
 
@@ -402,109 +356,76 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
 
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         let external = {
-            // FIRC is 192 MHz; use div=16 → 12 MHz serial clock, matching the
-            // known-good speed from the original 48 MHz FIRC + div=4 default.
-            // The MX25U standard-SPI READ (0x03) max is ~50 MHz but board
-            // capacitance probably makes 48 MHz (192/4) unreliable.
-            use embassy_mcxa::clocks::periph_helpers::{Div4, FlexspiClockSel};
-            const FLEXSPI_DIV: Div4 = match Div4::from_divisor(16) {
-                Some(d) => d,
-                None => panic!("invalid FlexSPI divisor"),
-            };
-            const FLEXSPI_CLOCK: ClockConfig = ClockConfig {
-                power: PoweredClock::NormalEnabledDeepSleepDisabled,
-                source: FlexspiClockSel::FroHf,
-                div: FLEXSPI_DIV,
-            };
+            // Reset FlexSPI so the ROM get_config/init start from the hardware
+            // default rather than inheriting leftover controller state.
+            // SAFETY: FLEXSPI0 is not otherwise in use at this point in boot.
+            unsafe {
+                embassy_mcxa::clocks::pulse_reset::<peripherals::FLEXSPI0>();
+            }
 
             #[cfg(not(feature = "mcxa5xxevk"))]
-            let flexspi = Flexspi::new_blocking(
-                p.FLEXSPI0,
-                p.P3_17, // Port B: B_SS0 (CS0)
-                p.P3_16, // Port B: B_SCLK
-                p.P3_1,  // Port B: B_DQS
-                p.P3_15, // Port B: B_DATA0
-                p.P3_14, // Port B: B_DATA1
-                p.P3_13, // Port B: B_DATA2
-                p.P3_12, // Port B: B_DATA3
-                FLEXSPI_CLOCK,
-                MX25U_FLASH_CONFIG,
-            )
-            .unwrap_or_else(|_| panic!("FlexSPI init failed"));
+            let (pins, connection) = (
+                FlexspiNorPins::new(
+                    p.P3_17, // Port B: B_SS0 (CS0)
+                    p.P3_16, // Port B: B_SCLK
+                    p.P3_1,  // Port B: B_DQS
+                    p.P3_15, // Port B: B_DATA0
+                    p.P3_14, // Port B: B_DATA1
+                    p.P3_13, // Port B: B_DATA2
+                    p.P3_12, // Port B: B_DATA3
+                ),
+                SerialNorFlashConnection::SinglePortB,
+            );
 
             #[cfg(feature = "mcxa5xxevk")]
-            let flexspi = Flexspi::new_blocking(
-                p.FLEXSPI0,
-                p.P3_0,  // Port A EVK: A_SS0 (CS0)
-                p.P3_7,  // Port A EVK: A_SCLK
-                p.P3_6,  // Port A EVK: A_DQS
-                p.P3_8,  // Port A EVK: A_DATA0
-                p.P3_9,  // Port A EVK: A_DATA1
-                p.P3_10, // Port A EVK: A_DATA2
-                p.P3_11, // Port A EVK: A_DATA3
-                FLEXSPI_CLOCK,
-                MX25U_FLASH_CONFIG,
-            )
-            .unwrap_or_else(|_| panic!("FlexSPI init failed"));
-            let external = ExternalStorage::new(FlexspiNor::new(flexspi));
-            // Port B only: disable A1 (size=0) so B1 starts at SFAR=0,
-            // matching the driver's write_enable/read_status which use SFAR=0.
-            // Port A (EVK) needs no post-init — A1 is chip_index=0 and SFAR=0
-            // already targets it natively.
-            #[cfg(not(feature = "mcxa5xxevk"))]
-            {
-                use embassy_mcxa::pac;
-                pac::FLEXSPI0.flshcr1(2).write_value(pac::FLEXSPI0.flshcr1(1).read());
-                pac::FLEXSPI0.flshcr2(2).write_value(pac::FLEXSPI0.flshcr2(1).read());
-                pac::FLEXSPI0.dllcr(1).write_value(pac::FLEXSPI0.dllcr(0).read());
-                pac::FLEXSPI0.flshcr0(0).write(|r| r.set_flshsz(0));
-                pac::FLEXSPI0.mcr0().modify(|r| r.set_mdis(pac::flexspi::Mdis::Val1));
-                pac::FLEXSPI0
-                    .mcr0()
-                    .modify(|r| r.set_rxclksrc(pac::flexspi::Rxclksrc::Val0));
-                pac::FLEXSPI0.mcr0().modify(|r| r.set_mdis(pac::flexspi::Mdis::Val0));
-                pac::FLEXSPI0
-                    .mcr0()
-                    .modify(|r| r.set_swreset(pac::flexspi::Swreset::Val1));
-                while pac::FLEXSPI0.mcr0().read().swreset() == pac::flexspi::Swreset::Val1 {}
-            }
-            external
+            let (pins, connection) = (
+                FlexspiNorPins::new(
+                    p.P3_0,  // Port A EVK: A_SS0 (CS0)
+                    p.P3_7,  // Port A EVK: A_SCLK
+                    p.P3_6,  // Port A EVK: A_DQS
+                    p.P3_8,  // Port A EVK: A_DATA0
+                    p.P3_9,  // Port A EVK: A_DATA1
+                    p.P3_10, // Port A EVK: A_DATA2
+                    p.P3_11, // Port A EVK: A_DATA3
+                ),
+                SerialNorFlashConnection::SinglePortA,
+            );
+
+            // SFDP SDR auto-probe (non-destructive; DDR probing would write test
+            // patterns), 1-pad query/cmd, quad mode left to SFDP, 30 MHz.
+            let option = SerialNorConfigOption {
+                option0: pack_serial_nor_option0(
+                    SerialNorOptionSize::Option0AndOption1,
+                    SerialNorDeviceType::ReadSfdpSdr,
+                    SerialNorOptionPadEncoding::One,
+                    SerialNorOptionPadEncoding::One,
+                    SerialNorQuadModeSetting::NotConfigured,
+                    SerialNorMiscMode::Disabled,
+                    FlexspiSerialClockFrequency::MHz30,
+                ),
+                option1: pack_serial_nor_option1(connection, 0, 0, 0, 0, 0),
+            };
+
+            // Keep the ROM-probed LUT; override only what the ROM can't infer:
+            // - read_sample_clk_src = 0: internal dummy-read strobe (no-DQS board).
+            // - Port B: disable A1/A2 so B1 sits at SFAR 0, and size B1.
+            let nor = embassy_mcxa::rom::get()
+                .flex_spi_with_options(p.FLEXSPI0, pins, option, |cfg| {
+                    cfg.mem_config.read_sample_clk_src = 0;
+                    #[cfg(not(feature = "mcxa5xxevk"))]
+                    {
+                        cfg.mem_config.sflash_a1_size = 0;
+                        cfg.mem_config.sflash_a2_size = 0;
+                        cfg.mem_config.sflash_b1_size = EXTERNAL_FLASH_SIZE as u32;
+                        cfg.mem_config.sflash_b2_size = 0;
+                    }
+                })
+                .unwrap_or_else(|_| panic!("FlexSPI init failed"));
+
+            ExternalStorage::new(nor)
         };
         #[cfg(not(all(target_os = "none", feature = "mcxa5xx")))]
         let external = ExternalStorage::init();
-
-        // FlexSPI external-flash READ probe (read-only, modifies nothing): dumps
-        // the JEDEC id + boot-journal bytes so you can compare the journal
-        // before/after an external write done by another tool (e.g. SurfDbg
-        // 0xFF'ing the journal). If the bytes change, that tool really wrote to
-        // external flash; if they don't, it didn't.
-        #[cfg(all(target_os = "none", feature = "mcxa5xx", feature = "flexspi-selftest"))]
-        let external = {
-            let mut external = external;
-            use embassy_mcxa::pac;
-            // JEDEC/vendor id: proves the MCU can actually reach the external NOR.
-            flexspi_ip_command(0, Command::ReadId as u8, 3);
-            let jedec = pac::FLEXSPI0.rfdr(0).read().rxdata();
-            defmt_or_log::info!(
-                "flexspi-probe: JEDEC id = {:#010x} (MX25U low byte should be 0xc2)",
-                jedec
-            );
-            // Boot-journal bytes at external offset 0x1000 (read-only).
-            let mut j = [0u8; 16];
-            let _ = external.read(0x1000, &mut j).await;
-            defmt_or_log::info!(
-                "flexspi-probe: journal @0x1000 = [{:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}]",
-                j[0],
-                j[1],
-                j[2],
-                j[3],
-                j[4],
-                j[5],
-                j[6],
-                j[7]
-            );
-            external
-        };
 
         let ext_flash_manager = EXT_FLASH.init_with(|| PartitionManager::new(external));
 
