@@ -58,8 +58,8 @@ fn in_emulation_window(offset: usize, len: usize) -> bool {
 use embassy_mcxa::clocks::config::{FircConfig, FircFreqSel, VddDriveStrength, VddLevel};
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use embassy_mcxa::rom::{
-    FlexspiNor, FlexspiNorPins, FlexspiSerialClockFrequency, SerialNorConfigOption, SerialNorDeviceType,
-    SerialNorFlashConnection, SerialNorMiscMode, SerialNorOptionPadEncoding, SerialNorOptionSize,
+    FlexspiClockSource, FlexspiNor, FlexspiNorPins, FlexspiSerialClockFrequency, SerialNorConfigOption,
+    SerialNorDeviceType, SerialNorFlashConnection, SerialNorMiscMode, SerialNorOptionPadEncoding, SerialNorOptionSize,
     SerialNorQuadModeSetting, pack_serial_nor_option0, pack_serial_nor_option1,
 };
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
@@ -144,21 +144,15 @@ impl ReadNorFlash for ExternalStorage {
         // buffer one page at a time.
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
-            let mut start: u32 = offset;
-            let mut curr: usize = 0;
             let mut words = [0u32; FLASH_PAGE_SIZE / 4];
-            while curr < bytes.len() {
-                let read_len = core::cmp::min(FLASH_PAGE_SIZE, bytes.len() - curr);
-
+            for (page, chunk) in bytes.chunks_mut(FLASH_PAGE_SIZE).enumerate() {
+                let start = offset + (page * FLASH_PAGE_SIZE) as u32;
                 self.nor
-                    .read(&mut words, start, read_len as u32)
+                    .read(&mut words, start, chunk.len() as u32)
                     .map_err(|_| NorFlashErrorKind::Other)?;
-                for (dst, word) in bytes[curr..curr + read_len].chunks_mut(4).zip(words.iter()) {
+                for (dst, word) in chunk.chunks_mut(4).zip(words.iter()) {
                     dst.copy_from_slice(&word.to_le_bytes()[..dst.len()]);
                 }
-
-                start += read_len as u32;
-                curr += read_len;
             }
         }
 
@@ -199,15 +193,9 @@ impl NorFlash for ExternalStorage {
             return Err(NorFlashErrorKind::NotAligned);
         }
 
-        // Real FlexSPI: erase each 4 KB sector in [from, to).
+        // Real FlexSPI: erase [from, to).
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
-        {
-            let mut addr = from;
-            while addr < to {
-                self.nor.erase_sector(addr).map_err(|_| NorFlashErrorKind::Other)?;
-                addr += Self::ERASE_SIZE as u32;
-            }
-        }
+        self.nor.erase(from, to - from).map_err(|_| NorFlashErrorKind::Other)?;
 
         // Host / non-hardware: RAM-shadow emulation.
         #[cfg(not(all(target_os = "none", feature = "mcxa5xx")))]
@@ -240,24 +228,24 @@ impl NorFlash for ExternalStorage {
         // boundary in a single program operation.
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
-            let mut start: u32 = offset;
-            let mut curr: usize = 0;
+            let first_len = bytes.len().min(FLASH_PAGE_SIZE - offset as usize % FLASH_PAGE_SIZE);
+            let (first, rest) = bytes.split_at(first_len);
+            let mut start = offset;
             let mut words = [u32::MAX; FLASH_PAGE_SIZE / 4];
-            while curr < bytes.len() {
-                let page_remaining = FLASH_PAGE_SIZE - start as usize % FLASH_PAGE_SIZE;
-                let write_len = core::cmp::min(page_remaining, bytes.len() - curr);
-
-                for (word, chunk) in words.iter_mut().zip(bytes[curr..curr + write_len].chunks(4)) {
+            for chunk in core::iter::once(first)
+                .chain(rest.chunks(FLASH_PAGE_SIZE))
+                .filter(|chunk| !chunk.is_empty())
+            {
+                for (word, src) in words.iter_mut().zip(chunk.chunks(4)) {
                     let mut bounce = [0xFF; 4];
-                    bounce[..chunk.len()].copy_from_slice(chunk);
+                    bounce[..src.len()].copy_from_slice(src);
                     *word = u32::from_le_bytes(bounce);
                 }
                 self.nor
-                    .partial_program(start, &words, write_len as u32)
+                    .partial_program(start, &words, chunk.len() as u32)
                     .map_err(|_| NorFlashErrorKind::Other)?;
 
-                start += write_len as u32;
-                curr += write_len;
+                start += chunk.len() as u32;
             }
         }
 
@@ -410,7 +398,7 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             // - read_sample_clk_src = 0: internal dummy-read strobe (no-DQS board).
             // - Port B: disable A1/A2 so B1 sits at SFAR 0, and size B1.
             let nor = embassy_mcxa::rom::get()
-                .flex_spi_with_options(p.FLEXSPI0, pins, option, |cfg| {
+                .flex_spi_with_options_and_clock(p.FLEXSPI0, pins, option, FlexspiClockSource::FroHf, |cfg| {
                     cfg.mem_config.read_sample_clk_src = 0;
                     #[cfg(not(feature = "mcxa5xxevk"))]
                     {
