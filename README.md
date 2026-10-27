@@ -34,6 +34,8 @@ The `ec-slimloader` crate will handle for you:
 * it will read from the state journal what image slot will be booted.
 * on subsequent reboots, it will fall back to your defined backup slot if you do not mark your current application image as `confirmed`.
 
+If that backup fails validation and differs from the target, the loader also tries the target before giving up. It records `Attempting` before this reverse fallback, so the application identifies the correct running slot and inactive update slot. Each distinct candidate is checked at most once per boot.
+
 However, some aspects are handled by the platform support crate (and can differ from project-to-project):
 * how application images are loaded. For `ec-slimloader-imxrt` images are copied to RAM in a quite chip-specific way. Typically for other platforms you might want to swap images between on-chip NOR flash and external NOR flash. The latter method is not implemented in this repository (yet).
 * how application images are verified. By default the images themselves are not checked at all. `ec-slimloader-imxrt` leverages the native NXP authentication routines to check image integrity.
