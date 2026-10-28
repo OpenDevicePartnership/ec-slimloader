@@ -31,7 +31,6 @@ fault-rejection = { path = "../fault-rejection" }
 default = ["mcxa5xx", "defmt"]
 defmt = ["dep:defmt", "defmt-or-log/defmt", "ec-slimloader/defmt", "partition-manager/defmt", "mcxa-security-provisioning/defmt"]
 log = ["dep:log", "defmt-or-log/log", "ec-slimloader/log", "mcxa-security-provisioning/log"]
-flexspi-selftest = []
 mcxa5xx = ["embassy-mcxa/mcxa5xx"]
 # Use this when targeting the FRDM-MCXA577 EVK (flash on FlexSPI Port A).
 # Without this flag the driver targets Port B (custom board wiring for end target HW).
