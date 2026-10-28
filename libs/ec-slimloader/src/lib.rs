@@ -164,6 +164,16 @@ pub async fn start<B: Board, const JOURNAL_BUFFER_SIZE: usize>(config: B::Config
         info!("Attempting to boot backup in {:?}", slot);
         let error = board.check_and_boot(&state.backup()).await; // If this function returns, it implies that the boot has failed.
         warn!("Failed to boot backup in {:?} because {:?}", slot, error);
+    } else if slot != state.target() {
+        // We started in [Attempting] or [Failed], so the backup was tried first and could not boot.
+        // The target has not been tried this boot; an interrupted earlier attempt may have left it usable.
+        // Try the target as a last resort, recording [Attempting] in the journal so the app
+        // identifies the target as running and writes future updates to the backup.
+
+        set_status::<_, JOURNAL_BUFFER_SIZE>(&mut board, &mut state, Status::Attempting).await;
+        info!("Backup unusable, retrying target {:?}", state.target());
+        let error = board.check_and_boot(&state.target()).await;
+        warn!("Failed to boot target {:?} because {:?}", state.target(), error);
     }
 
     error!("No candidates booted successfully, giving up...");
