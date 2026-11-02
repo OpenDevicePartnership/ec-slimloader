@@ -8,22 +8,18 @@
 //!   * boot journal + config/log partitions : external FlexSPI flash `0x0800_0000`
 //!
 
-use core::ops::Range;
+use core::ops::{Not, Range};
 
 use ec_slimloader::{Board, BootError, BootStatePolicy};
 use ec_slimloader_state::flash::FlashJournal;
 use ec_slimloader_state::state::Slot;
 #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
 use ec_slimloader_state::state::Status;
-use embassy_mcxa::rom::NbootBoolValue;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, NorFlashErrorKind, ReadNorFlash};
 use heapless::Vec;
-use mcxa_security_provisioning::Provisioner;
 use partition_manager::{Partition, PartitionManager, RO, RW};
 use static_cell::StaticCell;
-
-use crate::{jump, verification};
 
 /// External flash total size (2 MB).
 const EXTERNAL_FLASH_SIZE: usize = 0x0020_0000;
@@ -473,12 +469,15 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
         #[cfg(not(all(target_os = "none", feature = "mcxa5xx")))]
         {
             let _ = app_base;
-            return BootError::Integrity;
+            BootError::Integrity
         }
 
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         {
+            use embassy_mcxa::rom::NbootBoolValue;
             use fault_rejection::protected_if;
+
+            use crate::{jump, verification};
 
             if !slot_has_valid_app(app_base) {
                 return BootError::Markers;
@@ -508,7 +507,7 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             }
 
             let Err(if_result) = protected_if::<{ NbootBoolValue::True as u32 }, _, _, _>(
-                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, || Self::dev_mode()) {
+                || match verification::verify_authenticity(self.sgi.reborrow(), image_base, BootMode::load_from_ifr) {
                     Ok(result) => result as u32,
                     Err(error) => error as u32, // Error has no overlap in value with Nboot bool, so this is safe to do
                 },
@@ -534,55 +533,86 @@ impl<C: McxaConfig + BootStatePolicy> Mcxa<C> {
         ec_slimloader::start::<Self, JOURNAL_BUFFER_SIZE>(config).await
     }
 
-    /// Check if the device authenticity should be checked in dev mode (where the keys are self-generated instead of taken from the programmed value)
-    /// Dev mode is active when the returned value is [DEV_VAL]
-    fn dev_mode() -> u32 {
-        let ifr = unsafe { mcxa_ifr::IFR::current() };
-
-        let secure_boot_cfg_ptr = &raw const ifr.cmpa.secure_boot_cfg;
-
-        // Read secure boot twice to harden against fault injection where they saturate a register
-        let secure_boot1 = unsafe { secure_boot_cfg_ptr.read_volatile() }
-            .sec_boot_en()
-            .raw_value()
-            .value() as u32;
-        let secure_boot2 = unsafe { secure_boot_cfg_ptr.read_volatile() }
-            .sec_boot_en()
-            .raw_value()
-            .value() as u32;
-
-        let lifecycle = match ifr.cfpa.header.cfpa_lc_state() {
-            Ok(val) => val.raw_value(),
-            Err(e) => e,
-        } as u32;
-        let inv_lifecycle = match ifr.cfpa.header.inv_cfpa_lc_state() {
-            Ok(val) => val.raw_value(),
-            Err(e) => e,
-        } as u32;
-
-        (secure_boot1 << 24) | (secure_boot2 << 16) | (lifecycle << 8) | (inv_lifecycle)
-    }
-
+    #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
     /// Check if the secure boot settings are good
     fn follows_policy() -> bool {
-        if Self::dev_mode() == DEV_VAL {
+        if BootMode::load_from_ifr() == BootMode::DEV_VAL {
             true
         } else {
-            unsafe { Provisioner::new_from_page(true) }
+            unsafe { mcxa_security_provisioning::Provisioner::new_from_page(true) }
                 .check_production_settings()
                 .is_ok()
         }
     }
 }
 
-pub const DEV_VAL: u32 = 0b00000011_00000011_00000011_11111100;
-// SecSecBootEn::OnlyPki ------- ^^
-// SecSecBootEn::OnlyPki ---------------- ^^
-// LifeCycleState::Develop ----------------- ^^^^^^^^
-// InvLifeCycleState::Develop ----------------------- ^^^^^^^^
+/// Information about the boot mode
+///
+/// Data is laid out so that a single(!) saturation fault injection doesn't produce a value
+/// that can lead to disabling security protections.
+/// It's also very unlikely that a skipped instruction would lead to the correct bit pattern,
+/// but that hasn't been exhaustively examined.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BootMode {
+    inverse_lifecycle: u8,
+    lifecycle: u8,
+    inverse_secure_boot: u8,
+    secure_boot: u8,
+}
+
+impl BootMode {
+    /// The state of bootmode that would permit the use of dev mode
+    pub const DEV_VAL: Self = Self {
+        inverse_lifecycle: 0b11111100,   // InvLifeCycleState::Develop
+        lifecycle: 0b00000011,           // LifeCycleState::Develop
+        inverse_secure_boot: 0b00000011, // !SecSecBootEn::AllAllowed
+        secure_boot: 0b00000000,         // SecSecBootEn::AllAllowed
+    };
+
+    pub fn load_from_ifr() -> Self {
+        let ifr = unsafe { mcxa_ifr::IFR::current() };
+
+        let secure_boot_cfg_ptr = &raw const ifr.cmpa.secure_boot_cfg;
+
+        // Read secure boot twice to harden against fault injection where they saturate a register
+        let secure_boot = unsafe { secure_boot_cfg_ptr.read_volatile() }
+            .sec_boot_en()
+            .raw_value()
+            .value();
+        let inverse_secure_boot = unsafe { secure_boot_cfg_ptr.read_volatile() }
+            .sec_boot_en()
+            .raw_value()
+            .not()
+            .value();
+
+        let lifecycle = match ifr.cfpa.header.cfpa_lc_state() {
+            Ok(val) => val.raw_value(),
+            Err(e) => e,
+        };
+        let inverse_lifecycle = match ifr.cfpa.header.inv_cfpa_lc_state() {
+            Ok(val) => val.raw_value(),
+            Err(e) => e,
+        };
+
+        Self {
+            inverse_lifecycle,
+            lifecycle,
+            inverse_secure_boot,
+            secure_boot,
+        }
+    }
+
+    /// Get the raw value of the mode. This way it can be used with [fault_rejection::protected_if].
+    pub const fn raw_value(&self) -> u32 {
+        unsafe { core::mem::transmute_copy::<Self, u32>(self) }
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use mcxa_ifr::{InvLifeCycleState, LifeCycleState, SecBootEn};
+
     use super::*;
 
     #[test]
@@ -607,5 +637,30 @@ mod tests {
         assert!(!vector_table_looks_valid(0x0801_0000, 0x0001_0289));
         assert!(!vector_table_looks_valid(0x2004_58B0, 0x0001_0288));
         assert!(!vector_table_looks_valid(0x2004_58B0, 0x0801_0001));
+    }
+
+    #[test]
+    fn boot_mode_dev_mode_correct() {
+        let secure_boot = SecBootEn::AllAllowed.raw_value().value();
+        let inverse_secure_boot = SecBootEn::AllAllowed.raw_value().not().value();
+
+        let lifecycle = match Ok(LifeCycleState::Develop) {
+            Ok(val) => val.raw_value(),
+            Err(e) => e,
+        };
+        let inverse_lifecycle = match Ok(InvLifeCycleState::Develop) {
+            Ok(val) => val.raw_value(),
+            Err(e) => e,
+        };
+
+        assert_eq!(
+            BootMode {
+                inverse_lifecycle,
+                lifecycle,
+                inverse_secure_boot,
+                secure_boot,
+            },
+            BootMode::DEV_VAL
+        );
     }
 }

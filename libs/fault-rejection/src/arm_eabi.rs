@@ -1,5 +1,22 @@
 use core::mem::ManuallyDrop;
 
+/// A very convoluted if statement.
+///
+/// It consists of 3 parts:
+/// - The expression callback
+/// - The `TRUE` const
+/// - The body callback
+///
+/// The expression will be evaluated. If it returns the same value as `TRUE`, the body will be called.
+///
+/// ## Claims
+///
+/// The goal is to harden against fault injections. Specifically, this function protects against single(!) instruction skips.
+/// If any instruction is skipped, either the body is not executed or a `udf` instruction is executed instead.
+///
+/// This function does not protect against saturation faults (where a register is set to all-0 or all-1).
+/// The `TRUE` value should be chosen so it's not all-0 or all-1 to mitigate this type of fault injection somewhat.
+/// If that's the case, a saturation can in practise only affect some pointers which will cause UB when it's all-0 or a memfault when it's all-1.
 pub fn protected_if<const TRUE: u32, R, E: FnOnce() -> u32, B: FnOnce() -> R>(
     expression: E,
     body: B,
