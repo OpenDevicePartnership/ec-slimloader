@@ -566,8 +566,8 @@ impl BootMode {
     pub const DEV_VAL: Self = Self {
         inverse_lifecycle: 0b11111100,   // InvLifeCycleState::Develop
         lifecycle: 0b00000011,           // LifeCycleState::Develop
-        inverse_secure_boot: 0b00000011, // !SecSecBootEn::AllAllowed
-        secure_boot: 0b00000000,         // SecSecBootEn::AllAllowed
+        inverse_secure_boot: 0b00000011, // !SecBootEn::AllAllowed
+        secure_boot: 0b00000000,         // SecBootEn::AllAllowed
     };
 
     pub fn load_from_ifr() -> Self {
