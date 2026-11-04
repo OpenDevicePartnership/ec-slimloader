@@ -22,8 +22,43 @@ pub struct Provisioner {
 }
 
 impl Provisioner {
-    const DEFAULT_CC_SOCU_PIN: u32 = 0x1FFFE000; // default value for CC_SOCU_PIN in CMPA, for breakdown, refer to NXP secure provisioning guide.
-    const DEFAULT_CC_SOCU_DFLT: u32 = 0xBFFF4000; // default value for CC_SOCU_DFLT in CMPA, for breakdown, refer to NXP secure provisioning guide.
+    const DEFAULT_CC_SOCU_PIN: u32 = 0x1FFF0000;
+    /*
+    Bit-field        Bits   Required value
+
+    NIDEN            0      USE_DAP_TO_ENABLE/0
+    DBGEN            1      USE_DAP_TO_ENABLE/0
+    SPNIDEN          2      USE_DAP_TO_ENABLE/0
+    SPIDEN           3      USE_DAP_TO_ENABLE/0
+    Reserved         4:5    *Reserved/0b00
+    ISP_CMD_EN       6      USE_DAP_TO_ENABLE/0
+    FA_CMD_EN        7      USE_DAP_TO_ENABLE/0
+    ME_CMD_EN        8      USE_DAP_TO_ENABLE/0
+    Reserved         9:12   *Reserved/0b0000
+    Reserved         13     *Reserved/1
+    Reserved         14     *Reserved/1
+    Reserved         15     *Reserved/1
+    Inverse_value    16:31  0x1FFF
+    */
+
+    const DEFAULT_CC_SOCU_DFLT: u32 = 0x3FFFC000;
+    /*
+    Bit-field        Bits   Required value
+
+    NIDEN            0      DISABLED/0
+    DBGEN            1      DISABLED/0
+    SPNIDEN          2      DISABLED/0
+    SPIDEN           3      DISABLED/0
+    Reserved         4:5    *Reserved/0b00
+    ISP_CMD_EN       6      DISABLED/0
+    FA_CMD_EN        7      DISABLED/0
+    ME_CMD_EN        8      DISABLED/0
+    Reserved         9:12   *Reserved/0b0000
+    ME_DEVCFG_DIS    13     DISABLED/0
+    DBG_KEYFLUSH     14     SGI_KEYS_CLEARED/1
+    UUID_CHECK       15     DEBUG_CERT_PER_DEVICE/1
+    Inverse_value    16:31  0x3FFF
+    */
 
     /// # Safety
     /// Only sound to call on an mcxa5xx device
