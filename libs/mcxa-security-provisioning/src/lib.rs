@@ -259,7 +259,7 @@ impl Provisioner {
 
         self.ifr.cmpa.boot_cfg0 = BootCfg0::builder()
             .with_marker(0x5963)
-            .with_boot_speed(mcxa_ifr::BootSpeed::MdMode)
+            .with_boot_speed(mcxa_ifr::BootSpeed::SdMode)
             .with_rec_boot_en(false.into())
             .with_rec_lspi(false)
             .with_rec_flexspi(false)
