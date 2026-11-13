@@ -22,7 +22,7 @@ pub struct Provisioner {
 }
 
 impl Provisioner {
-    const DEFAULT_CC_SOCU_PIN: u32 = 0x1FFF0000;
+    const DEFAULT_CC_SOCU_PIN: u32 = 0x1FFFE000;
     /*
     Bit-field        Bits   Required value
 
