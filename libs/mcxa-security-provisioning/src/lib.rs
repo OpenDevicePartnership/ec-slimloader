@@ -7,8 +7,9 @@ use embassy_mcxa::rom::FlashError;
 use embassy_mcxa::{peripherals, Peri};
 use header::{HeaderError, ImageHeader};
 use mcxa_ifr::{
-    u3, u4, u5, BootCfg0, BootCfg1, DiceCsrKeyType, Header, InverseBigBool, LifeCycleState, LspiQflashCfg0, QspiPort,
-    RotkRevoke, RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
+    u3, u4, u5, BootCfg0, BootCfg1, CcSocuDflt, CcSocuPin, DebugControl, DebugKeyFlush, DebugState, DebugUuidCheck,
+    DevcfgErase, DiceCsrKeyType, Header, InverseBigBool, LifeCycleState, LspiQflashCfg0, QspiPort, RotkRevoke,
+    RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
 };
 
 pub mod certificate;
@@ -22,43 +23,30 @@ pub struct Provisioner {
 }
 
 impl Provisioner {
-    const DEFAULT_CC_SOCU_PIN: u32 = 0x1FFFE000;
-    /*
-    Bit-field        Bits   Required value
+    // Provisioning policy, not hardware reset defaults. Encoding supplies the
+    // reserved bits and inverse halves (IFR.xlsx DEVCFG rows 151–152).
+    const DEFAULT_CC_SOCU_PIN: CcSocuPin = CcSocuPin {
+        niden: DebugControl::DebugAuthentication,
+        dbgen: DebugControl::DebugAuthentication,
+        spniden: DebugControl::DebugAuthentication,
+        spiden: DebugControl::DebugAuthentication,
+        isp_cmd: DebugControl::DebugAuthentication,
+        fa_cmd: DebugControl::DebugAuthentication,
+        me_cmd: DebugControl::DebugAuthentication,
+    };
 
-    NIDEN            0      USE_DAP_TO_ENABLE/0
-    DBGEN            1      USE_DAP_TO_ENABLE/0
-    SPNIDEN          2      USE_DAP_TO_ENABLE/0
-    SPIDEN           3      USE_DAP_TO_ENABLE/0
-    Reserved         4:5    *Reserved/0b00
-    ISP_CMD_EN       6      USE_DAP_TO_ENABLE/0
-    FA_CMD_EN        7      USE_DAP_TO_ENABLE/0
-    ME_CMD_EN        8      USE_DAP_TO_ENABLE/0
-    Reserved         9:12   *Reserved/0b0000
-    Reserved         13     *Reserved/1
-    Reserved         14     *Reserved/1
-    Reserved         15     *Reserved/1
-    Inverse_value    16:31  0x1FFF
-    */
-
-    const DEFAULT_CC_SOCU_DFLT: u32 = 0x3FFFC000;
-    /*
-    Bit-field        Bits   Required value
-
-    NIDEN            0      DISABLED/0
-    DBGEN            1      DISABLED/0
-    SPNIDEN          2      DISABLED/0
-    SPIDEN           3      DISABLED/0
-    Reserved         4:5    *Reserved/0b00
-    ISP_CMD_EN       6      DISABLED/0
-    FA_CMD_EN        7      DISABLED/0
-    ME_CMD_EN        8      DISABLED/0
-    Reserved         9:12   *Reserved/0b0000
-    ME_DEVCFG_DIS    13     DISABLED/0
-    DBG_KEYFLUSH     14     SGI_KEYS_CLEARED/1
-    UUID_CHECK       15     DEBUG_CERT_PER_DEVICE/1
-    Inverse_value    16:31  0x3FFF
-    */
+    const DEFAULT_CC_SOCU_DFLT: CcSocuDflt = CcSocuDflt {
+        niden: DebugState::Disabled,
+        dbgen: DebugState::Disabled,
+        spniden: DebugState::Disabled,
+        spiden: DebugState::Disabled,
+        isp_cmd: DebugState::Disabled,
+        fa_cmd: DebugState::Disabled,
+        me_cmd: DebugState::Disabled,
+        devcfg_erase: DevcfgErase::Disabled,
+        key_flush: DebugKeyFlush::Clear,
+        uuid_check: DebugUuidCheck::PerDeviceCertificate,
+    };
 
     /// # Safety
     /// Only sound to call on an mcxa5xx device
@@ -228,8 +216,8 @@ impl Provisioner {
 
         self.with_rotkh(config.rotkh, config.pqc_rotkh);
 
-        self.ifr.cmpa.cc_socu_pin = Self::DEFAULT_CC_SOCU_PIN;
-        self.ifr.cmpa.cc_socu_dflt = Self::DEFAULT_CC_SOCU_DFLT;
+        self.ifr.cmpa.set_cc_socu_pin(Self::DEFAULT_CC_SOCU_PIN);
+        self.ifr.cmpa.set_cc_socu_dflt(Self::DEFAULT_CC_SOCU_DFLT);
 
         self.cmpa_updated = true;
 
@@ -320,8 +308,8 @@ impl Provisioner {
             .build();
         self.ifr.cmpa.sbl_start_addr = 0x1000_0000;
 
-        self.ifr.cmpa.cc_socu_pin = Self::DEFAULT_CC_SOCU_PIN;
-        self.ifr.cmpa.cc_socu_dflt = Self::DEFAULT_CC_SOCU_DFLT;
+        self.ifr.cmpa.set_cc_socu_pin(Self::DEFAULT_CC_SOCU_PIN);
+        self.ifr.cmpa.set_cc_socu_dflt(Self::DEFAULT_CC_SOCU_DFLT);
 
         self.cmpa_updated = true;
 
