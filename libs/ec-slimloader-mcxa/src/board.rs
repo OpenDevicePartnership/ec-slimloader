@@ -334,6 +334,19 @@ impl<C: McxaConfig + BootStatePolicy> Board for Mcxa<C> {
             embassy_mcxa::init(bl_cfg)
         };
 
+        // The ROM leaves CRC0 held in reset after boot, but NBOOT image authentication
+        // uses it; a CRC0 still in reset bus-faults on first access. Clock it and release
+        // it from reset here, after embassy_mcxa::init (which unlocks MRCC).
+        // SAFETY: nothing else uses CRC0 at this point in boot.
+        #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
+        unsafe {
+            // CRC0 is bus-clocked; the returned pre-enable parts carry nothing to keep (no WakeGuard)
+            let _ = embassy_mcxa::clocks::enable_and_reset::<peripherals::CRC0>(
+                &embassy_mcxa::clocks::periph_helpers::NoConfig,
+            )
+            .unwrap_or_else(|_| panic!("CRC0 enable failed"));
+        }
+
         #[cfg(all(target_os = "none", feature = "mcxa5xx"))]
         let sgi = p.SGI0;
 
