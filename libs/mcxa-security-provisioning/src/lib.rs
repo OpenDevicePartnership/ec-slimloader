@@ -8,8 +8,8 @@ use embassy_mcxa::{peripherals, Peri};
 use header::{HeaderError, ImageHeader};
 use mcxa_ifr::{
     u3, u4, u5, BootCfg0, BootCfg1, CcSocuDflt, CcSocuPin, DebugControl, DebugKeyFlush, DebugState, DebugUuidCheck,
-    DevcfgErase, DiceCsrKeyType, Header, InverseBigBool, LifeCycleState, LspiQflashCfg0, QspiPort, RotkRevoke,
-    RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
+    DevcfgErase, DiceCsrKeyType, Header, InvLifeCycleState, InverseBigBool, LifeCycleState, LspiQflashCfg0, QspiPort,
+    RotkRevoke, RotkUsage, RotkUsageVal, SecureBootCfg, Update, CFPA, IFR,
 };
 
 pub mod certificate;
@@ -226,7 +226,15 @@ impl Provisioner {
 
     /// First boot IFR (CMPA / CFPA) provisioning for DEV and/or factory floor, non-security critical.
     /// Keeps secure boot, DICE and TZM disabled, and sets a safe default for other fields.
-    pub fn with_initial_config(&mut self) -> &mut Self {
+    /// Only allowed in the Develop lifecycle state.
+    pub fn with_initial_config(&mut self) -> Result<&mut Self, ProvisionError> {
+        // Even erased / brand new devices should be in the Develop lifecycle state, so we can enforce this here.
+        if self.ifr.cfpa.header.cfpa_lc_state() != Ok(LifeCycleState::Develop)
+            || self.ifr.cfpa.header.inv_cfpa_lc_state() != Ok(InvLifeCycleState::Develop)
+        {
+            return Err(ProvisionError::InvalidLifeCycle);
+        }
+
         if self.is_erased() {
             let err_auth_fail_count = self.ifr.cfpa.err_auth_fail_count;
             let err_itrc_count = self.ifr.cfpa.err_itrc_count;
@@ -313,7 +321,25 @@ impl Provisioner {
 
         self.cmpa_updated = true;
 
-        self
+        Ok(self)
+    }
+
+    /// Allow custom debug port access settings. This is a security-sensitive operation, practice caution and only use this if you know what you're doing.
+    /// When using this, must call after [Self::with_default_secure_cmpa_config] or [Self::with_initial_config] to ensure the rest of the CMPA is set up correctly.
+    /// Only allowed in the Develop lifecycle state.
+    pub fn with_socu_debug_settings(&mut self, pin: CcSocuPin, dflt: CcSocuDflt) -> Result<&mut Self, ProvisionError> {
+        if self.ifr.cfpa.header.cfpa_lc_state() != Ok(LifeCycleState::Develop)
+            || self.ifr.cfpa.header.inv_cfpa_lc_state() != Ok(InvLifeCycleState::Develop)
+        {
+            return Err(ProvisionError::InvalidLifeCycle);
+        }
+
+        self.ifr.cmpa.set_cc_socu_pin(pin);
+        self.ifr.cmpa.set_cc_socu_dflt(dflt);
+
+        self.cmpa_updated = true;
+
+        Ok(self)
     }
 
     pub fn check_production_settings(&mut self) -> Result<&mut Self, ProvisionError> {
