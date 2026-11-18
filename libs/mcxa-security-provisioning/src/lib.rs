@@ -16,7 +16,11 @@ pub mod certificate;
 pub mod header;
 
 pub struct Provisioner {
+    /// Current working copy; `with_*` calls modify it and [Self::commit] writes it to scratch.
     ifr: IFR,
+    /// IFR as mapped from flash. Only changes after commit and reset, so security checks
+    /// read it rather than the working copy.
+    flash_ifr: &'static IFR,
     secure_alias: bool,
     cmpa_updated: bool,
     cfpa_updated: bool,
@@ -51,17 +55,31 @@ impl Provisioner {
     /// # Safety
     /// Only sound to call on an mcxa5xx device
     pub unsafe fn new_from_page(secure_alias: bool) -> Self {
-        let disk_ifr = if secure_alias {
+        let flash_ifr = if secure_alias {
             IFR::secure_current()
         } else {
             IFR::current()
         };
 
         Self {
-            ifr: disk_ifr.clone(),
+            ifr: flash_ifr.clone(),
+            flash_ifr,
             secure_alias,
             cmpa_updated: false,
             cfpa_updated: false,
+        }
+    }
+
+    /// Guard for Develop-only operations. Checks the flash lifecycle, not the working copy,
+    /// so [Self::with_lifecycle] cannot be used to bypass it.
+    fn require_develop(&self) -> Result<(), ProvisionError> {
+        let header = &self.flash_ifr.cfpa.header;
+        if header.cfpa_lc_state() == Ok(LifeCycleState::Develop)
+            && header.inv_cfpa_lc_state() == Ok(InvLifeCycleState::Develop)
+        {
+            Ok(())
+        } else {
+            Err(ProvisionError::InvalidLifeCycle)
         }
     }
 
@@ -189,9 +207,7 @@ impl Provisioner {
     /// Sets a "default" secure Boot configuration for CMPA. This is intended for first-time provisioning of a DEV unit, and must only be called in the Develop lifecycle state.
     /// Not intended for production or factory use.
     pub fn with_default_secure_cmpa_config(&mut self, config: CmpaDefaultConfig) -> Result<&mut Self, ProvisionError> {
-        if self.ifr.cfpa.header.cfpa_lc_state() != Ok(LifeCycleState::Develop) {
-            return Err(ProvisionError::InvalidLifeCycle);
-        }
+        self.require_develop()?;
 
         self.ifr.cmpa.boot_cfg0 = config.boot_cfg0.with_marker(0x5963);
         self.ifr.cmpa.boot_cfg1 = config.boot_cfg1;
@@ -228,12 +244,8 @@ impl Provisioner {
     /// Keeps secure boot, DICE and TZM disabled, and sets a safe default for other fields.
     /// Only allowed in the Develop lifecycle state.
     pub fn with_initial_config(&mut self) -> Result<&mut Self, ProvisionError> {
-        // Even erased / brand new devices should be in the Develop lifecycle state, so we can enforce this here.
-        if self.ifr.cfpa.header.cfpa_lc_state() != Ok(LifeCycleState::Develop)
-            || self.ifr.cfpa.header.inv_cfpa_lc_state() != Ok(InvLifeCycleState::Develop)
-        {
-            return Err(ProvisionError::InvalidLifeCycle);
-        }
+        // Even erased / brand new devices are in the Develop lifecycle state, so we can enforce this here.
+        self.require_develop()?;
 
         if self.is_erased() {
             let err_auth_fail_count = self.ifr.cfpa.err_auth_fail_count;
@@ -328,11 +340,7 @@ impl Provisioner {
     /// When using this, must call after [Self::with_default_secure_cmpa_config] or [Self::with_initial_config] to ensure the rest of the CMPA is set up correctly.
     /// Only allowed in the Develop lifecycle state.
     pub fn with_socu_debug_settings(&mut self, pin: CcSocuPin, dflt: CcSocuDflt) -> Result<&mut Self, ProvisionError> {
-        if self.ifr.cfpa.header.cfpa_lc_state() != Ok(LifeCycleState::Develop)
-            || self.ifr.cfpa.header.inv_cfpa_lc_state() != Ok(InvLifeCycleState::Develop)
-        {
-            return Err(ProvisionError::InvalidLifeCycle);
-        }
+        self.require_develop()?;
 
         self.ifr.cmpa.set_cc_socu_pin(pin);
         self.ifr.cmpa.set_cc_socu_dflt(dflt);
@@ -342,18 +350,17 @@ impl Provisioner {
         Ok(self)
     }
 
+    /// Checks the flash secure-boot policy, not the working copy, so staging settings
+    /// with [Self::with_secure_boot_policies] cannot make this pass before they are applied.
     pub fn check_production_settings(&mut self) -> Result<&mut Self, ProvisionError> {
-        if self.is_erased()
-            || !matches!(
-                self.ifr.cmpa.secure_boot_cfg.sec_boot_en(),
-                mcxa_ifr::SecBootEn::OnlyPki
-            )
-            || !matches!(
-                self.ifr.cmpa.secure_boot_cfg.enf_cnsa(),
-                mcxa_ifr::EnfCnsa::CNSA2 | mcxa_ifr::EnfCnsa::CNSA2Dup
-            )
-            || matches!(self.ifr.cmpa.secure_boot_cfg.fast_boot_en(), InverseBigBool::True)
-            || !matches!(self.ifr.cmpa.secure_boot_cfg.lp_sec_boot(), mcxa_ifr::LpSecBoot::Cold)
+        let flash_ifr = self.flash_ifr;
+        let cfg = &flash_ifr.cmpa.secure_boot_cfg;
+        if flash_ifr.cfpa.is_erased()
+            || flash_ifr.cmpa.is_erased()
+            || !matches!(cfg.sec_boot_en(), mcxa_ifr::SecBootEn::OnlyPki)
+            || !matches!(cfg.enf_cnsa(), mcxa_ifr::EnfCnsa::CNSA2 | mcxa_ifr::EnfCnsa::CNSA2Dup)
+            || matches!(cfg.fast_boot_en(), InverseBigBool::True)
+            || !matches!(cfg.lp_sec_boot(), mcxa_ifr::LpSecBoot::Cold)
         {
             return Err(ProvisionError::InvalidSettings);
         }
@@ -374,6 +381,8 @@ impl Provisioner {
     /// Provide the starting addresses of the multiple SBL image splits or provide just one address if there's just one SBL image.
     ///
     /// If no starting addresses are given, the function errors with [ProvisionError::NoImages]
+    /// Note that this check happens PRIOR TO actually committing the changes to flash,
+    /// so checking the LIVE hashes in the IFR is the correct check.
     pub fn check_rotkh(
         &mut self,
         mut peri: Peri<'_, peripherals::SGI0>,
