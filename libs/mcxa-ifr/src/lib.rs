@@ -7,6 +7,9 @@ use core::ops::{Index, IndexMut};
 pub use arbitrary_int::{u3, u4, u5, u7, u10, u24};
 use bitbybit::{bitenum, bitfield};
 
+mod socu;
+pub use socu::{CcSocuDflt, CcSocuPin, DebugControl, DebugKeyFlush, DebugState, DebugUuidCheck, DevcfgErase};
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct IFR {
@@ -446,9 +449,9 @@ pub struct CMPA {
     pub isp_usb_id: u32,      // TODO
     pub isp_usb_cfg: u32,     // TODO
     pub isp_misc_cfg: u32,    // TODO
-    pub cc_socu_pin: u32,     // TODO
-    pub cc_socu_dflt: u32,    // TODO
-    pub vendor_usage: u32,    // TODO
+    cc_socu_pin: u32,
+    cc_socu_dflt: u32,
+    pub vendor_usage: u32, // TODO
     pub _reserved0: [u32; 1],
     pub secure_boot_cfg: SecureBootCfg,
     pub rotk_usage: RotkUsage,
@@ -531,6 +534,45 @@ impl CMPA {
         mldsa_cert_temp_addr: 0,
         mldsa_cert_temp_hash: ReverseArray::new([0; _]),
     };
+
+    /// Read the stored CC_SOCU_PIN word without asserting it is valid.
+    ///
+    /// Erased, zeroed, and malformed flash values remain representable.
+    pub fn cc_socu_pin(&self) -> u32 {
+        self.cc_socu_pin
+    }
+
+    /// Read the stored CC_SOCU_DFLT word without asserting it is valid.
+    pub fn cc_socu_dflt(&self) -> u32 {
+        self.cc_socu_dflt
+    }
+
+    /// Set CC_SOCU_PIN, deriving reserved bits and the inverse copy.
+    ///
+    /// Raw writes cannot bypass the encoder:
+    ///
+    /// ```compile_fail,E0616
+    /// use mcxa_ifr::CMPA;
+    /// let mut cmpa = CMPA::ZERO;
+    /// cmpa.cc_socu_pin = 0x1FFF_0000;
+    /// ```
+    ///
+    /// PIN and DFLT configurations are not interchangeable:
+    ///
+    /// ```compile_fail,E0308
+    /// use mcxa_ifr::{CcSocuDflt, CMPA};
+    /// fn wrong_word(cmpa: &mut CMPA, dflt: CcSocuDflt) {
+    ///     cmpa.set_cc_socu_pin(dflt);
+    /// }
+    /// ```
+    pub fn set_cc_socu_pin(&mut self, value: CcSocuPin) {
+        self.cc_socu_pin = value.encode();
+    }
+
+    /// Set CC_SOCU_DFLT, deriving reserved bits and the inverse copy.
+    pub fn set_cc_socu_dflt(&mut self, value: CcSocuDflt) {
+        self.cc_socu_dflt = value.encode();
+    }
 
     pub fn as_array(&self) -> &[u8; core::mem::size_of::<Self>()] {
         // Safety: We're a repr(C) struct with no padding bytes
@@ -1154,6 +1196,18 @@ impl<T, const N: usize> FromIterator<T> for ReverseArray<T, N> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn erased_socu_words_remain_raw() {
+        let cmpa = super::CMPA {
+            cc_socu_pin: u32::MAX,
+            cc_socu_dflt: u32::MAX,
+            ..super::CMPA::ZERO
+        };
+        assert_eq!(cmpa.cc_socu_pin(), u32::MAX);
+        assert_eq!(cmpa.cc_socu_dflt(), u32::MAX);
+        assert_eq!(&cmpa.as_array()[0x40..0x48], &[0xFF; 8]);
+    }
+
     use super::*;
 
     /// DEV test keys: ECDSA (secp384r1) RKTH as derived by the SBL (`Rkth::as_words()`).

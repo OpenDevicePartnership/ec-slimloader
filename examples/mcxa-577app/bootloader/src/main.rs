@@ -19,12 +19,18 @@ async fn main(_spawner: Spawner) -> ! {
         info!("IFR is erased, will provision with initial state, will reset");
 
         // causes a reset, so we will not return from this function. on next reset, IFR will have been provisioned and we will continue to bootloader.
-        let Err(e) = provisioner.with_initial_config().commit_and_reboot();
-
-        // If we got here we didn't reboot for some reason
-
-        #[cfg(any(feature = "defmt", feature = "log"))]
-        defmt_or_log::error!("{}", e);
+        match provisioner.with_initial_config() {
+            Ok(p) => {
+                let Err(_e) = p.commit_and_reboot();
+                // If we got here we didn't reboot for some reason
+                #[cfg(any(feature = "defmt", feature = "log"))]
+                defmt_or_log::error!("{}", _e);
+            }
+            Err(_e) => {
+                #[cfg(any(feature = "defmt", feature = "log"))]
+                defmt_or_log::error!("{}", defmt_or_log::Debug2Format(&_e));
+            }
+        }
         // TODO: when integrating in ADO, add a counter and possibly take action based on counter (e.g. max attempts).
         loop {
             cortex_m::asm::wfe();
