@@ -30,7 +30,7 @@ arbitrary = "1.4"
 crc = "3.2"
 num_enum = { version = "0.7", default-features = false }
 embedded-storage-async = "0.4.1"
-heapless = "0.8"
+heapless = "0.9.4"
 static_cell = "2.1"
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", tag = "v0.1.0", default-features = false }
 partition-manager-macros = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", tag = "v0.1.0" }

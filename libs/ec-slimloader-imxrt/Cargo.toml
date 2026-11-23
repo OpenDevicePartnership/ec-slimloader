@@ -71,7 +71,7 @@ defmt = { workspace = true, optional = true }
 defmt-or-log = { workspace = true }
 log = { workspace = true, optional = true }
 
-embassy-embedded-hal = "0.5.0"
+embassy-embedded-hal = "0.6.0"
 
 embassy-sync = { workspace = true }
 partition-manager = { git = "https://github.com/OpenDevicePartnership/embedded-services.git", tag = "v0.1.0", features = [
@@ -82,4 +82,4 @@ embedded-storage = "0.3.1"
 embedded-storage-async = { workspace = true }
 
 static_cell = "2.1.1"
-heapless = "0.8.0"
+heapless = "0.9.4"
