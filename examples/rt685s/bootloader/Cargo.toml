@@ -30,7 +30,7 @@ ec-slimloader-imxrt = { path = "../../../libs/ec-slimloader-imxrt", features = [
 
 example-bsp = { path = "../bsp", features = ["bootloader"] }
 
-heapless = "0.8.0"
+heapless = "0.9.4"
 
 cortex-m = { version = "0.7.7", features = [
     "inline-asm",

@@ -382,12 +382,12 @@ dependencies = [
  "defmt-or-log",
  "ec-slimloader",
  "ec-slimloader-state",
- "embassy-embedded-hal 0.5.0",
+ "embassy-embedded-hal",
  "embassy-imxrt",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embedded-storage",
  "embedded-storage-async",
- "heapless 0.8.0",
+ "heapless",
  "imxrt-rom",
  "mimxrt600-fcb",
  "partition-manager",
@@ -413,30 +413,13 @@ checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
 
 [[package]]
 name = "embassy-embedded-hal"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "554e3e840696f54b4c9afcf28a0f24da431c927f4151040020416e7393d6d0d8"
-dependencies = [
- "embassy-futures",
- "embassy-hal-internal 0.3.0",
- "embassy-sync 0.7.2",
- "embedded-hal 0.2.7",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "embedded-storage",
- "embedded-storage-async",
- "nb 1.1.0",
-]
-
-[[package]]
-name = "embassy-embedded-hal"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0641612053b2f34fc250bb63f6630ae75de46e02ade7f457268447081d709ce"
 dependencies = [
  "embassy-futures",
  "embassy-hal-internal 0.4.0",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
@@ -516,10 +499,10 @@ dependencies = [
  "critical-section",
  "defmt 1.1.1",
  "document-features",
- "embassy-embedded-hal 0.6.0",
+ "embassy-embedded-hal",
  "embassy-futures",
  "embassy-hal-internal 0.3.0",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embassy-time-driver",
  "embassy-time-queue-utils",
@@ -546,20 +529,6 @@ dependencies = [
 
 [[package]]
 name = "embassy-sync"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73974a3edbd0bd286759b3d483540f0ebef705919a5f56f4fc7709066f71689b"
-dependencies = [
- "cfg-if",
- "critical-section",
- "embedded-io-async 0.6.1",
- "futures-core",
- "futures-sink",
- "heapless 0.8.0",
-]
-
-[[package]]
-name = "embassy-sync"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bbd85cf5a5ae56bdf26f618364af642d1d0a4e245cdd75cd9aabda382f65a81"
@@ -570,7 +539,7 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "futures-core",
  "futures-sink",
- "heapless 0.9.3",
+ "heapless",
 ]
 
 [[package]]
@@ -606,7 +575,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "168297bf80aaf114b3c9ad589bf38b01b3009b9af7f97cd18086c5bbf96f5693"
 dependencies = [
  "embassy-executor-timer-queue",
- "heapless 0.9.3",
+ "heapless",
 ]
 
 [[package]]
@@ -718,11 +687,11 @@ dependencies = [
  "defmt-or-log",
  "defmt-rtt",
  "ec-slimloader-state",
- "embassy-embedded-hal 0.5.0",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-imxrt",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embassy-time",
  "embedded-storage",
  "embedded-storage-async",
@@ -744,9 +713,9 @@ dependencies = [
  "ec-slimloader-imxrt",
  "embassy-executor",
  "embassy-imxrt",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "example-bsp",
- "heapless 0.8.0",
+ "heapless",
  "panic-probe",
  "partition-manager",
 ]
@@ -755,7 +724,7 @@ dependencies = [
 name = "example-bsp"
 version = "0.1.0"
 dependencies = [
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "partition-manager",
 ]
 
@@ -829,19 +798,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "heapless"
-version = "0.8.0"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
-dependencies = [
- "hash32",
- "stable_deref_trait",
-]
-
-[[package]]
-name = "heapless"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
+checksum = "411fdef4df93751117bd9ef8caa0e7f99c65dafec5bd84313eb8e2fdd75e32f2"
 dependencies = [
  "hash32",
  "stable_deref_trait",
@@ -1011,7 +970,7 @@ version = "0.1.0"
 source = "git+https://github.com/OpenDevicePartnership/embedded-services.git?tag=v0.1.0#6034c6bf3d2d7bfe50821370be7c1275fbf8520a"
 dependencies = [
  "defmt 0.3.100",
- "embassy-sync 0.8.0",
+ "embassy-sync",
  "embedded-storage-async",
  "partition-manager-macros",
 ]

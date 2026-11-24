@@ -30,7 +30,7 @@ defmt-or-log = { version = "0.2.3", optional = true }
 defmt-rtt = { version = "1.0", optional = true }
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 
-heapless = { version = "0.8", default-features = false }
+heapless = { version = "0.9.4", default-features = false }
 partition-manager = { workspace = true, features = ["macros"] }
 partition-manager-macros = { workspace = true }
 embassy-sync = { workspace = true }

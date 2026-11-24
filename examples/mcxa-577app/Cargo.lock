@@ -332,7 +332,7 @@ dependencies = [
  "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embedded-storage-async",
  "fault-rejection",
- "heapless 0.8.0",
+ "heapless",
  "mcxa-ifr",
  "mcxa-security-provisioning",
  "partition-manager",
@@ -473,7 +473,7 @@ dependencies = [
  "embedded-io-async",
  "embedded-storage",
  "grounded",
- "heapless 0.9.3",
+ "heapless",
  "indexmap",
  "maitake-sync",
  "nb 1.1.0",
@@ -499,7 +499,7 @@ dependencies = [
  "embedded-io-async",
  "futures-core",
  "futures-sink",
- "heapless 0.9.3",
+ "heapless",
 ]
 
 [[package]]
@@ -512,7 +512,7 @@ dependencies = [
  "embedded-io-async",
  "futures-core",
  "futures-sink",
- "heapless 0.9.3",
+ "heapless",
 ]
 
 [[package]]
@@ -561,7 +561,7 @@ version = "0.3.2"
 source = "git+https://github.com/embassy-rs/embassy?rev=2b34c20e968bbb12baba58aded23b7c1061e444c#2b34c20e968bbb12baba58aded23b7c1061e444c"
 dependencies = [
  "embassy-executor-timer-queue 0.1.1",
- "heapless 0.9.3",
+ "heapless",
 ]
 
 [[package]]
@@ -713,19 +713,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "heapless"
-version = "0.8.0"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
-dependencies = [
- "hash32",
- "stable_deref_trait",
-]
-
-[[package]]
-name = "heapless"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
+checksum = "411fdef4df93751117bd9ef8caa0e7f99c65dafec5bd84313eb8e2fdd75e32f2"
 dependencies = [
  "hash32",
  "stable_deref_trait",
@@ -838,7 +828,7 @@ dependencies = [
  "embassy-executor 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-mcxa",
  "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "heapless 0.8.0",
+ "heapless",
  "mcxa-ifr",
  "mcxa-security-provisioning",
  "panic-probe",
